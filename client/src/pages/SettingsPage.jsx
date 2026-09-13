@@ -61,6 +61,8 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   // Email Management States
   const [newEmail, setNewEmail] = useState('');
+  const [emailPassword, setEmailPassword] = useState('');
+  const [showEmailPassword, setShowEmailPassword] = useState(false);
   const [emailOtp, setEmailOtp] = useState('');
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [sendingEmailOtp, setSendingEmailOtp] = useState(false);
@@ -69,6 +71,8 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   // Phone Management States
   const [newPhone, setNewPhone] = useState('');
+  const [phonePassword, setPhonePassword] = useState('');
+  const [showPhonePassword, setShowPhonePassword] = useState(false);
   const [phoneOtp, setPhoneOtp] = useState('');
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [sendingPhoneOtp, setSendingPhoneOtp] = useState(false);
@@ -328,9 +332,15 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   // 2. Email Management Handlers
   const handleSendEmailOtp = async () => {
+    if (newEmail.trim() && !emailPassword) {
+      setFeedbackMsg({ type: 'error', text: 'Please enter your current password to authorize changing your email address.' });
+      return;
+    }
     try {
       setSendingEmailOtp(true);
-      const payload = newEmail.trim() ? { newEmail: newEmail.trim() } : {};
+      const payload = newEmail.trim() 
+        ? { newEmail: newEmail.trim(), currentPassword: emailPassword } 
+        : {};
       const res = await apiClient.post('/users/email/send-otp', payload);
       if (res.success) {
         setEmailOtpSent(true);
@@ -363,6 +373,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
         setEmailOtpSent(false);
         setEmailOtp('');
         setNewEmail('');
+        setEmailPassword('');
         setFeedbackMsg({ type: 'success', text: res.message || 'Email verified successfully!' });
       } else {
         setFeedbackMsg({ type: 'error', text: res.error || 'Verification failed.' });
@@ -380,9 +391,16 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
       setFeedbackMsg({ type: 'error', text: 'Please enter a phone number in international format (+1...)' });
       return;
     }
+    if (!phonePassword) {
+      setFeedbackMsg({ type: 'error', text: 'Please enter your current password to authorize linking a phone number.' });
+      return;
+    }
     try {
       setSendingPhoneOtp(true);
-      const res = await apiClient.post('/users/phone/send-otp', { phoneNumber: newPhone.trim() });
+      const res = await apiClient.post('/users/phone/send-otp', {
+        phoneNumber: newPhone.trim(),
+        currentPassword: phonePassword
+      });
       if (res.success) {
         setPhoneOtpSent(true);
         setPhoneOtpCountdown(60);
@@ -414,6 +432,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
         setPhoneOtpSent(false);
         setPhoneOtp('');
         setNewPhone('');
+        setPhonePassword('');
         setFeedbackMsg({ type: 'success', text: res.message || 'Phone number linked successfully!' });
       } else {
         setFeedbackMsg({ type: 'error', text: res.error || 'Phone verification failed.' });
@@ -1088,29 +1107,55 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       </span>
                     )}
 
-                    <div className="account-mgmt-field-row">
-                      <input
-                        type="email"
-                        className="form-input"
-                        placeholder="Enter new email address (e.g. user@example.com)"
-                        value={newEmail}
-                        onChange={(e) => setNewEmail(e.target.value)}
-                        disabled={sendingEmailOtp || verifyingEmailOtp || isDemoUser}
-                      />
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        onClick={handleSendEmailOtp}
-                        disabled={sendingEmailOtp || verifyingEmailOtp || otpCountdown > 0 || isDemoUser}
-                      >
-                        {sendingEmailOtp
-                          ? 'Sending...'
-                          : otpCountdown > 0
-                          ? `Resend (${otpCountdown}s)`
-                          : emailOtpSent
-                          ? 'Resend OTP'
-                          : 'Send Code'}
-                      </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div className="account-mgmt-field-row">
+                        <input
+                          type="email"
+                          className="form-input"
+                          placeholder="Enter new email address (e.g. user@example.com)"
+                          value={newEmail}
+                          onChange={(e) => setNewEmail(e.target.value)}
+                          disabled={sendingEmailOtp || verifyingEmailOtp || isDemoUser}
+                        />
+                      </div>
+
+                      {newEmail.trim() !== '' && (
+                        <div className="password-input-wrapper">
+                          <input
+                            type={showEmailPassword ? 'text' : 'password'}
+                            className="form-input"
+                            placeholder="Enter current password to authorize email change"
+                            value={emailPassword}
+                            onChange={(e) => setEmailPassword(e.target.value)}
+                            disabled={sendingEmailOtp || verifyingEmailOtp || isDemoUser}
+                          />
+                          <button
+                            type="button"
+                            className="btn-pass-toggle"
+                            onClick={() => setShowEmailPassword(!showEmailPassword)}
+                            tabIndex="-1"
+                          >
+                            {showEmailPassword ? '👁️' : '👁️‍🗨️'}
+                          </button>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={handleSendEmailOtp}
+                          disabled={sendingEmailOtp || verifyingEmailOtp || otpCountdown > 0 || isDemoUser}
+                        >
+                          {sendingEmailOtp
+                            ? 'Sending...'
+                            : otpCountdown > 0
+                            ? `Resend (${otpCountdown}s)`
+                            : emailOtpSent
+                            ? 'Resend OTP'
+                            : 'Send Code'}
+                        </button>
+                      </div>
                     </div>
 
                     {emailOtpSent && (
@@ -1175,29 +1220,55 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       )}
                     </div>
 
-                    <div className="account-mgmt-field-row">
-                      <input
-                        type="tel"
-                        className="form-input"
-                        placeholder="Enter phone with country code (e.g. +14155552671)"
-                        value={newPhone}
-                        onChange={(e) => setNewPhone(e.target.value)}
-                        disabled={sendingPhoneOtp || verifyingPhoneOtp || isDemoUser}
-                      />
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        onClick={handleSendPhoneOtp}
-                        disabled={sendingPhoneOtp || verifyingPhoneOtp || phoneOtpCountdown > 0 || !newPhone.trim() || isDemoUser}
-                      >
-                        {sendingPhoneOtp
-                          ? 'Sending...'
-                          : phoneOtpCountdown > 0
-                          ? `Resend (${phoneOtpCountdown}s)`
-                          : phoneOtpSent
-                          ? 'Resend Code'
-                          : 'Send Code'}
-                      </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div className="account-mgmt-field-row">
+                        <input
+                          type="tel"
+                          className="form-input"
+                          placeholder="Enter phone with country code (e.g. +14155552671)"
+                          value={newPhone}
+                          onChange={(e) => setNewPhone(e.target.value)}
+                          disabled={sendingPhoneOtp || verifyingPhoneOtp || isDemoUser}
+                        />
+                      </div>
+
+                      {newPhone.trim() !== '' && (
+                        <div className="password-input-wrapper">
+                          <input
+                            type={showPhonePassword ? 'text' : 'password'}
+                            className="form-input"
+                            placeholder="Enter current password to authorize phone change"
+                            value={phonePassword}
+                            onChange={(e) => setPhonePassword(e.target.value)}
+                            disabled={sendingPhoneOtp || verifyingPhoneOtp || isDemoUser}
+                          />
+                          <button
+                            type="button"
+                            className="btn-pass-toggle"
+                            onClick={() => setShowPhonePassword(!showPhonePassword)}
+                            tabIndex="-1"
+                          >
+                            {showPhonePassword ? '👁️' : '👁️‍🗨️'}
+                          </button>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={handleSendPhoneOtp}
+                          disabled={sendingPhoneOtp || verifyingPhoneOtp || phoneOtpCountdown > 0 || !newPhone.trim() || isDemoUser}
+                        >
+                          {sendingPhoneOtp
+                            ? 'Sending...'
+                            : phoneOtpCountdown > 0
+                            ? `Resend (${phoneOtpCountdown}s)`
+                            : phoneOtpSent
+                            ? 'Resend Code'
+                            : 'Send Code'}
+                        </button>
+                      </div>
                     </div>
 
                     {phoneOtpSent && (

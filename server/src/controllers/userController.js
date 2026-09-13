@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const { query } = require('../config/db');
 const { generateToken, setAuthCookie } = require('../utils/jwt');
+const { sendEmailChangeOtpEmail } = require('../utils/mailer');
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -493,6 +494,9 @@ const sendEmailOtp = async (req, res, next) => {
        VALUES ($1, $2, $3, $4, $5)`,
       [userId, type, targetEmail, otpCode, expiresAt]
     );
+
+    // 7. Dispatch real verification email via Gmail SMTP
+    await sendEmailChangeOtpEmail(targetEmail, otpCode);
 
     console.log(`\n========================================`);
     console.log(`[VIBEGRID EMAIL OTP ASSISTANCE]`);
