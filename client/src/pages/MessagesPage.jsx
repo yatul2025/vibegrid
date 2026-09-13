@@ -38,6 +38,27 @@ import CreateGroupModal from '../components/CreateGroupModal';
 import CallHistoryModal from '../components/CallHistoryModal';
 import KeyBackupModal from '../components/KeyBackupModal';
 import senderKeysService from '../services/crypto/senderKeys';
+import {
+  Phone,
+  Video,
+  Search,
+  Clock,
+  Shield,
+  ShieldCheck,
+  Send,
+  Image as ImageIcon,
+  Mic,
+  Users,
+  KeyRound,
+  Plus,
+  ArrowLeft,
+  X,
+  User as UserIcon,
+  Check,
+  CheckCheck,
+  PhoneCall,
+  Lock
+} from 'lucide-react';
 
 function formatMessageTime(dateString) {
   if (!dateString) return '';
@@ -116,15 +137,23 @@ export default function MessagesPage({
   const [searching, setSearching] = useState(false);
 
   const messagesEndRef = useRef(null);
+  const chatStreamRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const activePartnerRef = useRef(activePartner);
   activePartnerRef.current = activePartner;
 
-  // Auto-scroll to bottom of message thread
+  // Auto-scroll to bottom of message thread (isolated to chat-stream container to prevent window shifting)
   const scrollToBottom = (smooth = true) => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+    if (chatStreamRef.current) {
+      if (smooth) {
+        chatStreamRef.current.scrollTo({
+          top: chatStreamRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      } else {
+        chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
+      }
     }
   };
 
@@ -646,32 +675,36 @@ export default function MessagesPage({
                 className="btn-sidebar-icon"
                 onClick={() => setIsCallHistoryOpen(true)}
                 title="Call History & Logs"
+                aria-label="Call History"
               >
-                📞
+                <PhoneCall size={16} />
               </button>
               <button
                 type="button"
                 className="btn-sidebar-icon"
                 onClick={() => setIsCreateGroupOpen(true)}
                 title="Create Encrypted Group"
+                aria-label="Create Group"
               >
-                👥
+                <Users size={16} />
               </button>
               <button
                 type="button"
                 className="btn-sidebar-icon"
                 onClick={() => setIsKeyBackupOpen(true)}
                 title="E2EE Keys Backup & Restore"
+                aria-label="Key Backup"
               >
-                🔐
+                <KeyRound size={16} />
               </button>
               <button
                 type="button"
-                className="btn-new-chat-icon"
+                className="btn-sidebar-icon btn-new-chat-action"
                 onClick={() => setIsNewChatModalOpen(true)}
-                title="Start a new message"
+                title="Start a new chat"
+                aria-label="New Chat"
               >
-                ✏️
+                <Plus size={18} />
               </button>
             </div>
           </div>
@@ -754,7 +787,7 @@ export default function MessagesPage({
                   title="Back to conversations"
                   aria-label="Back to conversations"
                 >
-                  ←
+                  <ArrowLeft size={20} />
                 </button>
                 <div
                   className="chat-header-user"
@@ -784,12 +817,22 @@ export default function MessagesPage({
                         }}
                         title={isPeerVerified ? 'Cryptographic Identity Verified' : 'Click to verify Safety Number'}
                       >
-                        {isPeerVerified ? '🛡️ Verified' : '🔒 E2EE'}
+                        {isPeerVerified ? (
+                          <>
+                            <ShieldCheck size={13} className="safety-badge-icon" />
+                            <span>Verified</span>
+                          </>
+                        ) : (
+                          <>
+                            <Shield size={13} className="safety-badge-icon" />
+                            <span>E2EE</span>
+                          </>
+                        )}
                       </button>
 
                       {ephemeralTimer && (
                         <span className="ephemeral-timer-badge" title={`Disappearing messages: ${ephemeralTimer}s`}>
-                          ⏳
+                          <Clock size={13} />
                         </span>
                       )}
                     </div>
@@ -797,9 +840,11 @@ export default function MessagesPage({
                       {isPartnerTyping ? (
                         <span className="typing-sub-label">typing...</span>
                       ) : isCurrentPartnerOnline ? (
-                        <span className="online-sub-label">Active now</span>
+                        <span className="online-sub-label">
+                          <span className="online-dot-pulse" /> Active now
+                        </span>
                       ) : (
-                        activePartner.full_name || 'Direct conversation'
+                        activePartner.full_name || 'End-to-end encrypted'
                       )}
                     </span>
                   </div>
@@ -814,24 +859,28 @@ export default function MessagesPage({
                       className={`btn-chat-action ${ephemeralTimer ? 'active-timer' : ''}`}
                       onClick={() => setIsEphemeralMenuOpen((prev) => !prev)}
                       title="Disappearing Messages Settings"
+                      aria-label="Disappearing Messages"
                     >
-                      ⏳
+                      <Clock size={18} />
                     </button>
 
                     {isEphemeralMenuOpen && (
                       <div className="ephemeral-dropdown">
-                        <h4>Disappearing Messages</h4>
+                        <div className="ephemeral-dropdown-header">
+                          <Clock size={14} />
+                          <h4>Disappearing Messages</h4>
+                        </div>
                         <button type="button" onClick={() => handleSetEphemeralTimer(null)}>
-                          Off {ephemeralTimer === null && '✓'}
+                          <span>Off</span> {ephemeralTimer === null && '✓'}
                         </button>
                         <button type="button" onClick={() => handleSetEphemeralTimer(86400)}>
-                          24 Hours {ephemeralTimer === 86400 && '✓'}
+                          <span>24 Hours</span> {ephemeralTimer === 86400 && '✓'}
                         </button>
                         <button type="button" onClick={() => handleSetEphemeralTimer(604800)}>
-                          7 Days {ephemeralTimer === 604800 && '✓'}
+                          <span>7 Days</span> {ephemeralTimer === 604800 && '✓'}
                         </button>
                         <button type="button" onClick={() => handleSetEphemeralTimer(2592000)}>
-                          30 Days {ephemeralTimer === 2592000 && '✓'}
+                          <span>30 Days</span> {ephemeralTimer === 2592000 && '✓'}
                         </button>
                       </div>
                     )}
@@ -847,7 +896,7 @@ export default function MessagesPage({
                     title="Search in this encrypted conversation"
                     aria-label="Search Chat"
                   >
-                    🔍
+                    <Search size={18} />
                   </button>
 
                   <button
@@ -857,7 +906,7 @@ export default function MessagesPage({
                     title={`Start Audio Call with @${activePartner.username}`}
                     aria-label="Audio Call"
                   >
-                    📞
+                    <Phone size={18} />
                   </button>
 
                   <button
@@ -867,15 +916,17 @@ export default function MessagesPage({
                     title={`Start Video Call with @${activePartner.username}`}
                     aria-label="Video Call"
                   >
-                    📹
+                    <Video size={18} />
                   </button>
 
                   <button
                     type="button"
-                    className="btn-secondary btn-sm"
+                    className="btn-chat-action btn-profile-action"
                     onClick={() => onNavigateToProfile && onNavigateToProfile(activePartner.username)}
+                    title={`View @${activePartner.username}'s profile`}
+                    aria-label="Profile"
                   >
-                    Profile
+                    <UserIcon size={18} />
                   </button>
                 </div>
               </div>
@@ -883,6 +934,7 @@ export default function MessagesPage({
               {/* In-Chat Encrypted Search Bar */}
               {isSearchInChatOpen && (
                 <div className="in-chat-search-bar">
+                  <Search size={16} className="in-chat-search-icon" />
                   <input
                     type="text"
                     placeholder="Search in this encrypted conversation..."
@@ -896,18 +948,21 @@ export default function MessagesPage({
                       type="button"
                       className="btn-clear-search"
                       onClick={() => setChatSearchQuery('')}
+                      aria-label="Clear Search"
                     >
-                      ✕
+                      <X size={15} />
                     </button>
                   )}
                 </div>
               )}
 
               {/* Chat Message Stream */}
-              <div className="chat-stream">
+              <div className="chat-stream" ref={chatStreamRef}>
                 {/* E2EE Security Disclaimer Banner */}
                 <div className="e2ee-stream-banner">
-                  <span className="e2ee-banner-icon">🔒</span>
+                  <div className="e2ee-banner-icon-badge">
+                    <Lock size={15} />
+                  </div>
                   <p>
                     Messages, photos, voice notes, and calls are end-to-end encrypted.
                     Nobody outside of this chat can read or listen to them.
@@ -941,6 +996,7 @@ export default function MessagesPage({
                         return (
                           <div key={m.id} className="call-log-bubble-row">
                             <div className="call-log-bubble">
+                              <PhoneCall size={14} className="call-log-icon" />
                               <span className="call-log-text">{m.content}</span>
                               <span className="call-log-time">{formatMessageTime(m.created_at)}</span>
                             </div>
@@ -968,7 +1024,11 @@ export default function MessagesPage({
                               </span>
                               {m.is_mine && (
                                 <span className="message-receipt-tick" title={m.is_read ? 'Read' : 'Delivered'}>
-                                  {m.is_read ? '✓✓' : '✓'}
+                                  {m.is_read ? (
+                                    <CheckCheck size={14} className="receipt-check-read" />
+                                  ) : (
+                                    <Check size={13} className="receipt-check-delivered" />
+                                  )}
                                 </span>
                               )}
                             </div>
@@ -1015,9 +1075,10 @@ export default function MessagesPage({
                       className="btn-composer-icon"
                       onClick={() => fileInputRef.current?.click()}
                       title="Attach Encrypted Photo"
+                      aria-label="Attach Photo"
                       disabled={sending || uploadingMedia}
                     >
-                      📷
+                      <ImageIcon size={20} />
                     </button>
 
                     <button
@@ -1025,9 +1086,10 @@ export default function MessagesPage({
                       className="btn-composer-icon"
                       onClick={() => setIsVoiceRecording(true)}
                       title="Record Encrypted Voice Note"
+                      aria-label="Record Voice Note"
                       disabled={sending || uploadingMedia}
                     >
-                      🎙️
+                      <Mic size={20} />
                     </button>
 
                     <input
@@ -1045,8 +1107,10 @@ export default function MessagesPage({
                       type="submit"
                       className="btn-primary btn-chat-send"
                       disabled={!messageInput.trim() || sending || uploadingMedia}
+                      title="Send message"
                     >
-                      {sending ? '...' : 'Send'}
+                      <span>{sending ? '...' : 'Send'}</span>
+                      <Send size={15} className="send-icon-svg" />
                     </button>
                   </form>
                 )}
@@ -1162,39 +1226,66 @@ export default function MessagesPage({
         }
 
         .btn-sidebar-icon {
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          border: 1px solid var(--border-color, #e2e8f0);
-          background: var(--bg-card, #ffffff);
-          color: var(--text-primary, #0f172a);
+          width: 34px;
+          height: 34px;
+          border-radius: 10px;
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+          background: rgba(255, 255, 255, 0.04);
+          color: var(--text-secondary, #94a3b8);
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          font-size: 14px;
           cursor: pointer;
-          transition: transform 0.15s ease, background 0.15s ease;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .btn-sidebar-icon:hover {
-          transform: scale(1.08);
-          background: var(--bg-hover, #f1f5f9);
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--text-primary, #f8fafc);
+          transform: translateY(-1px);
         }
+
+        .btn-new-chat-action {
+          background: rgba(99, 102, 241, 0.12) !important;
+          color: #818cf8 !important;
+          border-color: rgba(99, 102, 241, 0.3) !important;
+        }
+
+        .btn-new-chat-action:hover {
+          background: #6366f1 !important;
+          color: #ffffff !important;
+          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+        }
+
         .chat-header-avatar-wrap {
           position: relative;
           display: inline-block;
         }
 
+        .chat-header-avatar {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          object-fit: cover;
+          border: 2px solid var(--border-color, rgba(255, 255, 255, 0.1));
+          transition: border-color 0.2s ease;
+        }
+
+        .chat-header-user:hover .chat-header-avatar {
+          border-color: #6366f1;
+        }
+
         .header-online-indicator,
         .conversation-online-indicator {
           position: absolute;
-          bottom: 2px;
-          right: 2px;
-          width: 10px;
-          height: 10px;
+          bottom: 1px;
+          right: 1px;
+          width: 11px;
+          height: 11px;
           border-radius: 50%;
           background: #10b981;
-          border: 2px solid var(--card-bg, #ffffff);
+          border: 2px solid var(--card-bg, #131722);
+          box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
         }
 
         .chat-header-title-row {
@@ -1203,160 +1294,447 @@ export default function MessagesPage({
           gap: 8px;
         }
 
+        .chat-header-username {
+          font-weight: 700;
+          font-size: 1.05rem;
+          color: var(--text-primary, #f8fafc);
+          letter-spacing: -0.01em;
+        }
+
         .btn-safety-badge {
-          border: none;
+          border: 1px solid;
           display: inline-flex;
           align-items: center;
+          gap: 4px;
           font-size: 0.72rem;
-          font-weight: 700;
-          padding: 2px 8px;
-          border-radius: 12px;
+          font-weight: 600;
+          padding: 3px 8px;
+          border-radius: 20px;
           cursor: pointer;
-          transition: transform 0.15s ease;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .btn-safety-badge.unverified {
           background: rgba(99, 102, 241, 0.12);
-          color: #6366f1;
-          border: 1px solid rgba(99, 102, 241, 0.3);
+          color: #818cf8;
+          border-color: rgba(99, 102, 241, 0.3);
         }
 
         .btn-safety-badge.verified {
-          background: rgba(16, 185, 129, 0.15);
+          background: rgba(16, 185, 129, 0.14);
           color: #10b981;
-          border: 1px solid rgba(16, 185, 129, 0.35);
+          border-color: rgba(16, 185, 129, 0.35);
+          box-shadow: 0 0 10px rgba(16, 185, 129, 0.15);
         }
 
         .btn-safety-badge:hover {
-          transform: scale(1.05);
+          transform: translateY(-1px) scale(1.04);
         }
 
         .ephemeral-timer-badge {
-          font-size: 0.8rem;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #f59e0b;
         }
 
         .typing-sub-label {
           color: #10b981;
           font-style: italic;
           font-weight: 600;
+          animation: pulse 1.5s infinite;
         }
 
         .online-sub-label {
           color: #10b981;
           font-weight: 500;
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+        }
+
+        .online-dot-pulse {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #10b981;
+          box-shadow: 0 0 6px #10b981;
+        }
+
+        .chat-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
         }
 
         .btn-chat-action {
-          width: 36px;
-          height: 36px;
-          border-radius: 50%;
-          border: 1px solid var(--border-color, #e2e8f0);
-          background: var(--bg-card, #ffffff);
-          color: var(--text-primary, #0f172a);
+          width: 38px;
+          height: 38px;
+          border-radius: 10px;
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+          background: rgba(255, 255, 255, 0.04);
+          color: var(--text-secondary, #94a3b8);
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          font-size: 16px;
           cursor: pointer;
-          transition: transform 0.15s ease, background 0.15s ease;
-        }
-
-        .btn-chat-action.active-timer {
-          border-color: #6366f1;
-          background: rgba(99, 102, 241, 0.1);
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .btn-chat-action:hover {
-          transform: scale(1.08);
-          background: var(--bg-hover, #f1f5f9);
+          transform: translateY(-2px);
+          color: var(--text-primary, #ffffff);
+          border-color: rgba(255, 255, 255, 0.25);
+          background: rgba(255, 255, 255, 0.08);
+        }
+
+        .btn-chat-action.btn-audio-call:hover {
+          background: rgba(16, 185, 129, 0.15);
+          color: #10b981;
+          border-color: #10b981;
+          box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-chat-action.btn-video-call:hover {
+          background: rgba(99, 102, 241, 0.15);
+          color: #818cf8;
+          border-color: #6366f1;
+          box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-chat-action.active-search {
+          background: rgba(56, 189, 248, 0.16);
+          color: #38bdf8;
+          border-color: #38bdf8;
+        }
+
+        .btn-chat-action.active-timer {
+          background: rgba(245, 158, 11, 0.16);
+          color: #f59e0b;
+          border-color: #f59e0b;
+        }
+
+        .btn-chat-action.btn-profile-action:hover {
+          background: rgba(255, 255, 255, 0.1);
+          color: #ffffff;
+          border-color: rgba(255, 255, 255, 0.3);
         }
 
         .ephemeral-menu-wrap {
+          display: flex;
+          align-items: center;
           position: relative;
         }
 
         .ephemeral-dropdown {
           position: absolute;
-          top: 44px;
+          top: 48px;
           right: 0;
-          background: var(--card-bg, #ffffff);
-          border: 1px solid var(--border-color, #e2e8f0);
-          border-radius: 12px;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+          background: var(--bg-card, #1a202c);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+          border-radius: 14px;
+          box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
           padding: 10px;
-          width: 170px;
+          width: 195px;
           z-index: 50;
           display: flex;
           flex-direction: column;
           gap: 4px;
+          backdrop-filter: blur(16px);
+          animation: slideDown 0.15s ease-out;
         }
 
-        .ephemeral-dropdown h4 {
-          font-size: 0.75rem;
-          color: var(--text-secondary, #64748b);
-          margin: 0 0 6px 4px;
+        .ephemeral-dropdown-header {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 8px 8px;
+          border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+          color: #f59e0b;
+        }
+
+        .ephemeral-dropdown-header h4 {
+          font-size: 0.76rem;
+          color: var(--text-secondary, #94a3b8);
+          margin: 0;
           text-transform: uppercase;
+          letter-spacing: 0.03em;
         }
 
         .ephemeral-dropdown button {
           background: transparent;
           border: none;
-          text-align: left;
-          padding: 6px 10px;
-          border-radius: 6px;
+          padding: 8px 10px;
+          border-radius: 8px;
           font-size: 0.85rem;
-          color: var(--text-primary, #0f172a);
+          color: var(--text-primary, #f8fafc);
           cursor: pointer;
           display: flex;
+          align-items: center;
           justify-content: space-between;
+          transition: background 0.15s ease, color 0.15s ease;
         }
 
         .ephemeral-dropdown button:hover {
-          background: var(--bg-hover, #f1f5f9);
+          background: rgba(99, 102, 241, 0.15);
+          color: #818cf8;
+        }
+
+        .in-chat-search-bar {
+          display: flex;
+          align-items: center;
+          background: var(--bg-card, #131722);
+          border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+          padding: 8px 16px;
+          gap: 10px;
+          animation: slideDown 0.15s ease-out;
+        }
+
+        .in-chat-search-icon {
+          color: #818cf8;
+          flex-shrink: 0;
+        }
+
+        .in-chat-search-input {
+          flex: 1;
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+          border-radius: 20px;
+          padding: 6px 14px;
+          font-size: 0.85rem;
+          background: var(--bg-page, #0b0e14);
+          color: var(--text-primary, #f8fafc);
+          outline: none;
+          transition: border-color 0.2s;
+        }
+
+        .in-chat-search-input:focus {
+          border-color: #6366f1;
+        }
+
+        .btn-clear-search {
+          background: none;
+          border: none;
+          color: var(--text-secondary, #94a3b8);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 50%;
+        }
+
+        .btn-clear-search:hover {
+          color: #ffffff;
+          background: rgba(255, 255, 255, 0.08);
         }
 
         .e2ee-stream-banner {
-          margin: 8px auto 16px auto;
-          max-width: 440px;
+          margin: 12px auto 18px auto;
+          max-width: 480px;
           padding: 10px 16px;
-          background: rgba(99, 102, 241, 0.08);
+          background: rgba(99, 102, 241, 0.07);
           border: 1px solid rgba(99, 102, 241, 0.2);
-          border-radius: 12px;
+          border-radius: 14px;
           display: flex;
           align-items: center;
-          gap: 10px;
-          text-align: center;
+          gap: 12px;
+          text-align: left;
+        }
+
+        .e2ee-banner-icon-badge {
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background: rgba(99, 102, 241, 0.18);
+          color: #818cf8;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
         }
 
         .e2ee-stream-banner p {
           margin: 0;
           font-size: 0.76rem;
-          color: var(--text-secondary, #64748b);
-          line-height: 1.4;
+          color: var(--text-secondary, #94a3b8);
+          line-height: 1.45;
         }
 
-        .e2ee-banner-icon {
-          font-size: 1.1rem;
+        .call-log-bubble-row {
+          display: flex;
+          justify-content: center;
+          margin: 12px 0;
+          width: 100%;
+        }
+
+        .call-log-bubble {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 16px;
+          border-radius: 20px;
+          background: rgba(148, 163, 184, 0.1);
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          font-size: 0.8rem;
+          color: var(--text-secondary, #94a3b8);
+        }
+
+        .call-log-icon {
+          color: #818cf8;
+        }
+
+        .call-log-text {
+          font-weight: 500;
+        }
+
+        .call-log-time {
+          font-size: 0.72rem;
+          opacity: 0.75;
         }
 
         .chat-composer-container {
-          padding: 10px 16px;
-          border-top: 1px solid var(--border-color, #e2e8f0);
-          background: var(--card-bg, #ffffff);
+          padding: 12px 20px 16px;
+          border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+          background: var(--card-bg, #131722);
+          flex-shrink: 0;
+        }
+
+        .chat-composer-bar {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: var(--bg-page, #0b0e14);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+          border-radius: 28px;
+          padding: 5px 7px 5px 12px;
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .chat-composer-bar:focus-within {
+          border-color: #6366f1;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
         }
 
         .btn-composer-icon {
           background: none;
           border: none;
-          font-size: 18px;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--text-secondary, #94a3b8);
           cursor: pointer;
-          padding: 4px 6px;
-          border-radius: 8px;
-          transition: background 0.15s ease;
+          transition: all 0.2s ease;
         }
 
         .btn-composer-icon:hover {
-          background: var(--bg-hover, #f1f5f9);
+          color: #818cf8;
+          background: rgba(255, 255, 255, 0.08);
+          transform: scale(1.08);
+        }
+
+        .chat-input-field {
+          flex: 1;
+          border: none;
+          outline: none;
+          background: transparent;
+          color: var(--text-primary, #f8fafc);
+          font-size: 0.94rem;
+          padding: 8px 4px;
+        }
+
+        .chat-input-field::placeholder {
+          color: var(--text-secondary, #64748b);
+        }
+
+        .btn-chat-send {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 18px;
+          border-radius: 20px;
+          font-size: 0.88rem;
+          font-weight: 600;
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+          color: #ffffff;
+          border: none;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+        }
+
+        .btn-chat-send:hover:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 16px rgba(99, 102, 241, 0.5);
+        }
+
+        .btn-chat-send:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+          box-shadow: none;
+          transform: none;
+        }
+
+        .message-bubble-row {
+          display: flex;
+          margin-bottom: 8px;
+        }
+
+        .message-bubble-row.outgoing {
+          justify-content: flex-end;
+        }
+
+        .message-bubble-row.incoming {
+          justify-content: flex-start;
+        }
+
+        .message-bubble {
+          max-width: 68%;
+          padding: 10px 14px;
+          word-break: break-word;
+        }
+
+        .message-bubble-row.outgoing .message-bubble {
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+          color: #ffffff;
+          border-radius: 18px 18px 4px 18px;
+          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+        }
+
+        .message-bubble-row.incoming .message-bubble {
+          background: var(--card-bg, #1a202c);
+          color: var(--text-primary, #f8fafc);
+          border-radius: 18px 18px 18px 4px;
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+        }
+
+        .message-text {
+          margin: 0;
+          font-size: 0.92rem;
+          line-height: 1.45;
+        }
+
+        .message-info-row {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 4px;
+          margin-top: 4px;
+        }
+
+        .message-timestamp {
+          font-size: 0.68rem;
+          opacity: 0.75;
+        }
+
+        .receipt-check-read {
+          color: #38bdf8;
+        }
+
+        .receipt-check-delivered {
+          opacity: 0.7;
         }
 
         .message-bubble.has-media {
@@ -1411,7 +1789,7 @@ export default function MessagesPage({
         .audio-lock-tag {
           font-size: 0.68rem;
           background: rgba(99, 102, 241, 0.15);
-          color: #6366f1;
+          color: #818cf8;
           padding: 1px 5px;
           border-radius: 6px;
           margin-left: auto;
@@ -1431,26 +1809,11 @@ export default function MessagesPage({
           color: var(--text-secondary, #64748b);
         }
 
-        .message-info-row {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 4px;
-          margin-top: 3px;
-        }
-
-        .message-receipt-tick {
-          font-size: 0.72rem;
-          font-weight: bold;
-          opacity: 0.85;
-          margin-left: 2px;
-        }
-
         .typing-dots-bubble {
           padding: 10px 16px;
           border-radius: 18px;
-          background: var(--bg-card, #ffffff);
-          border: 1px solid var(--border-color, #e2e8f0);
+          background: var(--bg-card, #1a202c);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
           display: inline-flex;
           align-items: center;
           gap: 4px;
@@ -1472,71 +1835,9 @@ export default function MessagesPage({
           40% { transform: scale(1); opacity: 1; }
         }
 
-        .btn-chat-action.active-search {
-          background: rgba(99, 102, 241, 0.2);
-          color: #6366f1;
-        }
-
-        .in-chat-search-bar {
-          display: flex;
-          align-items: center;
-          background: var(--bg-card, #ffffff);
-          border-bottom: 1px solid var(--border-color, #e2e8f0);
-          padding: 8px 16px;
-          gap: 8px;
-          animation: slideDown 0.15s ease-out;
-        }
-
-        .in-chat-search-input {
-          flex: 1;
-          border: 1px solid var(--border-color, #e2e8f0);
-          border-radius: 20px;
-          padding: 6px 14px;
-          font-size: 0.85rem;
-          background: var(--bg-page, #f8fafc);
-          color: var(--text-primary, #0f172a);
-          outline: none;
-        }
-
-        .in-chat-search-input:focus {
-          border-color: #6366f1;
-        }
-
-        .btn-clear-search {
-          background: none;
-          border: none;
-          color: var(--text-secondary, #94a3b8);
-          font-size: 0.9rem;
-          cursor: pointer;
-          padding: 4px;
-        }
-
-        .call-log-bubble-row {
-          display: flex;
-          justify-content: center;
-          margin: 12px 0;
-          width: 100%;
-        }
-
-        .call-log-bubble {
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-          padding: 6px 16px;
-          border-radius: 20px;
-          background: var(--bg-hover, rgba(148, 163, 184, 0.12));
-          border: 1px solid var(--border-color, rgba(148, 163, 184, 0.2));
-          font-size: 0.8rem;
-          color: var(--text-secondary, #64748b);
-        }
-
-        .call-log-text {
-          font-weight: 500;
-        }
-
-        .call-log-time {
-          font-size: 0.72rem;
-          opacity: 0.75;
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>
