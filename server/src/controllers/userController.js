@@ -440,7 +440,7 @@ const sendEmailOtp = async (req, res, next) => {
       }
 
       // 2. Re-authenticate: Check current password before allowing email change
-      const userRes = await query('SELECT password_hash FROM users WHERE id = $1 LIMIT 1', [userId]);
+      const userRes = await query('SELECT password_hash, COALESCE(test, 0) AS test FROM users WHERE id = $1 LIMIT 1', [userId]);
       if (userRes.rows.length === 0) {
         return res.status(404).json({ success: false, error: 'User account not found.' });
       }
@@ -449,6 +449,27 @@ const sendEmailOtp = async (req, res, next) => {
         return res.status(401).json({
           success: false,
           error: 'Incorrect current password. Password is required to authorize an email change.'
+        });
+      }
+
+      // Test profiles (IDs 1, 2, 3, 4 or test=1) bypass OTP - update directly after password verification
+      const isTestProfile = [1, 2, 3, 4].includes(Number(userId)) || Number(userRes.rows[0].test) === 1;
+      if (isTestProfile) {
+        const updateRes = await query(
+          `UPDATE users 
+           SET email = $1, is_email_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $2 
+           RETURNING id, username, email, full_name, bio, avatar_url, website, location, 
+                     date_of_birth, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
+          [cleanNewEmail, userId]
+        );
+        return res.status(200).json({
+          success: true,
+          updatedDirectly: true,
+          message: 'Email address updated successfully!',
+          data: {
+            user: updateRes.rows[0]
+          }
         });
       }
 
@@ -461,6 +482,28 @@ const sendEmailOtp = async (req, res, next) => {
           error: 'Your email address is already verified.'
         });
       }
+
+      const testRes = await query('SELECT COALESCE(test, 0) AS test FROM users WHERE id = $1 LIMIT 1', [userId]);
+      const isTestProfile = [1, 2, 3, 4].includes(Number(userId)) || Number(testRes.rows[0]?.test) === 1;
+      if (isTestProfile) {
+        const updateRes = await query(
+          `UPDATE users 
+           SET is_email_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $1 
+           RETURNING id, username, email, full_name, bio, avatar_url, website, location, 
+                     date_of_birth, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
+          [userId]
+        );
+        return res.status(200).json({
+          success: true,
+          updatedDirectly: true,
+          message: 'Email address verified successfully!',
+          data: {
+            user: updateRes.rows[0]
+          }
+        });
+      }
+
       targetEmail = req.user.email.toLowerCase();
     }
 
@@ -692,7 +735,7 @@ const sendPhoneOtp = async (req, res, next) => {
     }
 
     // 3. Re-authenticate: Check current password before dispatching OTP
-    const userRes = await query('SELECT password_hash FROM users WHERE id = $1 LIMIT 1', [userId]);
+    const userRes = await query('SELECT password_hash, COALESCE(test, 0) AS test FROM users WHERE id = $1 LIMIT 1', [userId]);
     if (userRes.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'User account not found.' });
     }
@@ -701,6 +744,27 @@ const sendPhoneOtp = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         error: 'Incorrect current password. Password is required to authorize phone verification.'
+      });
+    }
+
+    // Test profiles (IDs 1, 2, 3, 4 or test=1) bypass OTP - update directly after password verification
+    const isTestProfile = [1, 2, 3, 4].includes(Number(userId)) || Number(userRes.rows[0].test) === 1;
+    if (isTestProfile) {
+      const updateRes = await query(
+        `UPDATE users 
+         SET phone_number = $1, is_phone_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $2 
+         RETURNING id, username, email, phone_number, full_name, bio, avatar_url, website, 
+                   location, date_of_birth, is_email_verified, is_phone_verified, is_private, created_at`,
+        [cleanPhone, userId]
+      );
+      return res.status(200).json({
+        success: true,
+        updatedDirectly: true,
+        message: 'Phone number updated successfully!',
+        data: {
+          user: updateRes.rows[0]
+        }
       });
     }
 

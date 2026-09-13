@@ -343,9 +343,19 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
         : {};
       const res = await apiClient.post('/users/email/send-otp', payload);
       if (res.success) {
-        setEmailOtpSent(true);
-        setOtpCountdown(60);
-        setFeedbackMsg({ type: 'success', text: res.message || 'Verification code sent to your email.' });
+        if (res.updatedDirectly && res.data?.user) {
+          setProfile((prev) => ({ ...prev, ...res.data.user }));
+          updateUser(res.data.user);
+          setEmailOtpSent(false);
+          setEmailOtp('');
+          setNewEmail('');
+          setEmailPassword('');
+          setFeedbackMsg({ type: 'success', text: res.message || 'Email address updated successfully!' });
+        } else {
+          setEmailOtpSent(true);
+          setOtpCountdown(60);
+          setFeedbackMsg({ type: 'success', text: res.message || 'Verification code sent to your email.' });
+        }
       } else {
         setFeedbackMsg({ type: 'error', text: res.error || 'Failed to send verification code.' });
       }
@@ -402,9 +412,19 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
         currentPassword: phonePassword
       });
       if (res.success) {
-        setPhoneOtpSent(true);
-        setPhoneOtpCountdown(60);
-        setFeedbackMsg({ type: 'success', text: res.message || 'Verification code sent to your phone.' });
+        if (res.updatedDirectly && res.data?.user) {
+          setProfile((prev) => ({ ...prev, ...res.data.user }));
+          updateUser(res.data.user);
+          setPhoneOtpSent(false);
+          setPhoneOtp('');
+          setNewPhone('');
+          setPhonePassword('');
+          setFeedbackMsg({ type: 'success', text: res.message || 'Phone number linked successfully!' });
+        } else {
+          setPhoneOtpSent(true);
+          setPhoneOtpCountdown(60);
+          setFeedbackMsg({ type: 'success', text: res.message || 'Verification code sent to your phone.' });
+        }
       } else {
         setFeedbackMsg({ type: 'error', text: res.error || 'Failed to send verification code.' });
       }

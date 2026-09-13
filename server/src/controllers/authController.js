@@ -341,22 +341,23 @@ const login = async (req, res, next) => {
 
     const isDemoAccess = req.body.isDemoAccess === true || req.body.isDemoAccess === 'true';
     const isDemoAccount = Boolean(isDemoAccess || DEMO_USERNAMES.includes((user.username || '').toLowerCase()));
+    const isTestProfile = Boolean([1, 2, 3, 4].includes(Number(user.id)) || Number(user.test) === 1);
 
-    // Demo accounts bypass 2FA OTP to allow showcase exploratory access
-    if (isDemoAccount) {
+    // Demo accounts & Test profiles (User IDs 1, 2, 3, 4) bypass 2FA OTP - password only
+    if (isDemoAccount || isTestProfile) {
       const sessionId = await createSessionRecord(user.id, req);
       const token = generateToken({
         id: user.id,
         username: user.username,
         tokenVersion: user.token_version || 1,
         sessionId,
-        isDemoAccess: true
+        isDemoAccess: isDemoAccount
       });
 
       setAuthCookie(res, token);
       delete user.password_hash;
       delete user.token_version;
-      user.is_demo_session = true;
+      if (isDemoAccount) user.is_demo_session = true;
 
       return res.status(200).json({
         success: true,
