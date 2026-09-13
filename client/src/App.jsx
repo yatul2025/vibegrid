@@ -31,15 +31,9 @@ function AppContent() {
   });
   const [settingsSection, setSettingsSection] = useState('profile');
 
-  // Test profile condition: user must have test = 1 or be in the first 4 user IDs / test profiles
+  // "System Status" is strictly visible ONLY to user IDs 1, 2, 3, 4 (test profiles with test = 1). All other users cannot see it.
   const isTestUser = Boolean(
-    user && (
-      Number(user.test) === 1 ||
-      user.test === 1 ||
-      user.test === true ||
-      [1, 2, 3, 4].includes(Number(user.id)) ||
-      ['test_user_3950', 'test', 'test2', 'test3', 'sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'].includes((user.username || '').toLowerCase())
-    )
+    user && [1, 2, 3, 4].includes(Number(user.id)) && (Number(user.test) === 1 || user.test === undefined || user.test === 1)
   );
 
   // If user is on 'status' tab but is not a test user, redirect to 'feed'
