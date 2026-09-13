@@ -41,8 +41,34 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Static file hosting for uploaded images
+// Static file hosting for uploaded images (local disk / default SVGs)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Dynamic media file server from PostgreSQL (handles Vercel Serverless and cloud deployments)
+app.get(['/uploads/:folder/:filename', '/api/uploads/:folder/:filename'], async (req, res, next) => {
+  try {
+    const { folder, filename } = req.params;
+    const mediaRes = await db.query(
+      'SELECT mime_type, data FROM media_files WHERE id = $1 AND folder = $2 LIMIT 1',
+      [filename, folder]
+    );
+
+    if (mediaRes.rows.length === 0) {
+      if (filename.startsWith('default-')) {
+        return res.redirect('/uploads/avatars/default-avatar.svg');
+      }
+      return res.status(404).json({ success: false, error: 'Media file not found' });
+    }
+
+    const { mime_type, data } = mediaRes.rows[0];
+    res.setHeader('Content-Type', mime_type || 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(data);
+  } catch (err) {
+    console.error('[Media Serve Error]', err);
+    next(err);
+  }
+});
 
 // ============================================================================
 // 2. Health & Status Endpoints
@@ -83,9 +109,24 @@ app.use('/api/hashtags', require('./routes/hashtagRoutes'));
 
 app.use((err, req, res, next) => {
   console.error('[Unhandled Error]', err.stack || err.message);
-  res.status(err.status || 500).json({
+
+  if (err.name === 'MulterError') {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        success: false,
+        error: 'File size too large. Please upload an image under 10MB.'
+      });
+    }
+    return res.status(400).json({
+      success: false,
+      error: `Upload error: ${err.message}`
+    });
+  }
+
+  const statusCode = err.status || err.statusCode || 500;
+  res.status(statusCode).json({
     success: false,
-    error: config.nodeEnv === 'production' ? 'Internal server error' : err.message
+    error: err.status ? err.message : (config.nodeEnv === 'production' && statusCode === 500 ? 'Internal server error' : err.message)
   });
 });
 

@@ -197,3 +197,15 @@ CREATE TABLE IF NOT EXISTS account_verifications (
 CREATE INDEX IF NOT EXISTS idx_account_verifications_user_id ON account_verifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_account_verifications_target ON account_verifications(type, target_value);
 
+-- 14. Media Files Table (Serverless & Cloud Upload Storage)
+CREATE TABLE IF NOT EXISTS media_files (
+    id VARCHAR(255) PRIMARY KEY,
+    folder VARCHAR(50) NOT NULL,
+    mime_type VARCHAR(100) NOT NULL,
+    data BYTEA NOT NULL,
+    size INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_media_files_folder ON media_files(folder);
+
+

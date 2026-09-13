@@ -13,6 +13,8 @@ const { query } = require('../config/db');
 const { generateToken, setAuthCookie } = require('../utils/jwt');
 const { sendEmailChangeOtpEmail } = require('../utils/mailer');
 const { getDefaultAvatar, isDefaultAvatar } = require('../utils/avatar');
+const { saveUploadedMedia, deleteUploadedMedia } = require('../utils/mediaStorage');
+const path = require('path');
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -236,15 +238,15 @@ const uploadAvatar = async (req, res, next) => {
       });
     }
 
-    // Public URL path accessible by the frontend
-    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    // Persist file in database & local storage (serverless-safe)
+    const { url: avatarUrl } = await saveUploadedMedia(req.file, 'avatars', userId);
 
     // Update avatar in PostgreSQL
     const updateQuery = `
       UPDATE users 
       SET avatar_url = $1, updated_at = CURRENT_TIMESTAMP 
       WHERE id = $2 
-      RETURNING id, username, email, full_name, bio, avatar_url
+      RETURNING id, username, email, full_name, bio, avatar_url, gender
     `;
     const result = await query(updateQuery, [avatarUrl, userId]);
 
@@ -252,7 +254,8 @@ const uploadAvatar = async (req, res, next) => {
       success: true,
       message: 'Profile picture updated successfully!',
       data: {
-        user: result.rows[0]
+        user: result.rows[0],
+        avatar_url: avatarUrl
       }
     });
   } catch (error) {
@@ -388,16 +391,10 @@ const removeAvatar = async (req, res, next) => {
       [defaultAvatar, userId]
     );
 
-    // Delete local disk file if it exists and is an uploaded avatar
+    // Delete old avatar from media storage (DB & local cache) if it was an uploaded file
     if (currentAvatar && currentAvatar.startsWith('/uploads/avatars/avatar-')) {
-      const fs = require('fs');
-      const path = require('path');
-      const filePath = path.join(__dirname, '../../', currentAvatar);
-      fs.unlink(filePath, (err) => {
-        if (err && err.code !== 'ENOENT') {
-          console.warn('[Avatar Delete File Warning]', err.message);
-        }
-      });
+      const oldFilename = path.basename(currentAvatar);
+      deleteUploadedMedia(oldFilename, 'avatars').catch(() => {});
     }
 
     res.status(200).json({

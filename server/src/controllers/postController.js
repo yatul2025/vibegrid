@@ -13,6 +13,7 @@
 const path = require('path');
 const fs = require('fs');
 const { query } = require('../config/db');
+const { saveUploadedMedia, deleteUploadedMedia } = require('../utils/mediaStorage');
 
 /**
  * Create a new photo post
@@ -43,8 +44,8 @@ const createPost = async (req, res, next) => {
       cleanCaption = caption.trim().slice(0, 2200);
     }
 
-    // 3. Construct public image URL
-    const imageUrl = `/uploads/posts/${req.file.filename}`;
+    // 3. Persist file in database & local storage (serverless-safe)
+    const { url: imageUrl } = await saveUploadedMedia(req.file, 'posts', userId);
 
     // 4. Insert post into PostgreSQL
     const insertQuery = `
@@ -308,15 +309,10 @@ const deletePost = async (req, res, next) => {
     // 2. Delete database record (cascades to likes and comments)
     await query('DELETE FROM posts WHERE id = $1', [postId]);
 
-    // 3. Attempt to delete physical file from disk
+    // 3. Remove media file from storage (DB & local cache)
     if (post.image_url && post.image_url.startsWith('/uploads/posts/')) {
       const filename = path.basename(post.image_url);
-      const filePath = path.join(__dirname, '../../uploads/posts', filename);
-      if (fs.existsSync(filePath)) {
-        fs.unlink(filePath, (err) => {
-          if (err) console.warn('[File Deletion Warning]', err.message);
-        });
-      }
+      deleteUploadedMedia(filename, 'posts').catch(() => {});
     }
 
     res.status(200).json({
