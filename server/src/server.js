@@ -16,11 +16,16 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const config = require('./config/env');
 const db = require('./config/db');
-const { initSocket } = require('./socket');
-
 const app = express();
 const httpServer = http.createServer(app);
-const io = initSocket(httpServer);
+
+let io = null;
+try {
+  const { initSocket } = require('./socket');
+  io = initSocket(httpServer);
+} catch (err) {
+  console.warn('[Socket.IO Initialization Notice]:', err.message);
+}
 app.set('io', io);
 
 // Security: Enable reverse proxy trust (1 hop) for accurate client IP in rate limiters

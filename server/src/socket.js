@@ -11,7 +11,13 @@
  * 5. Authorization checks against blocked_users and privacy settings before call setup.
  */
 
-const { Server } = require('socket.io');
+let Server = null;
+try {
+  Server = require('socket.io').Server;
+} catch (err) {
+  console.warn('[socket.io] Notice: socket.io is not loaded in this environment:', err.message);
+}
+
 const jwt = require('jsonwebtoken');
 const config = require('./config/env');
 const { query } = require('./config/db');
@@ -35,6 +41,11 @@ function parseCookies(cookieHeader) {
 }
 
 function initSocket(httpServer) {
+  if (!Server) {
+    console.warn('[socket.io] Serverless environment detected: WebSockets disabled.');
+    return null;
+  }
+
   const io = new Server(httpServer, {
     cors: {
       origin: [config.clientUrl, 'http://localhost:5173', 'http://localhost:3000'],
