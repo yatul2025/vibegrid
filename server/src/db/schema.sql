@@ -50,10 +50,14 @@ CREATE TABLE IF NOT EXISTS posts (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     image_url TEXT NOT NULL,
     caption TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    moderation_reason VARCHAR(100) DEFAULT NULL,
+    deactivated_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_is_active ON posts(is_active);
 
 -- 3. Likes Table (Compound Unique key prevents duplicate likes)
 CREATE TABLE IF NOT EXISTS likes (

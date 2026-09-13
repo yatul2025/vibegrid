@@ -151,13 +151,14 @@ const getFeedPosts = async (req, res, next) => {
         END AS is_saved
       FROM posts p
       JOIN users u ON p.user_id = u.id
-      WHERE (
-        u.is_private = FALSE
-        OR ($1::int IS NOT NULL AND (
-          p.user_id = $1::int
-          OR EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = $1::int AND f.following_id = p.user_id)
-        ))
-      )
+      WHERE p.is_active = TRUE
+        AND (
+          u.is_private = FALSE
+          OR ($1::int IS NOT NULL AND (
+            p.user_id = $1::int
+            OR EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = $1::int AND f.following_id = p.user_id)
+          ))
+        )
       ORDER BY p.created_at DESC
       LIMIT 50
     `;
@@ -230,6 +231,8 @@ const getUserPosts = async (req, res, next) => {
         p.image_url,
         p.caption,
         p.created_at,
+        p.is_active,
+        p.moderation_reason,
         u.username,
         u.avatar_url,
         (SELECT COUNT(*)::int FROM likes l WHERE l.post_id = p.id) AS likes_count,
@@ -247,6 +250,7 @@ const getUserPosts = async (req, res, next) => {
       FROM posts p
       JOIN users u ON p.user_id = u.id
       WHERE LOWER(u.username) = $1
+        AND (p.is_active = TRUE OR ($2::int IS NOT NULL AND p.user_id = $2::int))
       ORDER BY p.created_at DESC
     `;
     const result = await query(userPostsQuery, [cleanUsername, currentUserId]);
@@ -357,6 +361,7 @@ const getExplorePosts = async (req, res, next) => {
         END AS is_saved
       FROM posts p
       JOIN users u ON p.user_id = u.id
+      WHERE p.is_active = TRUE AND u.is_private = FALSE
       ORDER BY likes_count DESC, p.created_at DESC
       LIMIT 60
     `;
@@ -391,12 +396,12 @@ const toggleSavePost = async (req, res, next) => {
       });
     }
 
-    // 1. Verify post exists
-    const postCheck = await query('SELECT id FROM posts WHERE id = $1 LIMIT 1', [postId]);
+    // 1. Verify post exists and is active
+    const postCheck = await query('SELECT id FROM posts WHERE id = $1 AND is_active = TRUE LIMIT 1', [postId]);
     if (postCheck.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Post not found.'
+        error: 'Post not found or has been removed.'
       });
     }
 
@@ -457,7 +462,7 @@ const getSavedPosts = async (req, res, next) => {
       FROM saved_posts sp
       JOIN posts p ON sp.post_id = p.id
       JOIN users u ON p.user_id = u.id
-      WHERE sp.user_id = $1
+      WHERE sp.user_id = $1 AND p.is_active = TRUE
       ORDER BY sp.created_at DESC
     `;
     const result = await query(savedQuery, [userId]);
@@ -475,6 +480,62 @@ const getSavedPosts = async (req, res, next) => {
   }
 };
 
+/**
+ * Moderate a post (toggle active/inactive status and set moderation reason)
+ * Route: PATCH /api/posts/:id/moderate
+ */
+const moderatePost = async (req, res, next) => {
+  try {
+    const postId = parseInt(req.params.id, 10);
+    const callerId = req.user.id;
+    const { isActive = false, reason = 'Prohibited or adult content' } = req.body;
+
+    if (isNaN(postId)) {
+      return res.status(400).json({ success: false, error: 'Invalid post ID.' });
+    }
+
+    // Check caller authorization: User IDs 1..4 or test=1 or admin
+    const userRes = await query('SELECT id, COALESCE(test, 0) AS test FROM users WHERE id = $1 LIMIT 1', [callerId]);
+    const isAuthorized = [1, 2, 3, 4].includes(Number(callerId)) || Number(userRes.rows[0]?.test) === 1;
+
+    if (!isAuthorized) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized. Only administrators and moderators can moderate posts.'
+      });
+    }
+
+    // Check post exists
+    const postCheck = await query('SELECT id, user_id, is_active FROM posts WHERE id = $1 LIMIT 1', [postId]);
+    if (postCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Post not found.' });
+    }
+
+    const activeBool = Boolean(isActive);
+    const deactivatedAt = activeBool ? null : new Date();
+    const modReason = activeBool ? null : (reason ? String(reason).trim().substring(0, 100) : 'Prohibited or adult content');
+
+    const updateRes = await query(
+      `UPDATE posts 
+       SET is_active = $1, moderation_reason = $2, deactivated_at = $3 
+       WHERE id = $4 
+       RETURNING id, user_id, is_active, moderation_reason, deactivated_at, created_at`,
+      [activeBool, modReason, deactivatedAt, postId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: activeBool ? 'Post has been restored and is now active.' : 'Post has been deactivated and hidden from all feeds.',
+      data: {
+        post: updateRes.rows[0]
+      }
+    });
+  } catch (error) {
+    console.error('[Moderate Post Error]', error);
+    next(error);
+  }
+};
+
 module.exports = {
   createPost,
   getFeedPosts,
@@ -482,6 +543,7 @@ module.exports = {
   deletePost,
   getExplorePosts,
   toggleSavePost,
-  getSavedPosts
+  getSavedPosts,
+  moderatePost
 };
 

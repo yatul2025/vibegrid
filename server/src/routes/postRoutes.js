@@ -16,7 +16,8 @@ const {
   deletePost,
   getExplorePosts,
   toggleSavePost,
-  getSavedPosts
+  getSavedPosts,
+  moderatePost
 } = require('../controllers/postController');
 const {
   toggleLike,
@@ -41,6 +42,9 @@ router.get('/saved', protect, getSavedPosts);
 
 // GET /api/posts/user/:username — Get all posts by a specific user (Optional Auth)
 router.get('/user/:username', optionalAuth, getUserPosts);
+
+// PATCH /api/posts/:id/moderate — Toggle post active/inactive status (Protected, Admins/Moderators)
+router.patch('/:id/moderate', protect, moderatePost);
 
 // DELETE /api/posts/:id — Delete a post by ID (Protected, Author only)
 router.delete('/:id', protect, deletePost);

@@ -87,7 +87,7 @@ const getHashtagPosts = async (req, res, next) => {
       JOIN post_hashtags ph ON p.id = ph.post_id
       JOIN hashtags h ON ph.hashtag_id = h.id
       JOIN users u ON p.user_id = u.id
-      WHERE LOWER(h.name) = $1
+      WHERE LOWER(h.name) = $1 AND p.is_active = TRUE
       ORDER BY p.created_at DESC
       LIMIT 60
     `;
@@ -98,7 +98,7 @@ const getHashtagPosts = async (req, res, next) => {
       SELECT 
         id, 
         name,
-        (SELECT COUNT(*)::int FROM post_hashtags WHERE hashtag_id = hashtags.id) AS post_count
+        (SELECT COUNT(*)::int FROM post_hashtags ph JOIN posts p ON ph.post_id = p.id WHERE ph.hashtag_id = hashtags.id AND p.is_active = TRUE) AS post_count
       FROM hashtags 
       WHERE LOWER(name) = $1
       LIMIT 1

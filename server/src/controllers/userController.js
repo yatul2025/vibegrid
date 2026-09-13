@@ -60,7 +60,7 @@ const getProfile = async (req, res, next) => {
 
     // 2. Fetch statistics (Post count, Followers count, Following count)
     const [postsCountRes, followersCountRes, followingCountRes] = await Promise.all([
-      query('SELECT COUNT(*)::int as count FROM posts WHERE user_id = $1', [profile.id]),
+      query('SELECT COUNT(*)::int as count FROM posts WHERE user_id = $1 AND is_active = TRUE', [profile.id]),
       query('SELECT COUNT(*)::int as count FROM follows WHERE following_id = $1', [profile.id]),
       query('SELECT COUNT(*)::int as count FROM follows WHERE follower_id = $1', [profile.id])
     ]);
