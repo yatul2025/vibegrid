@@ -91,6 +91,25 @@ class KeyStore {
   }
 
   // ==========================================================================
+  // Cryptographic Safety Number Verification
+  // ==========================================================================
+
+  async isPeerVerified(userId, peerUserId) {
+    if (!e2eeDbStore) return false;
+    const val = await get(`verified:${userId}:${peerUserId}`, e2eeDbStore);
+    return Boolean(val);
+  }
+
+  async setPeerVerified(userId, peerUserId, isVerified) {
+    if (!e2eeDbStore) return;
+    if (isVerified) {
+      await set(`verified:${userId}:${peerUserId}`, true, e2eeDbStore);
+    } else {
+      await del(`verified:${userId}:${peerUserId}`, e2eeDbStore);
+    }
+  }
+
+  // ==========================================================================
   // Device Wipe (On Explicit Logout / Session Invalidation)
   // ==========================================================================
 

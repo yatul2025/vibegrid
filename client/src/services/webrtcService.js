@@ -12,6 +12,7 @@
  */
 
 import socketService from './socketService';
+import apiClient from '../api/client';
 
 const DEFAULT_ICE_SERVERS = {
   iceServers: [
@@ -74,15 +75,31 @@ class WebRTCService {
   }
 
   // ==========================================================================
+  // Dynamic ICE / TURN Server Resolution
+  // ==========================================================================
+
+  async getIceServers() {
+    try {
+      const res = await apiClient.get('/calls/turn-credentials');
+      if (res.success && Array.isArray(res.data?.iceServers) && res.data.iceServers.length > 0) {
+        return { iceServers: res.data.iceServers };
+      }
+    } catch (err) {
+      console.warn('[WebRTC] Using default STUN servers:', err.message);
+    }
+    return DEFAULT_ICE_SERVERS;
+  }
+
+  // ==========================================================================
   // PeerConnection Setup
   // ==========================================================================
 
-  createPeerConnection(targetUserId, callId) {
+  createPeerConnection(targetUserId, callId, iceConfig = DEFAULT_ICE_SERVERS) {
     this.targetUserId = Number(targetUserId);
     this.callId = callId;
     this.candidateQueue = [];
 
-    const pc = new RTCPeerConnection(DEFAULT_ICE_SERVERS);
+    const pc = new RTCPeerConnection(iceConfig);
     this.peerConnection = pc;
 
     this.remoteStream = new MediaStream();
@@ -145,7 +162,8 @@ class WebRTCService {
 
   async startCallAsInitiator(targetUserId, callId, callType = 'audio') {
     await this.getLocalMedia(callType);
-    const pc = this.createPeerConnection(targetUserId, callId);
+    const iceConfig = await this.getIceServers();
+    const pc = this.createPeerConnection(targetUserId, callId, iceConfig);
 
     const offer = await pc.createOffer({
       offerToReceiveAudio: true,
@@ -163,7 +181,8 @@ class WebRTCService {
 
   async handleIncomingOffer(callerId, sdp, callId, callType = 'audio') {
     await this.getLocalMedia(callType);
-    const pc = this.createPeerConnection(callerId, callId);
+    const iceConfig = await this.getIceServers();
+    const pc = this.createPeerConnection(callerId, callId, iceConfig);
 
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
 

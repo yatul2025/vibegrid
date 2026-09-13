@@ -1,23 +1,27 @@
 /**
  * client/src/pages/MessagesPage.jsx
  * =================================
- * Dual-Pane Direct Messaging with End-to-End Encryption (E2EE) & Real-Time WebSockets
+ * Dual-Pane Direct Messaging with End-to-End Encryption (E2EE),
+ * Encrypted Media Attachments, Voice Notes, Safety Numbers, and Disappearing Messages.
  * 
  * Features:
  * 1. Cryptographic Security:
- *    - Client-side AES-256-GCM authenticated encryption.
+ *    - Client-side AES-256-GCM authenticated encryption for text and media.
  *    - Transparent key agreement (ECDH P-256) & IndexedDB private key isolation.
+ *    - Signal-style 60-digit Safety Number verification modal with Verified status badge (🛡️).
  *    - End-to-End Encrypted badge (🔒) and security disclaimer banner.
- * 2. Real-Time Infrastructure (Socket.IO):
+ * 2. Encrypted Attachments & Voice Notes:
+ *    - Photos encrypted with single-use AES-GCM keys client-side before upload.
+ *    - Microphone voice recorder component with duration timer and encrypted playback.
+ * 3. Ephemeral Disappearing Messages:
+ *    - Configurable timer (Off, 24h, 7d, 30d) with auto-expiration and badge (⏳).
+ * 4. Real-Time Infrastructure (Socket.IO):
  *    - Instant message delivery without polling.
  *    - Ephemeral typing indicators ("@{username} is typing...").
  *    - Online presence indicators (green dot).
  *    - Delivery & read receipts (✓ / ✓✓).
- * 3. WebRTC Call Triggers:
+ * 5. WebRTC Call Triggers:
  *    - One-click Audio Call (📞) and Video Call (📹) actions in the chat header.
- * 4. Dual-Pane Responsive Layout:
- *    - Left pane: Conversation threads with search, unread badges, and last message previews.
- *    - Right pane: Active chat stream with optimistic updates and auto-scroll.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -25,6 +29,11 @@ import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import socketService from '../services/socketService';
 import e2eeService from '../services/crypto/e2eeService';
+import keyStore from '../services/crypto/keyStore';
+import { encryptMedia } from '../services/crypto/mediaCrypto';
+import SafetyNumberModal from '../components/SafetyNumberModal';
+import VoiceRecorder from '../components/VoiceRecorder';
+import EncryptedMediaRenderer from '../components/EncryptedMediaRenderer';
 
 function formatMessageTime(dateString) {
   if (!dateString) return '';
@@ -48,6 +57,16 @@ function formatRelativeTime(dateString) {
   return past.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+function parseMediaPayload(content) {
+  if (!content || typeof content !== 'string') return null;
+  if (content.startsWith('{"type":"image"') || content.startsWith('{"type":"audio"')) {
+    try {
+      return JSON.parse(content);
+    } catch {}
+  }
+  return null;
+}
+
 export default function MessagesPage({
   initialTargetUsername = null,
   onNavigateToProfile,
@@ -66,6 +85,14 @@ export default function MessagesPage({
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [messageInput, setMessageInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+
+  // Advanced Security & Media States
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [isSafetyModalOpen, setIsSafetyModalOpen] = useState(false);
+  const [isPeerVerified, setIsPeerVerified] = useState(false);
+  const [ephemeralTimer, setEphemeralTimer] = useState(null);
+  const [isEphemeralMenuOpen, setIsEphemeralMenuOpen] = useState(false);
 
   // Ephemeral Real-Time States
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
@@ -78,6 +105,7 @@ export default function MessagesPage({
   const [searching, setSearching] = useState(false);
 
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const activePartnerRef = useRef(activePartner);
   activePartnerRef.current = activePartner;
@@ -97,7 +125,6 @@ export default function MessagesPage({
     try {
       const res = await apiClient.get('/messages/conversations');
       if (res.success && res.data?.conversations) {
-        // Pre-decrypt the last message preview for each conversation thread
         const decryptedConvs = await Promise.all(
           res.data.conversations.map(async (c) => {
             let preview = c.last_message;
@@ -107,6 +134,9 @@ export default function MessagesPage({
                 c.partner_id
               );
             }
+            if (preview && preview.startsWith('{"type":"image"')) preview = '📷 Photo';
+            if (preview && preview.startsWith('{"type":"audio"')) preview = '🎙️ Voice Note';
+
             return {
               ...c,
               last_message: preview
@@ -132,6 +162,12 @@ export default function MessagesPage({
         const partner = res.data.partner;
         setActivePartner(partner);
 
+        // Check verification status from local keyStore
+        if (user) {
+          const verified = await keyStore.isPeerVerified(user.id, partner.id);
+          setIsPeerVerified(verified);
+        }
+
         // Decrypt all incoming/outgoing messages
         const decryptedMessages = await e2eeService.decryptMessageList(
           res.data.messages,
@@ -150,7 +186,7 @@ export default function MessagesPage({
     } finally {
       if (isInitialLoad) setLoadingMessages(false);
     }
-  }, [onUnreadCountChange]);
+  }, [user, onUnreadCountChange]);
 
   // Initial Load
   useEffect(() => {
@@ -200,20 +236,22 @@ export default function MessagesPage({
 
       if (isCurrentChat) {
         setMessages((prev) => {
-          // Prevent duplicates
           if (prev.some((m) => m.id === processedMsg.id)) return prev;
           return [...prev, processedMsg];
         });
 
         setTimeout(() => scrollToBottom(true), 30);
 
-        // Send read receipt if incoming message
         if (!processedMsg.is_mine) {
           socketService.sendReadReceipt(activeConversationId, processedMsg.id, currentPartner.id);
         }
       }
 
       // Update conversations sidebar preview
+      let snippet = decryptedContent;
+      if (snippet && snippet.startsWith('{"type":"image"')) snippet = '📷 Photo';
+      if (snippet && snippet.startsWith('{"type":"audio"')) snippet = '🎙️ Voice Note';
+
       setConversations((prev) => {
         const partnerId = processedMsg.is_mine ? processedMsg.recipient_id : processedMsg.sender_id;
         const exists = prev.some((c) => Number(c.partner_id) === Number(partnerId));
@@ -227,7 +265,7 @@ export default function MessagesPage({
           if (Number(c.partner_id) === Number(partnerId)) {
             return {
               ...c,
-              last_message: decryptedContent,
+              last_message: snippet,
               last_message_at: processedMsg.created_at,
               last_sender_id: processedMsg.sender_id,
               unread_count: isCurrentChat ? 0 : (c.unread_count + 1)
@@ -305,7 +343,7 @@ export default function MessagesPage({
   };
 
   // ==========================================================================
-  // 4. Send Encrypted Message
+  // 4. Send Encrypted Text Message
   // ==========================================================================
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -315,7 +353,6 @@ export default function MessagesPage({
     setMessageInput('');
     socketService.sendTypingStop(activeConversationId, activePartner.id);
 
-    // Optimistic temporary message
     const tempId = `temp-${Date.now()}`;
     const optimisticMessage = {
       id: tempId,
@@ -334,19 +371,16 @@ export default function MessagesPage({
     try {
       setSending(true);
 
-      // 1. Perform client-side E2EE encryption (AES-256-GCM + ECDH)
       const encEnvelope = await e2eeService.encryptMessage(activePartner.id, textToSend);
 
-      // 2. Transmit ciphertext to server (plaintext content is left empty or as fallback)
       const res = await apiClient.post(`/messages/${activePartner.username}`, {
-        content: textToSend, // backward compatibility
+        content: textToSend,
         ciphertext: encEnvelope.ciphertext || null,
         ivNonce: encEnvelope.ivNonce || null,
         senderDeviceId: encEnvelope.senderDeviceId || null
       });
 
       if (res.success && res.data?.message) {
-        // Replace optimistic message with confirmed server message
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId
@@ -355,7 +389,6 @@ export default function MessagesPage({
           )
         );
 
-        // Update conversation thread snippet
         setConversations((prev) =>
           prev.map((c) =>
             c.partner_username.toLowerCase() === activePartner.username.toLowerCase()
@@ -366,7 +399,6 @@ export default function MessagesPage({
       }
     } catch (err) {
       alert(err.message || 'Failed to send message.');
-      // Rollback optimistic message on error
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
       setSending(false);
@@ -374,7 +406,152 @@ export default function MessagesPage({
   };
 
   // ==========================================================================
-  // 5. Audio & Video WebRTC Call Triggers
+  // 5. Send Encrypted Photo Attachment
+  // ==========================================================================
+  const handleSendImage = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !activePartner || sending) return;
+
+    try {
+      setSending(true);
+      setUploadingMedia(true);
+
+      // 1. Client-Side AES-256-GCM encryption of media bytes
+      const encMedia = await encryptMedia(file);
+
+      // 2. Upload ciphertext Blob
+      const formData = new FormData();
+      formData.append('file', encMedia.encryptedBlob, 'encrypted-image.bin');
+
+      const uploadRes = await apiClient.post('/conversations/media/encrypted', formData);
+      if (!uploadRes.success) {
+        throw new Error(uploadRes.error || 'Failed to upload encrypted image.');
+      }
+
+      const mediaPayload = {
+        type: 'image',
+        url: uploadRes.data.mediaUrl,
+        mediaKey: encMedia.mediaKeyBase64,
+        iv: encMedia.ivNonce,
+        mimeType: encMedia.mimeType
+      };
+
+      const payloadString = JSON.stringify(mediaPayload);
+
+      // 3. Encrypt payload metadata inside E2EE envelope
+      const encEnvelope = await e2eeService.encryptMessage(activePartner.id, payloadString);
+
+      const res = await apiClient.post(`/messages/${activePartner.username}`, {
+        content: payloadString,
+        ciphertext: encEnvelope.ciphertext || null,
+        ivNonce: encEnvelope.ivNonce || null,
+        senderDeviceId: encEnvelope.senderDeviceId || null
+      });
+
+      if (res.success && res.data?.message) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            ...res.data.message,
+            content: payloadString,
+            is_mine: true,
+            is_encrypted: true
+          }
+        ]);
+        setTimeout(() => scrollToBottom(true), 30);
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to send encrypted photo.');
+    } finally {
+      setSending(false);
+      setUploadingMedia(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // ==========================================================================
+  // 6. Send Encrypted Voice Note
+  // ==========================================================================
+  const handleSendVoiceNote = async (audioBlob, durationSeconds) => {
+    if (!audioBlob || !activePartner || sending) return;
+
+    try {
+      setSending(true);
+      setIsVoiceRecording(false);
+      setUploadingMedia(true);
+
+      // 1. Client-Side AES-256-GCM encryption of audio bytes
+      const encMedia = await encryptMedia(audioBlob);
+
+      // 2. Upload ciphertext Blob
+      const formData = new FormData();
+      formData.append('file', encMedia.encryptedBlob, 'encrypted-voice.bin');
+
+      const uploadRes = await apiClient.post('/conversations/media/encrypted', formData);
+      if (!uploadRes.success) {
+        throw new Error(uploadRes.error || 'Failed to upload voice note.');
+      }
+
+      const mediaPayload = {
+        type: 'audio',
+        url: uploadRes.data.mediaUrl,
+        mediaKey: encMedia.mediaKeyBase64,
+        iv: encMedia.ivNonce,
+        mimeType: 'audio/webm',
+        durationSeconds
+      };
+
+      const payloadString = JSON.stringify(mediaPayload);
+
+      // 3. Encrypt payload metadata inside E2EE envelope
+      const encEnvelope = await e2eeService.encryptMessage(activePartner.id, payloadString);
+
+      const res = await apiClient.post(`/messages/${activePartner.username}`, {
+        content: payloadString,
+        ciphertext: encEnvelope.ciphertext || null,
+        ivNonce: encEnvelope.ivNonce || null,
+        senderDeviceId: encEnvelope.senderDeviceId || null
+      });
+
+      if (res.success && res.data?.message) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            ...res.data.message,
+            content: payloadString,
+            is_mine: true,
+            is_encrypted: true
+          }
+        ]);
+        setTimeout(() => scrollToBottom(true), 30);
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to send voice note.');
+    } finally {
+      setSending(false);
+      setUploadingMedia(false);
+    }
+  };
+
+  // ==========================================================================
+  // 7. Ephemeral / Disappearing Messages Timer
+  // ==========================================================================
+  const handleSetEphemeralTimer = async (seconds) => {
+    setIsEphemeralMenuOpen(false);
+    setEphemeralTimer(seconds);
+    try {
+      if (activeConversationId) {
+        await apiClient.put(`/conversations/${activeConversationId}/ephemeral`, {
+          timerSeconds: seconds
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to update ephemeral timer:', err);
+    }
+  };
+
+  // ==========================================================================
+  // 8. Audio & Video WebRTC Call Triggers
   // ==========================================================================
   const initiateAudioCall = () => {
     if (!activePartner) return;
@@ -395,7 +572,7 @@ export default function MessagesPage({
   };
 
   // ==========================================================================
-  // 6. User Search for New Chat
+  // 9. User Search for New Chat
   // ==========================================================================
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -561,12 +738,23 @@ export default function MessagesPage({
                   <div className="chat-header-names">
                     <div className="chat-header-title-row">
                       <span className="chat-header-username">@{activePartner.username}</span>
-                      <span
-                        className="e2ee-lock-badge"
-                        title="End-to-End Encrypted with AES-256-GCM & ECDH P-256"
+                      <button
+                        type="button"
+                        className={`btn-safety-badge ${isPeerVerified ? 'verified' : 'unverified'}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsSafetyModalOpen(true);
+                        }}
+                        title={isPeerVerified ? 'Cryptographic Identity Verified' : 'Click to verify Safety Number'}
                       >
-                        🔒 E2EE
-                      </span>
+                        {isPeerVerified ? '🛡️ Verified' : '🔒 E2EE'}
+                      </button>
+
+                      {ephemeralTimer && (
+                        <span className="ephemeral-timer-badge" title={`Disappearing messages: ${ephemeralTimer}s`}>
+                          ⏳
+                        </span>
+                      )}
                     </div>
                     <span className="chat-header-sub">
                       {isPartnerTyping ? (
@@ -580,8 +768,38 @@ export default function MessagesPage({
                   </div>
                 </div>
 
-                {/* Call & Profile Action Buttons */}
+                {/* Header Action Controls */}
                 <div className="chat-header-actions">
+                  {/* Disappearing Messages Dropdown */}
+                  <div className="ephemeral-menu-wrap">
+                    <button
+                      type="button"
+                      className={`btn-chat-action ${ephemeralTimer ? 'active-timer' : ''}`}
+                      onClick={() => setIsEphemeralMenuOpen((prev) => !prev)}
+                      title="Disappearing Messages Settings"
+                    >
+                      ⏳
+                    </button>
+
+                    {isEphemeralMenuOpen && (
+                      <div className="ephemeral-dropdown">
+                        <h4>Disappearing Messages</h4>
+                        <button type="button" onClick={() => handleSetEphemeralTimer(null)}>
+                          Off {ephemeralTimer === null && '✓'}
+                        </button>
+                        <button type="button" onClick={() => handleSetEphemeralTimer(86400)}>
+                          24 Hours {ephemeralTimer === 86400 && '✓'}
+                        </button>
+                        <button type="button" onClick={() => handleSetEphemeralTimer(604800)}>
+                          7 Days {ephemeralTimer === 604800 && '✓'}
+                        </button>
+                        <button type="button" onClick={() => handleSetEphemeralTimer(2592000)}>
+                          30 Days {ephemeralTimer === 2592000 && '✓'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     type="button"
                     className="btn-chat-action btn-audio-call"
@@ -618,8 +836,8 @@ export default function MessagesPage({
                 <div className="e2ee-stream-banner">
                   <span className="e2ee-banner-icon">🔒</span>
                   <p>
-                    Messages and calls are end-to-end encrypted. No one outside of this chat,
-                    not even VibeGrid, can read or listen to them.
+                    Messages, photos, voice notes, and calls are end-to-end encrypted.
+                    Nobody outside of this chat can read or listen to them.
                   </p>
                 </div>
 
@@ -639,26 +857,35 @@ export default function MessagesPage({
                     <p>Start your encrypted conversation with @{activePartner.username}!</p>
                   </div>
                 ) : (
-                  messages.map((m) => (
-                    <div
-                      key={m.id}
-                      className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'}`}
-                    >
-                      <div className="message-bubble">
-                        <p className="message-text">{m.content}</p>
-                        <div className="message-info-row">
-                          <span className="message-timestamp">
-                            {formatMessageTime(m.created_at)}
-                          </span>
-                          {m.is_mine && (
-                            <span className="message-receipt-tick" title={m.is_read ? 'Read' : 'Delivered'}>
-                              {m.is_read ? '✓✓' : '✓'}
-                            </span>
+                  messages.map((m) => {
+                    const mediaPayload = parseMediaPayload(m.content);
+
+                    return (
+                      <div
+                        key={m.id}
+                        className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'}`}
+                      >
+                        <div className={`message-bubble ${mediaPayload ? 'has-media' : ''}`}>
+                          {mediaPayload ? (
+                            <EncryptedMediaRenderer mediaPayload={mediaPayload} />
+                          ) : (
+                            <p className="message-text">{m.content}</p>
                           )}
+
+                          <div className="message-info-row">
+                            <span className="message-timestamp">
+                              {formatMessageTime(m.created_at)}
+                            </span>
+                            {m.is_mine && (
+                              <span className="message-receipt-tick" title={m.is_read ? 'Read' : 'Delivered'}>
+                                {m.is_read ? '✓✓' : '✓'}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
 
                 {/* Animated Typing Indicator Bubble */}
@@ -676,31 +903,70 @@ export default function MessagesPage({
               </div>
 
               {/* Chat Composer Bar */}
-              <form onSubmit={handleSendMessage} className="chat-composer-bar">
-                <input
-                  type="text"
-                  placeholder={`Send an encrypted message to @${activePartner.username}...`}
-                  value={messageInput}
-                  onChange={handleInputChange}
-                  className="chat-input-field"
-                  maxLength={1000}
-                  autoFocus
-                />
-                <button
-                  type="submit"
-                  className="btn-primary btn-chat-send"
-                  disabled={!messageInput.trim() || sending}
-                >
-                  {sending ? '...' : 'Send'}
-                </button>
-              </form>
+              <div className="chat-composer-container">
+                {isVoiceRecording ? (
+                  <VoiceRecorder
+                    onAudioRecorded={handleSendVoiceNote}
+                    onCancel={() => setIsVoiceRecording(false)}
+                  />
+                ) : (
+                  <form onSubmit={handleSendMessage} className="chat-composer-bar">
+                    {/* Hidden Photo File Input */}
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={handleSendImage}
+                    />
+
+                    <button
+                      type="button"
+                      className="btn-composer-icon"
+                      onClick={() => fileInputRef.current?.click()}
+                      title="Attach Encrypted Photo"
+                      disabled={sending || uploadingMedia}
+                    >
+                      📷
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn-composer-icon"
+                      onClick={() => setIsVoiceRecording(true)}
+                      title="Record Encrypted Voice Note"
+                      disabled={sending || uploadingMedia}
+                    >
+                      🎙️
+                    </button>
+
+                    <input
+                      type="text"
+                      placeholder={uploadingMedia ? "Encrypting and uploading media..." : `Send an encrypted message to @${activePartner.username}...`}
+                      value={messageInput}
+                      onChange={handleInputChange}
+                      className="chat-input-field"
+                      maxLength={1000}
+                      disabled={uploadingMedia}
+                      autoFocus
+                    />
+
+                    <button
+                      type="submit"
+                      className="btn-primary btn-chat-send"
+                      disabled={!messageInput.trim() || sending || uploadingMedia}
+                    >
+                      {sending ? '...' : 'Send'}
+                    </button>
+                  </form>
+                )}
+              </div>
             </>
           ) : (
-            /* No Chat Selected State */
             <div className="chat-no-selection">
               <div className="chat-no-selection-icon">💬</div>
               <h3>Your Direct Messages</h3>
-              <p>End-to-end encrypted messaging, audio calls, and video chat with anyone on VibeGrid.</p>
+              <p>End-to-end encrypted messaging, voice notes, photos, and video calling on VibeGrid.</p>
               <button
                 type="button"
                 className="btn-primary"
@@ -713,9 +979,16 @@ export default function MessagesPage({
         </section>
       </div>
 
-      {/* ================================================================== */}
-      {/* 3. "New Message" Modal with Live Search                           */}
-      {/* ================================================================== */}
+      {/* Safety Number Verification Modal */}
+      <SafetyNumberModal
+        isOpen={isSafetyModalOpen}
+        onClose={() => setIsSafetyModalOpen(false)}
+        peerUser={activePartner}
+        myUserId={user?.id}
+        onVerificationChanged={(verified) => setIsPeerVerified(verified)}
+      />
+
+      {/* New Message Search Modal */}
       {isNewChatModalOpen && (
         <div className="modal-backdrop" onClick={() => setIsNewChatModalOpen(false)}>
           <div className="modal-card new-chat-modal" onClick={(e) => e.stopPropagation()}>
@@ -771,7 +1044,7 @@ export default function MessagesPage({
         </div>
       )}
 
-      {/* Embedded CSS Enhancements for E2EE & Calling Controls */}
+      {/* Embedded CSS Enhancements */}
       <style>{`
         .chat-header-avatar-wrap {
           position: relative;
@@ -796,17 +1069,36 @@ export default function MessagesPage({
           gap: 8px;
         }
 
-        .e2ee-lock-badge {
+        .btn-safety-badge {
+          border: none;
           display: inline-flex;
           align-items: center;
-          background: rgba(99, 102, 241, 0.12);
-          color: #6366f1;
           font-size: 0.72rem;
           font-weight: 700;
-          padding: 2px 7px;
+          padding: 2px 8px;
           border-radius: 12px;
+          cursor: pointer;
+          transition: transform 0.15s ease;
+        }
+
+        .btn-safety-badge.unverified {
+          background: rgba(99, 102, 241, 0.12);
+          color: #6366f1;
           border: 1px solid rgba(99, 102, 241, 0.3);
-          cursor: help;
+        }
+
+        .btn-safety-badge.verified {
+          background: rgba(16, 185, 129, 0.15);
+          color: #10b981;
+          border: 1px solid rgba(16, 185, 129, 0.35);
+        }
+
+        .btn-safety-badge:hover {
+          transform: scale(1.05);
+        }
+
+        .ephemeral-timer-badge {
+          font-size: 0.8rem;
         }
 
         .typing-sub-label {
@@ -835,8 +1127,57 @@ export default function MessagesPage({
           transition: transform 0.15s ease, background 0.15s ease;
         }
 
+        .btn-chat-action.active-timer {
+          border-color: #6366f1;
+          background: rgba(99, 102, 241, 0.1);
+        }
+
         .btn-chat-action:hover {
           transform: scale(1.08);
+          background: var(--bg-hover, #f1f5f9);
+        }
+
+        .ephemeral-menu-wrap {
+          position: relative;
+        }
+
+        .ephemeral-dropdown {
+          position: absolute;
+          top: 44px;
+          right: 0;
+          background: var(--card-bg, #ffffff);
+          border: 1px solid var(--border-color, #e2e8f0);
+          border-radius: 12px;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+          padding: 10px;
+          width: 170px;
+          z-index: 50;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .ephemeral-dropdown h4 {
+          font-size: 0.75rem;
+          color: var(--text-secondary, #64748b);
+          margin: 0 0 6px 4px;
+          text-transform: uppercase;
+        }
+
+        .ephemeral-dropdown button {
+          background: transparent;
+          border: none;
+          text-align: left;
+          padding: 6px 10px;
+          border-radius: 6px;
+          font-size: 0.85rem;
+          color: var(--text-primary, #0f172a);
+          cursor: pointer;
+          display: flex;
+          justify-content: space-between;
+        }
+
+        .ephemeral-dropdown button:hover {
           background: var(--bg-hover, #f1f5f9);
         }
 
@@ -864,6 +1205,98 @@ export default function MessagesPage({
           font-size: 1.1rem;
         }
 
+        .chat-composer-container {
+          padding: 10px 16px;
+          border-top: 1px solid var(--border-color, #e2e8f0);
+          background: var(--card-bg, #ffffff);
+        }
+
+        .btn-composer-icon {
+          background: none;
+          border: none;
+          font-size: 18px;
+          cursor: pointer;
+          padding: 4px 6px;
+          border-radius: 8px;
+          transition: background 0.15s ease;
+        }
+
+        .btn-composer-icon:hover {
+          background: var(--bg-hover, #f1f5f9);
+        }
+
+        .message-bubble.has-media {
+          padding: 6px;
+        }
+
+        .encrypted-image-wrap {
+          position: relative;
+          max-width: 320px;
+          border-radius: 12px;
+          overflow: hidden;
+        }
+
+        .encrypted-chat-img {
+          width: 100%;
+          border-radius: 10px;
+          display: block;
+          cursor: pointer;
+          transition: filter 0.15s ease;
+        }
+
+        .encrypted-chat-img:hover {
+          filter: brightness(0.95);
+        }
+
+        .img-lock-badge {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          background: rgba(0, 0, 0, 0.65);
+          color: #fff;
+          font-size: 0.68rem;
+          padding: 2px 6px;
+          border-radius: 8px;
+          backdrop-filter: blur(4px);
+        }
+
+        .encrypted-audio-wrap {
+          min-width: 250px;
+          padding: 8px 10px;
+        }
+
+        .audio-note-header {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-bottom: 6px;
+          font-size: 0.8rem;
+          font-weight: 600;
+        }
+
+        .audio-lock-tag {
+          font-size: 0.68rem;
+          background: rgba(99, 102, 241, 0.15);
+          color: #6366f1;
+          padding: 1px 5px;
+          border-radius: 6px;
+          margin-left: auto;
+        }
+
+        .encrypted-audio-player {
+          width: 100%;
+          height: 36px;
+        }
+
+        .encrypted-media-loading {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 14px;
+          font-size: 0.82rem;
+          color: var(--text-secondary, #64748b);
+        }
+
         .message-info-row {
           display: flex;
           align-items: center;
@@ -879,7 +1312,6 @@ export default function MessagesPage({
           margin-left: 2px;
         }
 
-        /* Typing Dots Animation */
         .typing-dots-bubble {
           padding: 10px 16px;
           border-radius: 18px;

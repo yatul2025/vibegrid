@@ -250,6 +250,7 @@ const getMessages = async (req, res, next) => {
       FROM messages m
       JOIN users u ON m.sender_id = u.id
       WHERE m.conversation_id = $2
+        AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
       ORDER BY m.created_at ASC
     `, [userId, conversationId]);
 
@@ -313,15 +314,23 @@ const sendMessage = async (req, res, next) => {
 
     const recipientId = otherMembers.length === 1 ? otherMembers[0].user_id : null;
 
+    // Check ephemeral timer for disappearing messages
+    const convRes = await query(
+      'SELECT ephemeral_timer_seconds FROM conversations WHERE id = $1 LIMIT 1',
+      [conversationId]
+    );
+    const ephemeralSeconds = convRes.rows[0]?.ephemeral_timer_seconds;
+    const expiresAt = ephemeralSeconds ? new Date(Date.now() + ephemeralSeconds * 1000).toISOString() : null;
+
     // Insert message record
     const insertRes = await query(`
       INSERT INTO messages (
         conversation_id, sender_id, recipient_id, 
         sender_device_id, ciphertext, iv_nonce, content, 
-        message_type, reply_to_id
+        message_type, reply_to_id, expires_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING id, conversation_id, sender_id, sender_device_id, ciphertext, iv_nonce, content, message_type, reply_to_id, is_read, is_deleted, created_at
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING id, conversation_id, sender_id, sender_device_id, ciphertext, iv_nonce, content, message_type, reply_to_id, is_read, is_deleted, created_at, expires_at
     `, [
       conversationId,
       senderId,
@@ -331,7 +340,8 @@ const sendMessage = async (req, res, next) => {
       ivNonce || null,
       content || '',
       messageType,
-      replyToId || null
+      replyToId || null,
+      expiresAt
     ]);
 
     // Update conversation timestamp
@@ -461,11 +471,80 @@ const toggleReaction = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Upload client-side encrypted media attachment (image / voice note)
+ * @route   POST /api/conversations/media/encrypted
+ * @access  Private (Authenticated)
+ */
+const uploadEncryptedAttachment = async (req, res, next) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ success: false, error: 'No encrypted payload received.' });
+    }
+
+    const filename = `enc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.bin`;
+
+    await query(
+      `INSERT INTO media_files (id, folder, mime_type, data)
+       VALUES ($1, 'encrypted', 'application/octet-stream', $2)`,
+      [filename, req.file.buffer]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: {
+        mediaUrl: `/uploads/encrypted/${filename}`,
+        filename,
+        size: req.file.size
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc    Update disappearing messages timer for a conversation
+ * @route   PUT /api/conversations/:id/ephemeral
+ * @access  Private (Authenticated)
+ */
+const updateEphemeralTimer = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const conversationId = req.params.id;
+    const { timerSeconds } = req.body;
+
+    const memberCheck = await query(
+      'SELECT 1 FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+      [conversationId, userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not a member of this conversation.' });
+    }
+
+    await query(
+      'UPDATE conversations SET ephemeral_timer_seconds = $1 WHERE id = $2',
+      [timerSeconds ? Number(timerSeconds) : null, conversationId]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ephemeralTimerSeconds: timerSeconds ? Number(timerSeconds) : null
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getConversations,
   getOrCreateConversation,
   getMessages,
   sendMessage,
   deleteMessage,
-  toggleReaction
+  toggleReaction,
+  uploadEncryptedAttachment,
+  updateEphemeralTimer
 };

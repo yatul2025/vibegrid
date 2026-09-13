@@ -59,8 +59,16 @@ const uploadStory = multer({
   fileFilter
 });
 
+// 4. Encrypted Media Multer Instance (Max 25MB, accepts binary ciphertext)
+const uploadEncryptedMedia = multer({
+  storage,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit
+  fileFilter: (req, file, cb) => cb(null, true)
+});
+
 module.exports = {
   uploadAvatar,
   uploadPost,
-  uploadStory
+  uploadStory,
+  uploadEncryptedMedia
 };
