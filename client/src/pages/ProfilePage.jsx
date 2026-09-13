@@ -17,6 +17,7 @@ import apiClient from '../api/client';
 import CommentsModal from '../components/CommentsModal';
 import FollowListModal from '../components/FollowListModal';
 import HashtagFeedModal from '../components/HashtagFeedModal';
+import ConfirmModal from '../components/ConfirmModal';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
@@ -64,6 +65,7 @@ export default function ProfilePage({
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [avatarError, setAvatarError] = useState(null);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
   const fileInputRef = useRef(null);
 
   // Email Management State (Phase 3)
@@ -269,21 +271,29 @@ export default function ProfilePage({
     }
   }, [usernameToFetch, currentUser?.username]);
 
-  // Handle post deletion from profile
-  const handleDeletePost = async (postId) => {
-    if (!window.confirm('Are you sure you want to delete this post?')) return;
-    try {
-      const res = await apiClient.delete(`/posts/${postId}`);
-      if (res.success) {
-        setUserPosts((prev) => prev.filter((p) => p.id !== postId));
-        setStats((prev) => ({ ...prev, posts: Math.max(0, prev.posts - 1) }));
-        setSelectedPost(null);
-      } else {
-        alert(res.error || 'Failed to delete post.');
+  // Handle post deletion from profile - Opens modern confirmation modal
+  const handleDeletePost = (postId) => {
+    setConfirmAction({
+      title: 'Delete Post?',
+      description: 'Are you sure you want to permanently delete this post? This action cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          const res = await apiClient.delete(`/posts/${postId}`);
+          if (res.success) {
+            setUserPosts((prev) => prev.filter((p) => p.id !== postId));
+            setStats((prev) => ({ ...prev, posts: Math.max(0, prev.posts - 1) }));
+            setSelectedPost(null);
+            setConfirmAction(null);
+          } else {
+            alert(res.error || 'Failed to delete post.');
+          }
+        } catch (err) {
+          alert(err.message || 'Error deleting post.');
+        }
       }
-    } catch (err) {
-      alert(err.message || 'Error deleting post.');
-    }
+    });
   };
 
   // Handle like toggle inside profile post modal
@@ -513,30 +523,38 @@ export default function ProfilePage({
     }
   };
 
-  // Handle Avatar Removal (Revert to default)
-  const handleRemoveAvatar = async () => {
+  // Handle Avatar Removal (Revert to default) - Opens modern confirmation modal
+  const handleRemoveAvatar = () => {
     if (isDemoUser) {
       setAvatarError('🔒 Profile photo cannot be removed on official demo accounts.');
       return;
     }
-    if (!window.confirm('Are you sure you want to remove your profile picture?')) return;
-    try {
-      setRemovingAvatar(true);
-      setAvatarError(null);
-      const res = await apiClient.delete('/users/avatar');
-      if (res.success && res.data?.user) {
-        setProfile((prev) => ({ ...prev, avatar_url: res.data.user.avatar_url }));
-        setAvatarPreview(null);
-        updateUser({ avatar_url: res.data.user.avatar_url });
-        setProfileMsg({ type: 'success', text: 'Profile picture removed.' });
-      } else {
-        setAvatarError(res.error || 'Failed to remove avatar.');
+    setConfirmAction({
+      title: 'Remove Profile Picture?',
+      description: 'Your profile picture will be removed and reset to your default gender avatar.',
+      confirmText: 'Remove Photo',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          setRemovingAvatar(true);
+          setAvatarError(null);
+          const res = await apiClient.delete('/users/avatar');
+          if (res.success && res.data?.user) {
+            setProfile((prev) => ({ ...prev, avatar_url: res.data.user.avatar_url }));
+            setAvatarPreview(null);
+            updateUser({ avatar_url: res.data.user.avatar_url });
+            setProfileMsg({ type: 'success', text: 'Profile picture removed.' });
+            setConfirmAction(null);
+          } else {
+            setAvatarError(res.error || 'Failed to remove avatar.');
+          }
+        } catch (err) {
+          setAvatarError(err.message || 'Error removing avatar.');
+        } finally {
+          setRemovingAvatar(false);
+        }
       }
-    } catch (err) {
-      setAvatarError(err.message || 'Error removing avatar.');
-    } finally {
-      setRemovingAvatar(false);
-    }
+    });
   };
 
   // Handle Email OTP Request (Verify current email or change to new email)
@@ -933,38 +951,55 @@ export default function ProfilePage({
     }
   };
 
-  // Log out all other sessions
-  const handleLogoutOthers = async () => {
-    if (!window.confirm('Are you sure you want to log out of all other devices?')) return;
-    try {
-      setLoggingOutOthers(true);
-      const res = await apiClient.post('/users/security/sessions/logout-others');
-      if (res.success) {
-        setSessions((prev) => prev.filter((s) => s.is_current));
-        setProfileMsg({ type: 'success', text: res.message || 'Logged out of all other devices.' });
-      } else {
-        setProfileMsg({ type: 'error', text: res.error || 'Failed to log out of other devices.' });
+  // Log out all other sessions - Opens modern confirm modal
+  const handleLogoutOthers = () => {
+    setConfirmAction({
+      title: 'Log Out Other Sessions?',
+      description: 'Are you sure you want to log out of all other devices?',
+      confirmText: 'Log Out Others',
+      variant: 'warning',
+      onConfirm: async () => {
+        try {
+          setLoggingOutOthers(true);
+          const res = await apiClient.post('/users/security/sessions/logout-others');
+          if (res.success) {
+            setSessions((prev) => prev.filter((s) => s.is_current));
+            setProfileMsg({ type: 'success', text: res.message || 'Logged out of all other devices.' });
+            setConfirmAction(null);
+          } else {
+            setProfileMsg({ type: 'error', text: res.error || 'Failed to log out of other devices.' });
+          }
+        } catch (err) {
+          setProfileMsg({ type: 'error', text: err.message || 'Failed to log out of other devices.' });
+        } finally {
+          setLoggingOutOthers(false);
+        }
       }
-    } catch (err) {
-      setProfileMsg({ type: 'error', text: err.message || 'Failed to log out of other devices.' });
-    } finally {
-      setLoggingOutOthers(false);
-    }
+    });
   };
 
-  // Log out all devices (including current one)
-  const handleLogoutAll = async () => {
-    if (!window.confirm('Are you sure you want to log out of ALL devices including this one? You will need to log in again.')) return;
-    try {
-      setLoggingOutAll(true);
-      const res = await apiClient.post('/users/security/sessions/logout-all');
-      if (res.success) {
-        logout();
+  // Log out all devices (including current one) - Opens modern confirm modal
+  const handleLogoutAll = () => {
+    setConfirmAction({
+      title: 'Log Out All Devices?',
+      description: 'Are you sure you want to log out of ALL devices including this one? You will need to log in again.',
+      confirmText: 'Log Out All',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          setLoggingOutAll(true);
+          const res = await apiClient.post('/users/security/sessions/logout-all');
+          if (res.success) {
+            setConfirmAction(null);
+            logout();
+          }
+        } catch (err) {
+          setProfileMsg({ type: 'error', text: err.message || 'Failed to log out of all devices.' });
+        } finally {
+          setLoggingOutAll(false);
+        }
       }
-    } catch (err) {
-      setProfileMsg({ type: 'error', text: err.message || 'Failed to log out of all devices.' });
-      setLoggingOutAll(false);
-    }
+    });
   };
 
   // Load privacy settings when editing is opened
@@ -2067,6 +2102,21 @@ export default function ProfilePage({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modern Market-Level Confirmation Modal */}
+      {confirmAction && (
+        <ConfirmModal
+          isOpen={true}
+          title={confirmAction.title}
+          description={confirmAction.description}
+          confirmText={confirmAction.confirmText || 'Confirm'}
+          cancelText="Cancel"
+          variant={confirmAction.variant || 'danger'}
+          isLoading={confirmAction.isLoading || false}
+          onConfirm={confirmAction.onConfirm}
+          onClose={() => setConfirmAction(null)}
+        />
       )}
     </div>
   );

@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import CommentsModal from '../components/CommentsModal';
 import HashtagFeedModal from '../components/HashtagFeedModal';
+import HidePostModal from '../components/HidePostModal';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 
 export default function ExplorePage({ onNavigateToProfile }) {
@@ -41,6 +42,7 @@ export default function ExplorePage({ onNavigateToProfile }) {
   const [selectedPost, setSelectedPost] = useState(null);
   const [activeCommentsPost, setActiveCommentsPost] = useState(null);
   const [moderatingId, setModeratingId] = useState(null);
+  const [postToHide, setPostToHide] = useState(null);
 
   // Fetch explore posts
   const fetchExplorePosts = async () => {
@@ -192,24 +194,26 @@ export default function ExplorePage({ onNavigateToProfile }) {
     }
   };
 
-  // Moderate / Hide post (Admin / Test accounts)
-  const handleModeratePost = async (postId) => {
-    const reason = window.prompt(
-      'Enter moderation reason to hide this post (e.g., Adult content, Spam):',
-      'Adult content'
-    );
-    if (reason === null) return;
+  // Moderate / Hide post (Admin / Test accounts) - Opens modern bottom-sheet
+  const handleModeratePost = (postId) => {
+    setPostToHide(postId);
+  };
+
+  const handleConfirmHidePost = async (reason) => {
+    if (!postToHide) return;
 
     try {
-      setModeratingId(postId);
-      const res = await apiClient.patch(`/posts/${postId}/moderate`, {
+      setModeratingId(postToHide);
+      const res = await apiClient.patch(`/posts/${postToHide}/moderate`, {
         isActive: false,
-        reason: reason.trim() || 'Adult content'
+        reason: reason || 'Adult content'
       });
       if (res.success) {
-        setPosts((prev) => prev.filter((p) => p.id !== postId));
-        setSelectedPost(null);
-        alert('🛡️ Post hidden from explore and feeds successfully!');
+        setPosts((prev) => prev.filter((p) => p.id !== postToHide));
+        if (selectedPost && selectedPost.id === postToHide) {
+          setSelectedPost(null);
+        }
+        setPostToHide(null);
       } else {
         alert(res.error || 'Failed to hide post.');
       }
@@ -504,6 +508,14 @@ export default function ExplorePage({ onNavigateToProfile }) {
         onClose={() => setActiveHashtag(null)}
         onNavigateToProfile={onNavigateToProfile}
         onHashtagClick={(tag) => setActiveHashtag(tag)}
+      />
+
+      {/* Modern Content Moderation / Hide Post Sheet */}
+      <HidePostModal
+        isOpen={!!postToHide}
+        isLoading={moderatingId === postToHide}
+        onConfirm={handleConfirmHidePost}
+        onClose={() => setPostToHide(null)}
       />
     </div>
   );

@@ -20,6 +20,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
+import ConfirmModal from './ConfirmModal';
 
 function formatTimeAgo(dateString) {
   if (!dateString) return '';
@@ -53,6 +54,7 @@ export default function StoryViewerModal({
   const [isPaused, setIsPaused] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Interactive reply & reactions states
   const [replyText, setReplyText] = useState('');
@@ -286,20 +288,21 @@ export default function StoryViewerModal({
     }
   };
 
-  // Delete current story
-  const handleDeleteStory = async () => {
-    if (!currentStory) return;
+  // Open story delete confirmation modal
+  const handleDeleteClick = () => {
     setIsPaused(true);
+    setShowDeleteModal(true);
+  };
 
-    if (!window.confirm('Are you sure you want to delete this story?')) {
-      setIsPaused(false);
-      return;
-    }
+  // Confirm story deletion
+  const handleConfirmDeleteStory = async () => {
+    if (!currentStory) return;
 
     try {
       setDeleting(true);
       const res = await apiClient.delete(`/stories/${currentStory.id}`);
       if (res.success) {
+        setShowDeleteModal(false);
         if (onStoryDeleted) {
           onStoryDeleted(currentStory.id);
         }
@@ -320,11 +323,13 @@ export default function StoryViewerModal({
           }
         }
       } else {
-        alert(res.error || 'Failed to delete story.');
+        showToast(res.error || 'Failed to delete story.');
+        setShowDeleteModal(false);
         setIsPaused(false);
       }
     } catch (err) {
-      alert(err.message || 'Error deleting story.');
+      showToast(err.message || 'Error deleting story.');
+      setShowDeleteModal(false);
       setIsPaused(false);
     } finally {
       setDeleting(false);
@@ -472,7 +477,7 @@ export default function StoryViewerModal({
                 className="story-action-btn delete-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDeleteStory();
+                  handleDeleteClick();
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
                 onTouchStart={(e) => e.stopPropagation()}
@@ -634,6 +639,23 @@ export default function StoryViewerModal({
             {isCurrentStoryLiked ? '❤️' : '🤍'}
           </button>
         </div>
+
+        {/* Market-level Story Delete Confirmation Modal */}
+        <ConfirmModal
+          isOpen={showDeleteModal}
+          onClose={() => {
+            setShowDeleteModal(false);
+            setIsPaused(false);
+          }}
+          onConfirm={handleConfirmDeleteStory}
+          title="Delete Story?"
+          message="Are you sure you want to delete this story? It will be removed permanently."
+          confirmText="Delete"
+          cancelText="Cancel"
+          confirmVariant="danger"
+          icon="🗑️"
+          loading={deleting}
+        />
       </div>
     </div>
   );
