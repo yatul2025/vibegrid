@@ -71,7 +71,7 @@ const register = async (req, res, next) => {
     const insertQuery = `
       INSERT INTO users (username, email, password_hash, full_name)
       VALUES ($1, $2, $3, $4)
-      RETURNING id, username, email, full_name, bio, avatar_url, token_version, created_at
+      RETURNING id, username, email, full_name, bio, avatar_url, COALESCE(test, 0) AS test, token_version, created_at
     `;
     const result = await query(insertQuery, [
       username,
@@ -131,7 +131,7 @@ const login = async (req, res, next) => {
 
     // 1. Fetch user by either username OR email (including token_version and is_deactivated)
     const userQuery = `
-      SELECT id, username, email, password_hash, full_name, bio, avatar_url, token_version, is_deactivated, created_at
+      SELECT id, username, email, password_hash, full_name, bio, avatar_url, COALESCE(test, 0) AS test, token_version, is_deactivated, created_at
       FROM users
       WHERE username = $1 OR email = $1
       LIMIT 1

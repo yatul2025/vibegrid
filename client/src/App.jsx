@@ -31,6 +31,25 @@ function AppContent() {
   });
   const [settingsSection, setSettingsSection] = useState('profile');
 
+  // Test profile condition: user must have test = 1 or be in the first 4 user IDs / test profiles
+  const isTestUser = Boolean(
+    user && (
+      Number(user.test) === 1 ||
+      user.test === 1 ||
+      user.test === true ||
+      [1, 2, 3, 4].includes(Number(user.id)) ||
+      ['test_user_3950', 'test', 'test2', 'test3', 'sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'].includes((user.username || '').toLowerCase())
+    )
+  );
+
+  // If user is on 'status' tab but is not a test user, redirect to 'feed'
+  useEffect(() => {
+    if (currentTab === 'status' && !isTestUser && !loading) {
+      setCurrentTab('feed');
+      sessionStorage.setItem('vibegrid_active_tab', 'feed');
+    }
+  }, [currentTab, isTestUser, loading]);
+
   // Open Settings helper
   const openSettings = (section = 'profile') => {
     setSettingsSection(section);
@@ -311,12 +330,14 @@ function AppContent() {
             </>
           )}
 
-          <button
-            className={`nav-tab-btn ${currentTab === 'status' ? 'active' : ''}`}
-            onClick={() => setCurrentTab('status')}
-          >
-            📊 System Status
-          </button>
+          {isTestUser && (
+            <button
+              className={`nav-tab-btn ${currentTab === 'status' ? 'active' : ''}`}
+              onClick={() => setCurrentTab('status')}
+            >
+              📊 System Status
+            </button>
+          )}
 
           {!user && (
             <button
@@ -413,7 +434,17 @@ function AppContent() {
       {/* Main Content Area */}
       <main className={`main-content ${user ? 'has-bottom-nav' : ''}`}>
         <ErrorBoundary>
-          {currentTab === 'status' && <StatusDashboard />}
+          {currentTab === 'status' && (
+            isTestUser ? (
+              <StatusDashboard />
+            ) : (
+              <FeedPage
+                key={feedRefreshKey}
+                onOpenCreatePost={() => setIsCreatePostOpen(true)}
+                onNavigateToProfile={(username) => navigateToProfile(username)}
+              />
+            )
+          )}
           {currentTab === 'auth' && <AuthPage />}
           {currentTab === 'feed' && (
             <FeedPage
@@ -499,15 +530,17 @@ function AppContent() {
             <span className="mobile-nav-create-icon">➕</span>
           </button>
 
-          <button
-            type="button"
-            className={`mobile-nav-item ${currentTab === 'status' ? 'active' : ''}`}
-            onClick={() => setCurrentTab('status')}
-            title="System Status"
-          >
-            <span className="mobile-nav-icon">📊</span>
-            <span className="mobile-nav-label">Status</span>
-          </button>
+          {isTestUser && (
+            <button
+              type="button"
+              className={`mobile-nav-item ${currentTab === 'status' ? 'active' : ''}`}
+              onClick={() => setCurrentTab('status')}
+              title="System Status"
+            >
+              <span className="mobile-nav-icon">📊</span>
+              <span className="mobile-nav-label">Status</span>
+            </button>
+          )}
 
           <button
             type="button"

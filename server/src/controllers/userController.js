@@ -32,7 +32,7 @@ const getProfile = async (req, res, next) => {
     // 1. Fetch user record from PostgreSQL with extended profile fields
     const userResult = await query(
       `SELECT id, username, email, phone_number, full_name, bio, avatar_url, website, location, date_of_birth, 
-              is_email_verified, is_phone_verified, is_private, is_deactivated, created_at 
+              is_email_verified, is_phone_verified, is_private, is_deactivated, COALESCE(test, 0) AS test, created_at 
        FROM users 
        WHERE username = $1 
        LIMIT 1`,
@@ -160,7 +160,7 @@ const updateProfile = async (req, res, next) => {
       UPDATE users 
       SET username = $1, full_name = $2, bio = $3, website = $4, location = $5, date_of_birth = $6, updated_at = CURRENT_TIMESTAMP 
       WHERE id = $7 
-      RETURNING id, username, email, full_name, bio, avatar_url, website, location, date_of_birth, token_version, created_at
+      RETURNING id, username, email, full_name, bio, avatar_url, website, location, date_of_birth, COALESCE(test, 0) AS test, token_version, created_at
     `;
     const result = await query(updateQuery, [
       newUsername,

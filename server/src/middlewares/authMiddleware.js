@@ -48,7 +48,7 @@ const protect = async (req, res, next) => {
     const userResult = await query(
       `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
               date_of_birth, is_email_verified, is_phone_verified, is_private, is_deactivated, 
-              token_version, created_at 
+              COALESCE(test, 0) AS test, token_version, created_at 
        FROM users 
        WHERE id = $1 
        LIMIT 1`,

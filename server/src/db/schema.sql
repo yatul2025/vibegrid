@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     is_phone_verified BOOLEAN DEFAULT FALSE,
     is_deactivated BOOLEAN DEFAULT FALSE,
     deactivated_at TIMESTAMP WITH TIME ZONE,
+    test INTEGER DEFAULT 0,
     -- Privacy Settings
     is_private BOOLEAN DEFAULT FALSE,
     allow_messages_from VARCHAR(20) DEFAULT 'everyone',
