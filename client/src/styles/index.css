@@ -4891,15 +4891,19 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 14px 12px;
-  z-index: 10;
-  background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.1) 100%);
+  padding: 6px 14px 10px;
+  z-index: 20;
+  position: relative;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.65) 0%, rgba(0, 0, 0, 0.25) 60%, transparent 100%);
+  gap: 12px;
 }
 
 .story-author-meta {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  flex: 1;
 }
 
 .story-header-avatar {
@@ -4908,11 +4912,13 @@ body {
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid #ffffff;
+  flex-shrink: 0;
 }
 
 .story-header-names {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .story-header-username {
@@ -4930,42 +4936,74 @@ body {
 .story-header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-shrink: 0;
+  z-index: 25;
 }
 
 .story-action-btn {
-  background: transparent;
-  border: none;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: #ffffff;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   cursor: pointer;
-  padding: 6px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+  user-select: none;
 }
 
 .story-action-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.1);
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.08);
+}
+
+.story-action-btn.pause-btn {
+  font-size: 0.92rem;
 }
 
 .story-action-btn.delete-btn {
-  font-size: 1rem;
+  font-size: 1.05rem;
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.45);
 }
 
-.story-paused-badge {
-  background: rgba(0, 0, 0, 0.6);
+.story-action-btn.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.5);
+  border-color: rgba(239, 68, 68, 0.85);
+  transform: scale(1.1);
+}
+
+.story-action-btn.close-btn {
+  font-size: 1.15rem;
+}
+
+.story-paused-indicator-banner {
+  position: absolute;
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
   color: #ffffff;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
-  padding: 3px 7px;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 4px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 
 .story-media-wrapper {

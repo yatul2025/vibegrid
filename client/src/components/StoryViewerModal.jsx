@@ -289,7 +289,12 @@ export default function StoryViewerModal({
   // Delete current story
   const handleDeleteStory = async () => {
     if (!currentStory) return;
-    if (!window.confirm('Are you sure you want to delete this story?')) return;
+    setIsPaused(true);
+
+    if (!window.confirm('Are you sure you want to delete this story?')) {
+      setIsPaused(false);
+      return;
+    }
 
     try {
       setDeleting(true);
@@ -303,20 +308,24 @@ export default function StoryViewerModal({
             setStoryIndex((prev) => Math.max(0, prev - 1));
           }
           setAnimKey((k) => k + 1);
+          setIsPaused(false);
         } else {
           if (creatorIndex < creators.length - 1) {
             setCreatorIndex((prev) => prev);
             setStoryIndex(0);
             setAnimKey((k) => k + 1);
+            setIsPaused(false);
           } else {
             onClose();
           }
         }
       } else {
         alert(res.error || 'Failed to delete story.');
+        setIsPaused(false);
       }
     } catch (err) {
       alert(err.message || 'Error deleting story.');
+      setIsPaused(false);
     } finally {
       setDeleting(false);
     }
@@ -396,7 +405,14 @@ export default function StoryViewerModal({
         </div>
 
         {/* 2. Story Header (Creator Details & Controls) */}
-        <div className="story-header-row">
+        <div
+          className="story-header-row"
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="story-author-meta">
             <div className="story-viewer-avatar-wrap">
               <img
@@ -412,26 +428,43 @@ export default function StoryViewerModal({
             <div className="story-header-names">
               <div className="story-username-line">
                 <span className="story-header-username">{currentCreator.username}</span>
-                <button
-                  type="button"
-                  className={`story-cf-pill-btn ${closeFriendIds.has(currentCreator.userId) ? 'active' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onToggleCloseFriend && currentCreator) {
-                      onToggleCloseFriend(currentCreator.userId, currentCreator.username);
-                      triggerParticles('⭐');
-                    }
-                  }}
-                  title={closeFriendIds.has(currentCreator.userId) ? 'In Close Friends (Click to remove)' : 'Add to Close Friends'}
-                >
-                  ★ {closeFriendIds.has(currentCreator.userId) ? 'Close Friends' : 'Add to Close Friends'}
-                </button>
+                {!isMyStory && (
+                  <button
+                    type="button"
+                    className={`story-cf-pill-btn ${closeFriendIds.has(currentCreator.userId) ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onToggleCloseFriend && currentCreator) {
+                        onToggleCloseFriend(currentCreator.userId, currentCreator.username);
+                        triggerParticles('⭐');
+                      }
+                    }}
+                    title={closeFriendIds.has(currentCreator.userId) ? 'In Close Friends (Click to remove)' : 'Add to Close Friends'}
+                  >
+                    ★ {closeFriendIds.has(currentCreator.userId) ? 'Close Friends' : 'Add to Close Friends'}
+                  </button>
+                )}
               </div>
               <span className="story-header-time">{formatTimeAgo(currentStory.createdAt)}</span>
             </div>
           </div>
 
           <div className="story-header-actions">
+            {/* Play / Pause Toggle Button */}
+            <button
+              type="button"
+              className="story-action-btn pause-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPaused((prev) => !prev);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              title={pausedEffective ? 'Resume (Space)' : 'Pause (Space)'}
+            >
+              {pausedEffective ? '▶' : '❚❚'}
+            </button>
+
             {/* Delete button for story owner */}
             {isMyStory && (
               <button
@@ -441,15 +474,14 @@ export default function StoryViewerModal({
                   e.stopPropagation();
                   handleDeleteStory();
                 }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
                 title="Delete this story"
                 disabled={deleting}
               >
                 🗑️
               </button>
             )}
-
-            {/* Pause indicator */}
-            {pausedEffective && <span className="story-paused-badge">{isTyping ? 'Replying' : 'Paused'}</span>}
 
             {/* Close button */}
             <button
@@ -459,12 +491,21 @@ export default function StoryViewerModal({
                 e.stopPropagation();
                 onClose();
               }}
-              title="Close viewer"
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              title="Close viewer (Esc)"
             >
               ✕
             </button>
           </div>
         </div>
+
+        {/* Floating Paused Notification (Non-shifting overlay) */}
+        {pausedEffective && (
+          <div className="story-paused-indicator-banner">
+            <span>{isTyping ? '💬 Replying' : '⏸️ Paused'}</span>
+          </div>
+        )}
 
         {/* 3. Story Media Display */}
         <div className="story-media-wrapper">
