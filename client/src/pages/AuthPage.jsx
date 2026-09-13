@@ -1,10 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../api/client';
 
 export default function AuthPage() {
-  const { user, login, register, logout } = useAuth();
+  const { user, login, verifyLoginOtp, resendLoginOtp, register, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('login'); // 'login' | 'register'
+
+  // 2FA Login OTP states
+  const [loginStep, setLoginStep] = useState('credentials'); // 'credentials' | 'otp'
+  const [loginToken, setLoginToken] = useState(null);
+  const [maskedEmail, setMaskedEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState(null);
+  const [otpSuccessMsg, setOtpSuccessMsg] = useState(null);
+  const [devOtp, setDevOtp] = useState(null);
+  const [otpCooldown, setOtpCooldown] = useState(0);
+
+  // Countdown timer for 2FA OTP resend cooldown
+  useEffect(() => {
+    let timer;
+    if (otpCooldown > 0) {
+      timer = setInterval(() => {
+        setOtpCooldown((prev) => (prev > 1 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [otpCooldown]);
 
   // Form states
   const [loginData, setLoginData] = useState({
@@ -98,12 +120,69 @@ export default function AuthPage() {
     setError(null);
     setLoading(true);
     try {
-      await login(identifier, password, false);
+      const res = await login(identifier, password, false);
+      if (res?.step === 'otp_required') {
+        setLoginStep('otp');
+        setLoginToken(res.loginToken);
+        setMaskedEmail(res.maskedEmail || '');
+        setDevOtp(res.debugOtp || null);
+        setOtpCooldown(60);
+        setOtpCode('');
+        setOtpError(null);
+        setOtpSuccessMsg(null);
+      }
     } catch (err) {
       setError(err.message || 'Invalid username/email or password.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVerifyOtpSubmit = async (e) => {
+    e.preventDefault();
+    const cleanOtp = otpCode.trim();
+    if (!cleanOtp || cleanOtp.length !== 6) {
+      setOtpError('Please enter the full 6-digit verification code.');
+      return;
+    }
+    setOtpError(null);
+    setOtpSuccessMsg(null);
+    setOtpLoading(true);
+    try {
+      await verifyLoginOtp(loginToken, cleanOtp);
+    } catch (err) {
+      setOtpError(err.message || 'Invalid or expired verification code.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (otpCooldown > 0 || !loginToken) return;
+    setOtpError(null);
+    setOtpSuccessMsg(null);
+    setOtpLoading(true);
+    try {
+      const res = await resendLoginOtp(loginToken);
+      setOtpSuccessMsg('A fresh verification code has been dispatched to your email.');
+      if (res?.debugOtp) {
+        setDevOtp(res.debugOtp);
+      }
+      setOtpCooldown(60);
+    } catch (err) {
+      setOtpError(err.message || 'Failed to resend code. Please try again.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleBackToCredentials = () => {
+    setLoginStep('credentials');
+    setOtpCode('');
+    setOtpError(null);
+    setOtpSuccessMsg(null);
+    setLoginToken(null);
+    setDevOtp(null);
   };
 
   const handleDemoLogin = async (username) => {
@@ -392,109 +471,258 @@ export default function AuthPage() {
               </button>
             </div>
           ) : activeTab === 'login' ? (
-            /* 1. Log In Form (Matches Screenshot) */
-            <div className="ig-auth-box">
-              <h2 className="ig-auth-title">Log into VibeGrid</h2>
-
-              {error && <div className="ig-auth-error">⚠️ {error}</div>}
-
-              <form onSubmit={handleLoginSubmit} className="ig-form">
-                <div className="ig-input-group">
-                  <input
-                    type="text"
-                    name="identifier"
-                    placeholder="Mobile number, username or email"
-                    value={loginData.identifier}
-                    onChange={handleLoginChange}
-                    required
-                    maxLength={255}
-                    autoComplete="username"
-                    className="ig-input"
-                  />
+            loginStep === 'otp' ? (
+              /* 1B. Two-Factor Authentication OTP Verification Form */
+              <div className="ig-auth-box">
+                <div style={{ textAlign: 'center', marginBottom: '18px' }}>
+                  <div style={{
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '50%',
+                    background: 'rgba(59, 130, 246, 0.12)',
+                    border: '1px solid rgba(59, 130, 246, 0.25)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 12px auto',
+                    fontSize: '24px'
+                  }}>
+                    🛡️
+                  </div>
+                  <h2 className="ig-auth-title" style={{ marginBottom: '6px' }}>Two-Factor Verification</h2>
+                  <p className="ig-auth-subtext" style={{ fontSize: '13px', color: '#94a3b8', margin: '0' }}>
+                    Enter the 6-digit security code sent to
+                    <br />
+                    <strong style={{ color: '#f1f5f9', wordBreak: 'break-all' }}>{maskedEmail || 'your email'}</strong>
+                  </p>
                 </div>
 
-                <div className="ig-input-group ig-password-group">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    name="password"
-                    placeholder="Password"
-                    value={loginData.password}
-                    onChange={handleLoginChange}
-                    required
-                    maxLength={128}
-                    autoComplete="current-password"
-                    className="ig-input"
-                  />
-                  {loginData.password && (
+                {devOtp && (
+                  <div style={{
+                    background: 'rgba(234, 179, 8, 0.12)',
+                    border: '1px solid rgba(234, 179, 8, 0.35)',
+                    borderRadius: '10px',
+                    padding: '10px 14px',
+                    marginBottom: '16px',
+                    fontSize: '12px',
+                    color: '#facc15',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <span>⚡ <strong>Dev Mode Code:</strong> <code style={{ letterSpacing: '2px', fontSize: '14px', fontWeight: 'bold' }}>{devOtp}</code></span>
                     <button
                       type="button"
-                      className="ig-peek-btn"
-                      onClick={() => setShowPassword((p) => !p)}
+                      onClick={() => setOtpCode(devOtp)}
+                      style={{
+                        background: 'rgba(234, 179, 8, 0.25)',
+                        border: '1px solid rgba(234, 179, 8, 0.5)',
+                        color: '#fff',
+                        borderRadius: '6px',
+                        padding: '3px 10px',
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                        fontWeight: '600'
+                      }}
                     >
-                      {showPassword ? 'Hide' : 'Show'}
+                      Auto-Fill
                     </button>
-                  )}
+                  </div>
+                )}
+
+                {otpError && <div className="ig-auth-error">⚠️ {otpError}</div>}
+                {otpSuccessMsg && (
+                  <div style={{
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    color: '#34d399',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    textAlign: 'center',
+                    marginBottom: '16px'
+                  }}>
+                    ✓ {otpSuccessMsg}
+                  </div>
+                )}
+
+                <form onSubmit={handleVerifyOtpSubmit} className="ig-form">
+                  <div className="ig-input-group">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      placeholder="000000"
+                      value={otpCode}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                        setOtpCode(val);
+                        if (otpError) setOtpError(null);
+                      }}
+                      autoFocus
+                      style={{
+                        textAlign: 'center',
+                        letterSpacing: '10px',
+                        fontSize: '24px',
+                        fontWeight: '700',
+                        padding: '12px',
+                        fontFamily: 'monospace'
+                      }}
+                      className="ig-input"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={otpLoading || otpCode.trim().length !== 6}
+                    className="ig-btn-primary"
+                    style={{ marginTop: '12px' }}
+                  >
+                    {otpLoading ? 'Verifying Security Code...' : 'Verify & Log In'}
+                  </button>
+                </form>
+
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: '18px',
+                  paddingTop: '12px',
+                  borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))',
+                  fontSize: '13px'
+                }}>
+                  <button
+                    type="button"
+                    onClick={handleBackToCredentials}
+                    className="ig-link-button"
+                    style={{ color: '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    ← Back to Login
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={otpCooldown > 0 || otpLoading}
+                    className="ig-link-button"
+                    style={{ color: otpCooldown > 0 ? '#64748b' : 'var(--primary, #3897f0)' }}
+                  >
+                    {otpCooldown > 0 ? `Resend in ${otpCooldown}s` : 'Resend Code'}
+                  </button>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={loading || !loginData.identifier.trim() || !loginData.password}
-                  className="ig-btn-primary"
-                >
-                  {loading ? 'Logging in...' : 'Log in'}
-                </button>
-              </form>
-
-              <div className="ig-forgot-link">
-                <button
-                  type="button"
-                  onClick={() => setInfoModal('forgot')}
-                  className="ig-link-button"
-                >
-                  Forgot password?
-                </button>
+                <div className="vg-auth-brand-badge" style={{ marginTop: '20px' }}>
+                  <span className="vg-badge-v">V</span>
+                  <span className="vg-badge-text">VibeGrid Secure 2FA</span>
+                </div>
               </div>
+            ) : (
+              /* 1A. Log In Form (Standard Credentials) */
+              <div className="ig-auth-box">
+                <h2 className="ig-auth-title">Log into VibeGrid</h2>
 
-              {/* Demo 1-Click Login Row */}
-              <div className="ig-divider">
-                <span>OR TRY AS DEMO USER</span>
-              </div>
+                {error && <div className="ig-auth-error">⚠️ {error}</div>}
 
-              <div className="ig-demo-chips">
-                {DEMO_PERSONAS.map((p) => (
+                <form onSubmit={handleLoginSubmit} className="ig-form">
+                  <div className="ig-input-group">
+                    <input
+                      type="text"
+                      name="identifier"
+                      placeholder="Mobile number, username or email"
+                      value={loginData.identifier}
+                      onChange={handleLoginChange}
+                      required
+                      maxLength={255}
+                      autoComplete="username"
+                      className="ig-input"
+                    />
+                  </div>
+
+                  <div className="ig-input-group ig-password-group">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      placeholder="Password"
+                      value={loginData.password}
+                      onChange={handleLoginChange}
+                      required
+                      maxLength={128}
+                      autoComplete="current-password"
+                      className="ig-input"
+                    />
+                    {loginData.password && (
+                      <button
+                        type="button"
+                        className="ig-peek-btn"
+                        onClick={() => setShowPassword((p) => !p)}
+                      >
+                        {showPassword ? 'Hide' : 'Show'}
+                      </button>
+                    )}
+                  </div>
+
                   <button
-                    key={p.username}
-                    type="button"
-                    className="ig-demo-chip"
-                    onClick={() => handleDemoLogin(p.username)}
-                    disabled={loading}
-                    title={p.role}
+                    type="submit"
+                    disabled={loading || !loginData.identifier.trim() || !loginData.password}
+                    className="ig-btn-primary"
                   >
-                    <span>{p.icon}</span> @{p.username}
+                    {loading ? 'Logging in...' : 'Log in'}
                   </button>
-                ))}
-              </div>
+                </form>
 
-              {/* Create New Account Button */}
-              <div className="ig-create-account-wrapper">
-                <button
-                  type="button"
-                  className="ig-btn-outline"
-                  onClick={() => {
-                    setActiveTab('register');
-                    setError(null);
-                  }}
-                >
-                  Create new account
-                </button>
-              </div>
+                <div className="ig-forgot-link">
+                  <button
+                    type="button"
+                    onClick={() => setInfoModal('forgot')}
+                    className="ig-link-button"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
 
-              {/* VibeGrid Official Brand Badge */}
-              <div className="vg-auth-brand-badge">
-                <span className="vg-badge-v">V</span>
-                <span className="vg-badge-text">from VibeGrid</span>
+                {/* Demo 1-Click Login Row */}
+                <div className="ig-divider">
+                  <span>OR TRY AS DEMO USER</span>
+                </div>
+
+                <div className="ig-demo-chips">
+                  {DEMO_PERSONAS.map((p) => (
+                    <button
+                      key={p.username}
+                      type="button"
+                      className="ig-demo-chip"
+                      onClick={() => handleDemoLogin(p.username)}
+                      disabled={loading}
+                      title={p.role}
+                    >
+                      <span>{p.icon}</span> @{p.username}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Create New Account Button */}
+                <div className="ig-create-account-wrapper">
+                  <button
+                    type="button"
+                    className="ig-btn-outline"
+                    onClick={() => {
+                      setActiveTab('register');
+                      setLoginStep('credentials');
+                      setError(null);
+                    }}
+                  >
+                    Create new account
+                  </button>
+                </div>
+
+                {/* VibeGrid Official Brand Badge */}
+                <div className="vg-auth-brand-badge">
+                  <span className="vg-badge-v">V</span>
+                  <span className="vg-badge-text">from VibeGrid</span>
+                </div>
               </div>
-            </div>
+            )
           ) : (
             /* 2. Create Account / Register Form */
             <div className="ig-auth-box">
@@ -683,6 +911,7 @@ export default function AuthPage() {
                   className="ig-btn-outline"
                   onClick={() => {
                     setActiveTab('login');
+                    setLoginStep('credentials');
                     setError(null);
                   }}
                 >
@@ -909,6 +1138,7 @@ export default function AuthPage() {
                         onClick={() => {
                           setInfoModal(null);
                           setActiveTab('login');
+                          setLoginStep('credentials');
                           setRecoveryState({
                             step: 'request',
                             email: '',

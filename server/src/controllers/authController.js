@@ -10,8 +10,11 @@
 const crypto = require('crypto');
 const { query } = require('../config/db');
 const { hashPassword, comparePassword } = require('../utils/password');
+const jwt = require('jsonwebtoken');
+const config = require('../config/env');
 const { generateToken, setAuthCookie } = require('../utils/jwt');
 const { parseUserAgent, getClientIp, getApproxLocation } = require('../utils/deviceParser');
+const { sendLoginOtpEmail } = require('../utils/mailer');
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -170,37 +173,287 @@ const login = async (req, res, next) => {
       wasReactivated = true;
     }
 
-    // 4. Create active session record in database
-    const sessionId = await createSessionRecord(user.id, req);
-
-    // 5. Issue new signed JWT token with active token version, session ID, and demo access flag
     const isDemoAccess = req.body.isDemoAccess === true || req.body.isDemoAccess === 'true';
+    const isDemoAccount = Boolean(isDemoAccess || DEMO_USERNAMES.includes((user.username || '').toLowerCase()));
+
+    // Demo accounts bypass 2FA OTP to allow showcase exploratory access
+    if (isDemoAccount) {
+      const sessionId = await createSessionRecord(user.id, req);
+      const token = generateToken({
+        id: user.id,
+        username: user.username,
+        tokenVersion: user.token_version || 1,
+        sessionId,
+        isDemoAccess: true
+      });
+
+      setAuthCookie(res, token);
+      delete user.password_hash;
+      delete user.token_version;
+      user.is_demo_session = true;
+
+      return res.status(200).json({
+        success: true,
+        message: wasReactivated ? 'Welcome back! Your account has been reactivated.' : 'Logged in successfully!',
+        data: {
+          user,
+          reactivated: wasReactivated
+        }
+      });
+    }
+
+    // Standard accounts: Generate 6-digit OTP and send via Email
+    const otpCode = crypto.randomInt(100000, 999999).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Invalidate existing unused login OTPs for this user
+    await query(
+      "UPDATE account_verifications SET used = TRUE WHERE user_id = $1 AND type = 'login_otp' AND used = FALSE",
+      [user.id]
+    );
+
+    // Store in account_verifications
+    await query(
+      `INSERT INTO account_verifications (user_id, type, target_value, otp_code, expires_at)
+       VALUES ($1, 'login_otp', $2, $3, $4)`,
+      [user.id, user.email, otpCode, expiresAt]
+    );
+
+    // Send email using Nodemailer
+    await sendLoginOtpEmail(user.email, otpCode);
+
+    // Generate short-lived (10m) token for the verification step
+    const loginToken = jwt.sign(
+      {
+        userId: user.id,
+        username: user.username,
+        purpose: 'login_2fa',
+        wasReactivated
+      },
+      config.jwtSecret,
+      { expiresIn: '10m' }
+    );
+
+    // Mask email for user privacy display
+    const [namePart, domainPart] = (user.email || '').split('@');
+    const maskedEmail = `${namePart.length > 2 ? namePart.slice(0, 2) : namePart}***@${domainPart || 'gmail.com'}`;
+
+    return res.status(200).json({
+      success: true,
+      message: `A 6-digit verification code has been sent to ${maskedEmail}.`,
+      data: {
+        step: 'otp_required',
+        loginToken,
+        maskedEmail,
+        deliveryMethod: 'email',
+        debugOtp: config.nodeEnv === 'development' && (!config.email.user || !config.email.pass) ? otpCode : undefined
+      }
+    });
+  } catch (error) {
+    console.error('[Login Error]', error);
+    next(error);
+  }
+};
+
+/**
+ * Verify 2FA Login OTP Code
+ * Route: POST /api/auth/verify-login-otp
+ */
+const verifyLoginOtp = async (req, res, next) => {
+  try {
+    const { loginToken, otpCode } = req.body;
+
+    if (!loginToken || !otpCode || otpCode.trim().length !== 6) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please enter a valid 6-digit verification code.'
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(loginToken, config.jwtSecret);
+      if (decoded.purpose !== 'login_2fa') {
+        throw new Error('Invalid token purpose');
+      }
+    } catch {
+      return res.status(401).json({
+        success: false,
+        error: 'Your login verification session has expired. Please sign in again.'
+      });
+    }
+
+    const userId = decoded.userId;
+
+    // Check for pending active OTP
+    const otpRes = await query(
+      `SELECT id, otp_code, attempts, expires_at
+       FROM account_verifications
+       WHERE user_id = $1 AND type = 'login_otp' AND used = FALSE
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (otpRes.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No active verification code found. Please sign in again.'
+      });
+    }
+
+    const record = otpRes.rows[0];
+
+    // Check expiry
+    if (new Date() > new Date(record.expires_at)) {
+      await query('UPDATE account_verifications SET used = TRUE WHERE id = $1', [record.id]);
+      return res.status(400).json({
+        success: false,
+        error: 'Verification code has expired. Please request a new code.'
+      });
+    }
+
+    // Rate limiting: Maximum 5 attempts
+    if (record.attempts >= 5) {
+      await query('UPDATE account_verifications SET used = TRUE WHERE id = $1', [record.id]);
+      return res.status(429).json({
+        success: false,
+        error: 'Too many incorrect attempts. Please sign in again.'
+      });
+    }
+
+    // Check code
+    if (record.otp_code !== otpCode.trim()) {
+      await query('UPDATE account_verifications SET attempts = attempts + 1 WHERE id = $1', [record.id]);
+      const attemptsLeft = 5 - (record.attempts + 1);
+      return res.status(400).json({
+        success: false,
+        error: `Incorrect code. ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining.`
+      });
+    }
+
+    // Mark OTP as used
+    await query('UPDATE account_verifications SET used = TRUE WHERE id = $1', [record.id]);
+
+    // Fetch user details
+    const userRes = await query(
+      `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
+              date_of_birth, is_email_verified, is_phone_verified, is_private, is_deactivated, 
+              COALESCE(test, 0) AS test, token_version, created_at 
+       FROM users 
+       WHERE id = $1 
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User account no longer exists.' });
+    }
+
+    const user = userRes.rows[0];
+
+    // Reactivate if previously deactivated
+    if (user.is_deactivated || decoded.wasReactivated) {
+      await query('UPDATE users SET is_deactivated = false, deactivated_at = NULL WHERE id = $1', [user.id]);
+      user.is_deactivated = false;
+    }
+
+    // Create session and set cookie
+    const sessionId = await createSessionRecord(user.id, req);
     const token = generateToken({
       id: user.id,
       username: user.username,
       tokenVersion: user.token_version || 1,
       sessionId,
-      isDemoAccess
+      isDemoAccess: false
     });
 
-    // 6. Attach token as a secure HTTP-Only cookie
     setAuthCookie(res, token);
-
-    // 7. Exclude password_hash & token_version from response, attach is_demo_session
-    delete user.password_hash;
     delete user.token_version;
-    user.is_demo_session = Boolean(isDemoAccess || DEMO_USERNAMES.includes((user.username || '').toLowerCase()));
+    user.is_demo_session = false;
 
     res.status(200).json({
       success: true,
-      message: wasReactivated ? 'Welcome back! Your account has been reactivated.' : 'Logged in successfully!',
+      message: decoded.wasReactivated ? 'Welcome back! Your account has been reactivated.' : 'Logged in successfully!',
       data: {
         user,
-        reactivated: wasReactivated
+        reactivated: Boolean(decoded.wasReactivated)
       }
     });
   } catch (error) {
-    console.error('[Login Error]', error);
+    console.error('[Verify Login OTP Error]', error);
+    next(error);
+  }
+};
+
+/**
+ * Resend 2FA Login OTP Code
+ * Route: POST /api/auth/resend-login-otp
+ */
+const resendLoginOtp = async (req, res, next) => {
+  try {
+    const { loginToken } = req.body;
+    if (!loginToken) {
+      return res.status(400).json({ success: false, error: 'Missing login session token.' });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(loginToken, config.jwtSecret);
+      if (decoded.purpose !== 'login_2fa') throw new Error('Invalid token purpose');
+    } catch {
+      return res.status(401).json({ success: false, error: 'Verification session expired. Please sign in again.' });
+    }
+
+    const userId = decoded.userId;
+    const userRes = await query('SELECT id, username, email FROM users WHERE id = $1 LIMIT 1', [userId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+    const user = userRes.rows[0];
+
+    // Rate limit: 30s cooldown
+    const recentRes = await query(
+      `SELECT created_at FROM account_verifications 
+       WHERE user_id = $1 AND type = 'login_otp' 
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId]
+    );
+
+    if (recentRes.rows.length > 0) {
+      const elapsed = Date.now() - new Date(recentRes.rows[0].created_at).getTime();
+      if (elapsed < 30 * 1000) {
+        const waitSec = Math.ceil((30 * 1000 - elapsed) / 1000);
+        return res.status(429).json({
+          success: false,
+          error: `Please wait ${waitSec}s before requesting a new code.`
+        });
+      }
+    }
+
+    // Invalidate old OTPs
+    await query("UPDATE account_verifications SET used = TRUE WHERE user_id = $1 AND type = 'login_otp' AND used = FALSE", [userId]);
+
+    // Generate new OTP
+    const otpCode = crypto.randomInt(100000, 999999).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await query(
+      `INSERT INTO account_verifications (user_id, type, target_value, otp_code, expires_at)
+       VALUES ($1, 'login_otp', $2, $3, $4)`,
+      [userId, user.email, otpCode, expiresAt]
+    );
+
+    await sendLoginOtpEmail(user.email, otpCode);
+
+    res.status(200).json({
+      success: true,
+      message: 'A fresh verification code has been sent.',
+      data: {
+        debugOtp: config.nodeEnv === 'development' && (!config.email.user || !config.email.pass) ? otpCode : undefined
+      }
+    });
+  } catch (error) {
+    console.error('[Resend Login OTP Error]', error);
     next(error);
   }
 };

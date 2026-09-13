@@ -9,7 +9,7 @@
 const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
-const { register, login, logout, getMe, forgotPassword, resetPassword, changePassword } = require('../controllers/authController');
+const { register, login, logout, getMe, forgotPassword, resetPassword, changePassword, verifyLoginOtp, resendLoginOtp } = require('../controllers/authController');
 const { 
   validateRegistration, 
   validateLogin, 
@@ -72,6 +72,12 @@ router.post('/register', registerLimiter, validateRegistration, register);
 
 // POST /api/auth/login — Sign in with username/email & password (Rate-limited, Validated)
 router.post('/login', loginLimiter, validateLogin, login);
+
+// POST /api/auth/verify-login-otp — Verify 2FA email OTP and establish session
+router.post('/verify-login-otp', resetPasswordLimiter, verifyLoginOtp);
+
+// POST /api/auth/resend-login-otp — Resend 2FA login OTP email
+router.post('/resend-login-otp', forgotPasswordLimiter, resendLoginOtp);
 
 // POST /api/auth/logout — Log out & clear cookie
 router.post('/logout', logout);
