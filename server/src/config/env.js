@@ -30,8 +30,8 @@ const config = {
     name: process.env.DB_NAME || 'vibegrid_db'
   },
   email: {
-    user: process.env.EMAIL_USER || '',
-    pass: process.env.EMAIL_PASS || ''
+    user: (process.env.EMAIL_USER || '').trim(),
+    pass: (process.env.EMAIL_PASS || '').replace(/\s+/g, '')
   }
 };
 
