@@ -210,7 +210,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   // Load section-specific data when tab changes
   useEffect(() => {
-    if (activeSection === 'security') {
+    if (activeSection === 'security' && !isDemoUser) {
       fetchSessions();
     } else if (activeSection === 'privacy') {
       fetchPrivacySettings();
@@ -1372,76 +1372,78 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     </form>
                   </div>
 
-                  {/* Active Login Sessions Card */}
-                  <div className="account-mgmt-card" style={{ marginTop: '16px' }}>
-                    <div className="account-mgmt-header">
-                      <div className="account-mgmt-title">
-                        <span>Active Login Sessions</span>
-                        <span className="sessions-count-badge">{sessions.length} Active</span>
-                      </div>
-                      <span className="account-mgmt-subtitle">
-                        Devices where your account is currently signed in. Terminate unrecognized sessions.
-                      </span>
-                    </div>
-
-                    {loadingSessions ? (
-                      <div className="sessions-loading">
-                        <div className="spinner-small" />
-                        <span>Loading active sessions...</span>
-                      </div>
-                    ) : (
-                      <div className="sessions-list">
-                        {sessions.map((sess) => (
-                          <div key={sess.id} className={`session-item ${sess.is_current ? 'current-session' : ''}`}>
-                            <div className="session-icon">
-                              {sess.device === 'Mobile' ? '📱' : sess.device === 'Tablet' ? '📟' : '💻'}
-                            </div>
-                            <div className="session-details">
-                              <div className="session-header-row">
-                                <span className="session-device-name">
-                                  {sess.browser || 'Browser'} on {sess.os || 'Device'}
-                                </span>
-                                {sess.is_current && <span className="current-badge">This Device</span>}
-                              </div>
-                              <span className="session-meta">
-                                {sess.location || 'Local Network'} • Last active: {new Date(sess.last_active).toLocaleString()}
-                              </span>
-                            </div>
-                            {!sess.is_current && (
-                              <button
-                                type="button"
-                                className="session-revoke-btn"
-                                onClick={() => handleRevokeSession(sess.id)}
-                                disabled={revokingSessionId === sess.id}
-                              >
-                                {revokingSessionId === sess.id ? 'Revoking...' : 'Revoke'}
-                              </button>
-                            )}
-                          </div>
-                        ))}
-
-                        <div className="sessions-bulk-actions">
-                          <button
-                            type="button"
-                            className="btn-secondary btn-sm"
-                            onClick={handleLogoutOthers}
-                            disabled={loggingOutOthers || sessions.length <= 1}
-                          >
-                            {loggingOutOthers ? 'Logging out...' : 'Log Out of Other Devices'}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-secondary btn-sm"
-                            style={{ color: 'var(--danger)' }}
-                            onClick={handleLogoutAll}
-                            disabled={loggingOutAll}
-                          >
-                            {loggingOutAll ? 'Logging out...' : 'Log Out of All Devices'}
-                          </button>
+                  {/* Active Login Sessions Card (Hidden for demo profiles so visitors cannot terminate other users' sessions) */}
+                  {!isDemoUser && (
+                    <div className="account-mgmt-card" style={{ marginTop: '16px' }}>
+                      <div className="account-mgmt-header">
+                        <div className="account-mgmt-title">
+                          <span>Active Login Sessions</span>
+                          <span className="sessions-count-badge">{sessions.length} Active</span>
                         </div>
+                        <span className="account-mgmt-subtitle">
+                          Devices where your account is currently signed in. Terminate unrecognized sessions.
+                        </span>
                       </div>
-                    )}
-                  </div>
+
+                      {loadingSessions ? (
+                        <div className="sessions-loading">
+                          <div className="spinner-small" />
+                          <span>Loading active sessions...</span>
+                        </div>
+                      ) : (
+                        <div className="sessions-list">
+                          {sessions.map((sess) => (
+                            <div key={sess.id} className={`session-item ${sess.is_current ? 'current-session' : ''}`}>
+                              <div className="session-icon">
+                                {sess.device === 'Mobile' ? '📱' : sess.device === 'Tablet' ? '📟' : '💻'}
+                              </div>
+                              <div className="session-details">
+                                <div className="session-header-row">
+                                  <span className="session-device-name">
+                                    {sess.browser || 'Browser'} on {sess.os || 'Device'}
+                                  </span>
+                                  {sess.is_current && <span className="current-badge">This Device</span>}
+                                </div>
+                                <span className="session-meta">
+                                  {sess.location || 'Local Network'} • Last active: {new Date(sess.last_active).toLocaleString()}
+                                </span>
+                              </div>
+                              {!sess.is_current && (
+                                <button
+                                  type="button"
+                                  className="session-revoke-btn"
+                                  onClick={() => handleRevokeSession(sess.id)}
+                                  disabled={revokingSessionId === sess.id}
+                                >
+                                  {revokingSessionId === sess.id ? 'Revoking...' : 'Revoke'}
+                                </button>
+                              )}
+                            </div>
+                          ))}
+
+                          <div className="sessions-bulk-actions">
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={handleLogoutOthers}
+                              disabled={loggingOutOthers || sessions.length <= 1}
+                            >
+                              {loggingOutOthers ? 'Logging out...' : 'Log Out of Other Devices'}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              style={{ color: 'var(--danger)' }}
+                              onClick={handleLogoutAll}
+                              disabled={loggingOutAll}
+                            >
+                              {loggingOutAll ? 'Logging out...' : 'Log Out of All Devices'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

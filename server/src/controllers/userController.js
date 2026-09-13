@@ -1047,6 +1047,13 @@ const getActiveSessions = async (req, res, next) => {
  */
 const revokeSession = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Managing login sessions is disabled on official demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const sessionIdToRevoke = parseInt(req.params.id, 10);
 
@@ -1093,6 +1100,13 @@ const revokeSession = async (req, res, next) => {
  */
 const logoutOtherSessions = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Managing login sessions is disabled on official demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const currentSessionId = req.user.sessionId;
 
@@ -1127,6 +1141,13 @@ const logoutOtherSessions = async (req, res, next) => {
  */
 const logoutAllSessions = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Managing login sessions is disabled on official demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const { clearAuthCookie } = require('../utils/jwt');
 
