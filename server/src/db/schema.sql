@@ -203,9 +203,23 @@ CREATE TABLE IF NOT EXISTS media_files (
     folder VARCHAR(50) NOT NULL,
     mime_type VARCHAR(100) NOT NULL,
     data BYTEA NOT NULL,
-    size INTEGER NOT NULL,
+    size INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_media_files_folder ON media_files(folder);
+
+-- 15. WebRTC Call Signals (Serverless Real-Time Fallback)
+CREATE TABLE IF NOT EXISTS call_signals (
+    id SERIAL PRIMARY KEY,
+    call_id UUID NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
+    from_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    to_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    signal_type VARCHAR(30) NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_call_signals_poll ON call_signals(call_id, to_user_id, id);
+CREATE INDEX IF NOT EXISTS idx_call_signals_created ON call_signals(created_at);
+
 
 

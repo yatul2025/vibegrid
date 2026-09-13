@@ -513,10 +513,13 @@ const uploadEncryptedAttachment = async (req, res, next) => {
 
     const filename = `enc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.bin`;
 
+    const fileSize = req.file.size || req.file.buffer.length || 0;
+
     await query(
-      `INSERT INTO media_files (id, folder, mime_type, data)
-       VALUES ($1, 'encrypted', 'application/octet-stream', $2)`,
-      [filename, req.file.buffer]
+      `INSERT INTO media_files (id, folder, mime_type, data, size)
+       VALUES ($1, 'encrypted', 'application/octet-stream', $2, $3)
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, size = EXCLUDED.size, mime_type = EXCLUDED.mime_type`,
+      [filename, req.file.buffer, fileSize]
     );
 
     res.status(201).json({

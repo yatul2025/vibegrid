@@ -120,3 +120,17 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER REFERENCES mes
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id, created_at ASC);
+
+-- 11. WebRTC Call Signals Table (Serverless Fallback)
+CREATE TABLE IF NOT EXISTS call_signals (
+    id SERIAL PRIMARY KEY,
+    call_id UUID NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
+    from_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    to_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    signal_type VARCHAR(30) NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_call_signals_poll ON call_signals(call_id, to_user_id, id);
+CREATE INDEX IF NOT EXISTS idx_call_signals_created ON call_signals(created_at);
+

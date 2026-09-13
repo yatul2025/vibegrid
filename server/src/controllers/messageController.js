@@ -27,6 +27,9 @@ const getConversations = async (req, res, next) => {
         SELECT 
           m.id,
           m.content,
+          m.ciphertext,
+          m.iv_nonce,
+          m.conversation_id,
           m.created_at,
           m.sender_id,
           m.recipient_id,
@@ -37,7 +40,8 @@ const getConversations = async (req, res, next) => {
             ORDER BY m.created_at DESC
           ) as rn
         FROM messages m
-        WHERE m.sender_id = $1 OR m.recipient_id = $1
+        WHERE (m.sender_id = $1 OR m.recipient_id = $1)
+          AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
       ),
       unread_counts AS (
         SELECT 
@@ -45,11 +49,15 @@ const getConversations = async (req, res, next) => {
           COUNT(*)::int AS unread_count
         FROM messages m
         WHERE m.recipient_id = $1 AND m.is_read = FALSE
+          AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
         GROUP BY m.sender_id
       )
       SELECT 
         rm.id,
         rm.content AS last_message,
+        rm.ciphertext AS last_ciphertext,
+        rm.iv_nonce AS last_iv_nonce,
+        rm.conversation_id,
         rm.created_at AS last_message_at,
         rm.sender_id AS last_sender_id,
         u.id AS partner_id,
@@ -78,7 +86,7 @@ const getConversations = async (req, res, next) => {
 };
 
 /**
- * @desc    Get message stream with a specific user
+ * @desc    Get direct message history with a specific user
  * @route   GET /api/messages/:username
  * @access  Private (Authenticated)
  */
@@ -88,34 +96,64 @@ const getMessages = async (req, res, next) => {
     const { username } = req.params;
     const cleanUsername = username.trim().toLowerCase();
 
-    // 1. Resolve partner user with privacy settings
-    const userRes = await query(
-      'SELECT id, username, full_name, avatar_url, show_read_receipts FROM users WHERE LOWER(username) = $1 LIMIT 1',
+    // 1. Resolve partner user
+    const partnerRes = await query(
+      'SELECT id, username, full_name, avatar_url, show_read_receipts, allow_messages_from FROM users WHERE LOWER(username) = $1 LIMIT 1',
       [cleanUsername]
     );
 
-    if (userRes.rows.length === 0) {
+    if (partnerRes.rows.length === 0) {
       return res.status(404).json({
         success: false,
         error: `User @${cleanUsername} not found.`
       });
     }
 
-    const partner = userRes.rows[0];
+    const partner = partnerRes.rows[0];
 
-    // 2. Query messages between users
+    // Find or create conversation for this 1to1 pair
+    let conversationId = null;
+    let ephemeralTimerSeconds = null;
+
+    const convRes = await query(`
+      SELECT c.id, c.ephemeral_timer_seconds
+      FROM conversations c
+      JOIN conversation_members cm1 ON c.id = cm1.conversation_id AND cm1.user_id = $1
+      JOIN conversation_members cm2 ON c.id = cm2.conversation_id AND cm2.user_id = $2
+      WHERE c.type = '1to1'
+      LIMIT 1
+    `, [userId, partner.id]);
+
+    if (convRes.rows.length > 0) {
+      conversationId = convRes.rows[0].id;
+      ephemeralTimerSeconds = convRes.rows[0].ephemeral_timer_seconds;
+    } else {
+      const newConv = await query(`INSERT INTO conversations (type) VALUES ('1to1') RETURNING id`);
+      conversationId = newConv.rows[0].id;
+      await query(
+        `INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1, $2), ($1, $3) ON CONFLICT DO NOTHING`,
+        [conversationId, userId, partner.id]
+      );
+    }
+
+    // 2. Query messages between users (excluding expired ephemeral messages)
     const messagesQuery = `
       SELECT 
         m.id,
         m.sender_id,
         m.recipient_id,
+        m.conversation_id,
         m.content,
+        m.ciphertext,
+        m.iv_nonce,
+        m.sender_device_id,
         m.is_read,
         m.created_at,
         (m.sender_id = $1) AS is_mine
       FROM messages m
-      WHERE (m.sender_id = $1 AND m.recipient_id = $2)
-         OR (m.sender_id = $2 AND m.recipient_id = $1)
+      WHERE ((m.sender_id = $1 AND m.recipient_id = $2)
+          OR (m.sender_id = $2 AND m.recipient_id = $1))
+         AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
       ORDER BY m.created_at ASC
     `;
 
@@ -139,6 +177,8 @@ const getMessages = async (req, res, next) => {
       success: true,
       data: {
         partner,
+        conversationId,
+        ephemeralTimerSeconds,
         messages: formattedMessages
       }
     });
@@ -156,7 +196,7 @@ const sendMessage = async (req, res, next) => {
   try {
     const senderId = req.user.id;
     const { username } = req.params;
-    const { content } = req.body;
+    const { content, ciphertext, ivNonce, senderDeviceId } = req.body;
     const cleanUsername = username.trim().toLowerCase();
 
     // 1. Resolve partner user with privacy settings
@@ -204,27 +244,69 @@ const sendMessage = async (req, res, next) => {
     }
 
     // 3. Validate message content
-    if (!content || typeof content !== 'string' || !content.trim()) {
+    const cleanContent = (content && typeof content === 'string')
+      ? content.trim().slice(0, 10000)
+      : (ciphertext ? '[Encrypted Message]' : '');
+
+    if (!cleanContent && !ciphertext) {
       return res.status(400).json({
         success: false,
         error: 'Message content cannot be empty.'
       });
     }
 
-    const cleanContent = content.trim().slice(0, 1000);
+    // Find or create conversation for this 1to1 pair
+    let conversationId = null;
+    let ephemeralSeconds = null;
+
+    const convRes = await query(`
+      SELECT c.id, c.ephemeral_timer_seconds
+      FROM conversations c
+      JOIN conversation_members cm1 ON c.id = cm1.conversation_id AND cm1.user_id = $1
+      JOIN conversation_members cm2 ON c.id = cm2.conversation_id AND cm2.user_id = $2
+      WHERE c.type = '1to1'
+      LIMIT 1
+    `, [senderId, recipient.id]);
+
+    if (convRes.rows.length > 0) {
+      conversationId = convRes.rows[0].id;
+      ephemeralSeconds = convRes.rows[0].ephemeral_timer_seconds;
+    } else {
+      const newConv = await query(`INSERT INTO conversations (type) VALUES ('1to1') RETURNING id`);
+      conversationId = newConv.rows[0].id;
+      await query(
+        `INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1, $2), ($1, $3) ON CONFLICT DO NOTHING`,
+        [conversationId, senderId, recipient.id]
+      );
+    }
+
+    const expiresAt = ephemeralSeconds ? new Date(Date.now() + ephemeralSeconds * 1000).toISOString() : null;
 
     // 4. Insert message
     const insertQuery = `
-      INSERT INTO messages (sender_id, recipient_id, content)
-      VALUES ($1, $2, $3)
-      RETURNING id, sender_id, recipient_id, content, is_read, created_at
+      INSERT INTO messages (sender_id, recipient_id, conversation_id, content, ciphertext, iv_nonce, sender_device_id, expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id, sender_id, recipient_id, conversation_id, content, ciphertext, iv_nonce, sender_device_id, is_read, created_at
     `;
 
-    const result = await query(insertQuery, [senderId, recipient.id, cleanContent]);
+    const result = await query(insertQuery, [
+      senderId,
+      recipient.id,
+      conversationId,
+      cleanContent,
+      ciphertext || null,
+      ivNonce || null,
+      senderDeviceId || null,
+      expiresAt
+    ]);
+
     const newMessage = {
       ...result.rows[0],
       is_mine: true
     };
+
+    // Update conversation timestamp
+    await query('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [conversationId]);
 
     // Real-time broadcast to recipient
     const io = req.app.get('io');
@@ -239,7 +321,8 @@ const sendMessage = async (req, res, next) => {
       success: true,
       data: {
         message: newMessage,
-        recipient
+        recipient,
+        conversationId
       }
     });
   } catch (error) {

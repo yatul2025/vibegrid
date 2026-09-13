@@ -201,6 +201,8 @@ export default function MessagesPage({
       if (res.success && res.data) {
         const partner = res.data.partner;
         setActivePartner(partner);
+        setActiveConversationId(res.data.conversationId || null);
+        setEphemeralTimer(res.data.ephemeralTimerSeconds || null);
 
         // Check verification status from local keyStore
         if (user) {
@@ -227,6 +229,17 @@ export default function MessagesPage({
       if (isInitialLoad) setLoadingMessages(false);
     }
   }, [user, onUnreadCountChange]);
+
+  // Serverless fallback: Poll active conversation if socket is not connected
+  useEffect(() => {
+    if (!activePartner) return;
+    const interval = setInterval(() => {
+      if (!socketService.isConnected()) {
+        fetchMessagesForPartner(activePartner.username, false);
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [activePartner, fetchMessagesForPartner]);
 
   // Initial Load
   useEffect(() => {
