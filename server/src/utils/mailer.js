@@ -4,19 +4,29 @@
  * Email delivery utility using Nodemailer & Gmail SMTP.
  */
 
-const nodemailer = require('nodemailer');
+let nodemailer = null;
+try {
+  nodemailer = require('nodemailer');
+} catch (err) {
+  console.warn('[Mailer Warning] nodemailer module not found:', err.message);
+}
+
 const config = require('../config/env');
 
 let transporter = null;
 
-if (config.email.user && config.email.pass) {
-  transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: config.email.user,
-      pass: config.email.pass
-    }
-  });
+if (nodemailer && config.email.user && config.email.pass) {
+  try {
+    transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: config.email.user,
+        pass: config.email.pass
+      }
+    });
+  } catch (err) {
+    console.error('[Mailer Transporter Init Error]', err.message);
+  }
 }
 
 /**

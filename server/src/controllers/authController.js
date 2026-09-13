@@ -753,6 +753,8 @@ const changePassword = async (req, res, next) => {
 module.exports = {
   register,
   login,
+  verifyLoginOtp,
+  resendLoginOtp,
   logout,
   getMe,
   forgotPassword,
