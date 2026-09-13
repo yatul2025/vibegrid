@@ -182,6 +182,7 @@ export default function CallModal() {
         isInitiator: true
       });
       setCallState('outgoing');
+      startRingtone();
 
       socketService.emit('call:initiate', {
         targetUserId: targetUser.id,

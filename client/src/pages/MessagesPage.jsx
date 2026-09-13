@@ -36,6 +36,7 @@ import VoiceRecorder from '../components/VoiceRecorder';
 import EncryptedMediaRenderer from '../components/EncryptedMediaRenderer';
 import CreateGroupModal from '../components/CreateGroupModal';
 import CallHistoryModal from '../components/CallHistoryModal';
+import KeyBackupModal from '../components/KeyBackupModal';
 import senderKeysService from '../services/crypto/senderKeys';
 
 function formatMessageTime(dateString) {
@@ -98,6 +99,11 @@ export default function MessagesPage({
   const [isEphemeralMenuOpen, setIsEphemeralMenuOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isCallHistoryOpen, setIsCallHistoryOpen] = useState(false);
+  const [isKeyBackupOpen, setIsKeyBackupOpen] = useState(false);
+
+  // In-Chat Encrypted Search State
+  const [isSearchInChatOpen, setIsSearchInChatOpen] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
 
   // Ephemeral Real-Time States
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
@@ -653,6 +659,14 @@ export default function MessagesPage({
               </button>
               <button
                 type="button"
+                className="btn-sidebar-icon"
+                onClick={() => setIsKeyBackupOpen(true)}
+                title="E2EE Keys Backup & Restore"
+              >
+                🔐
+              </button>
+              <button
+                type="button"
                 className="btn-new-chat-icon"
                 onClick={() => setIsNewChatModalOpen(true)}
                 title="Start a new message"
@@ -825,6 +839,19 @@ export default function MessagesPage({
 
                   <button
                     type="button"
+                    className={`btn-chat-action ${isSearchInChatOpen ? 'active-search' : ''}`}
+                    onClick={() => {
+                      setIsSearchInChatOpen((prev) => !prev);
+                      if (isSearchInChatOpen) setChatSearchQuery('');
+                    }}
+                    title="Search in this encrypted conversation"
+                    aria-label="Search Chat"
+                  >
+                    🔍
+                  </button>
+
+                  <button
+                    type="button"
                     className="btn-chat-action btn-audio-call"
                     onClick={initiateAudioCall}
                     title={`Start Audio Call with @${activePartner.username}`}
@@ -853,6 +880,29 @@ export default function MessagesPage({
                 </div>
               </div>
 
+              {/* In-Chat Encrypted Search Bar */}
+              {isSearchInChatOpen && (
+                <div className="in-chat-search-bar">
+                  <input
+                    type="text"
+                    placeholder="Search in this encrypted conversation..."
+                    value={chatSearchQuery}
+                    onChange={(e) => setChatSearchQuery(e.target.value)}
+                    autoFocus
+                    className="in-chat-search-input"
+                  />
+                  {chatSearchQuery && (
+                    <button
+                      type="button"
+                      className="btn-clear-search"
+                      onClick={() => setChatSearchQuery('')}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Chat Message Stream */}
               <div className="chat-stream">
                 {/* E2EE Security Disclaimer Banner */}
@@ -880,35 +930,52 @@ export default function MessagesPage({
                     <p>Start your encrypted conversation with @{activePartner.username}!</p>
                   </div>
                 ) : (
-                  messages.map((m) => {
-                    const mediaPayload = parseMediaPayload(m.content);
+                  messages
+                    .filter((m) => {
+                      if (!chatSearchQuery.trim()) return true;
+                      return m.content && m.content.toLowerCase().includes(chatSearchQuery.toLowerCase());
+                    })
+                    .map((m) => {
+                      // System call log bubble
+                      if (m.message_type === 'call_log') {
+                        return (
+                          <div key={m.id} className="call-log-bubble-row">
+                            <div className="call-log-bubble">
+                              <span className="call-log-text">{m.content}</span>
+                              <span className="call-log-time">{formatMessageTime(m.created_at)}</span>
+                            </div>
+                          </div>
+                        );
+                      }
 
-                    return (
-                      <div
-                        key={m.id}
-                        className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'}`}
-                      >
-                        <div className={`message-bubble ${mediaPayload ? 'has-media' : ''}`}>
-                          {mediaPayload ? (
-                            <EncryptedMediaRenderer mediaPayload={mediaPayload} />
-                          ) : (
-                            <p className="message-text">{m.content}</p>
-                          )}
+                      const mediaPayload = parseMediaPayload(m.content);
 
-                          <div className="message-info-row">
-                            <span className="message-timestamp">
-                              {formatMessageTime(m.created_at)}
-                            </span>
-                            {m.is_mine && (
-                              <span className="message-receipt-tick" title={m.is_read ? 'Read' : 'Delivered'}>
-                                {m.is_read ? '✓✓' : '✓'}
-                              </span>
+                      return (
+                        <div
+                          key={m.id}
+                          className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'}`}
+                        >
+                          <div className={`message-bubble ${mediaPayload ? 'has-media' : ''}`}>
+                            {mediaPayload ? (
+                              <EncryptedMediaRenderer mediaPayload={mediaPayload} />
+                            ) : (
+                              <p className="message-text">{m.content}</p>
                             )}
+
+                            <div className="message-info-row">
+                              <span className="message-timestamp">
+                                {formatMessageTime(m.created_at)}
+                              </span>
+                              {m.is_mine && (
+                                <span className="message-receipt-tick" title={m.is_read ? 'Read' : 'Delivered'}>
+                                  {m.is_read ? '✓✓' : '✓'}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })
+                      );
+                    })
                 )}
 
                 {/* Animated Typing Indicator Bubble */}
@@ -1078,6 +1145,12 @@ export default function MessagesPage({
       <CallHistoryModal
         isOpen={isCallHistoryOpen}
         onClose={() => setIsCallHistoryOpen(false)}
+      />
+
+      {/* Key Backup Modal */}
+      <KeyBackupModal
+        isOpen={isKeyBackupOpen}
+        onClose={() => setIsKeyBackupOpen(false)}
       />
 
       {/* Embedded CSS Enhancements */}
@@ -1397,6 +1470,73 @@ export default function MessagesPage({
         @keyframes typingDotPulse {
           0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
           40% { transform: scale(1); opacity: 1; }
+        }
+
+        .btn-chat-action.active-search {
+          background: rgba(99, 102, 241, 0.2);
+          color: #6366f1;
+        }
+
+        .in-chat-search-bar {
+          display: flex;
+          align-items: center;
+          background: var(--bg-card, #ffffff);
+          border-bottom: 1px solid var(--border-color, #e2e8f0);
+          padding: 8px 16px;
+          gap: 8px;
+          animation: slideDown 0.15s ease-out;
+        }
+
+        .in-chat-search-input {
+          flex: 1;
+          border: 1px solid var(--border-color, #e2e8f0);
+          border-radius: 20px;
+          padding: 6px 14px;
+          font-size: 0.85rem;
+          background: var(--bg-page, #f8fafc);
+          color: var(--text-primary, #0f172a);
+          outline: none;
+        }
+
+        .in-chat-search-input:focus {
+          border-color: #6366f1;
+        }
+
+        .btn-clear-search {
+          background: none;
+          border: none;
+          color: var(--text-secondary, #94a3b8);
+          font-size: 0.9rem;
+          cursor: pointer;
+          padding: 4px;
+        }
+
+        .call-log-bubble-row {
+          display: flex;
+          justify-content: center;
+          margin: 12px 0;
+          width: 100%;
+        }
+
+        .call-log-bubble {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          padding: 6px 16px;
+          border-radius: 20px;
+          background: var(--bg-hover, rgba(148, 163, 184, 0.12));
+          border: 1px solid var(--border-color, rgba(148, 163, 184, 0.2));
+          font-size: 0.8rem;
+          color: var(--text-secondary, #64748b);
+        }
+
+        .call-log-text {
+          font-weight: 500;
+        }
+
+        .call-log-time {
+          font-size: 0.72rem;
+          opacity: 0.75;
         }
       `}</style>
     </div>

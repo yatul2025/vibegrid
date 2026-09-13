@@ -334,6 +334,22 @@ function initSocket(httpServer) {
           calleeId: userId,
           reason
         });
+
+        // Insert missed call record in conversation
+        const callInfo = await query('SELECT conversation_id, initiator_id, call_type FROM calls WHERE id = $1', [callId]);
+        if (callInfo.rows.length > 0 && callInfo.rows[0].conversation_id) {
+          const convId = callInfo.rows[0].conversation_id;
+          const callType = callInfo.rows[0].call_type || 'audio';
+          const callText = `⚠️ Missed ${callType} call`;
+
+          const msgRes = await query(`
+            INSERT INTO messages (conversation_id, sender_id, recipient_id, content, message_type)
+            VALUES ($1, $2, $3, $4, 'call_log')
+            RETURNING id, conversation_id, sender_id, content, message_type, created_at
+          `, [convId, callerId, userId, callText]);
+
+          io.to(`conv:${convId}`).emit('message:receive', msgRes.rows[0]);
+        }
       } catch (err) {
         console.error('[Call Reject Error]', err);
       }
@@ -343,7 +359,7 @@ function initSocket(httpServer) {
     socket.on('call:end', async ({ callId, targetUserId }) => {
       try {
         const callRes = await query(
-          `SELECT started_at FROM calls WHERE id = $1 LIMIT 1`,
+          `SELECT started_at, conversation_id, initiator_id, call_type FROM calls WHERE id = $1 LIMIT 1`,
           [callId]
         );
 
@@ -366,6 +382,24 @@ function initSocket(httpServer) {
             callId,
             durationSeconds
           });
+        }
+
+        // Insert call log message into conversation thread
+        if (callRes.rows.length > 0 && callRes.rows[0].conversation_id) {
+          const convId = callRes.rows[0].conversation_id;
+          const callType = callRes.rows[0].call_type || 'audio';
+          const m = Math.floor(durationSeconds / 60);
+          const s = durationSeconds % 60;
+          const durationStr = m > 0 ? `${m}m ${s}s` : `${s}s`;
+          const callText = `${callType === 'video' ? '📹 Video' : '📞 Audio'} call ended (${durationStr})`;
+
+          const msgRes = await query(`
+            INSERT INTO messages (conversation_id, sender_id, recipient_id, content, message_type)
+            VALUES ($1, $2, $3, $4, 'call_log')
+            RETURNING id, conversation_id, sender_id, content, message_type, created_at
+          `, [convId, userId, targetUserId, callText]);
+
+          io.to(`conv:${convId}`).emit('message:receive', msgRes.rows[0]);
         }
       } catch (err) {
         console.error('[Call End Error]', err);
