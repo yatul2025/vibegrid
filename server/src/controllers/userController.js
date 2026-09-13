@@ -1261,7 +1261,8 @@ const getPrivacySettings = async (req, res, next) => {
     const userId = req.user.id;
     const result = await query(
       `SELECT is_private, allow_messages_from, allow_comments_from, allow_mentions_from,
-              allow_tags_from, show_online_status, show_read_receipts, story_visibility
+              allow_tags_from, allow_calls_from, allow_group_add_from,
+              show_online_status, show_read_receipts, story_visibility
        FROM users
        WHERE id = $1
        LIMIT 1`,
@@ -1304,6 +1305,8 @@ const updatePrivacySettings = async (req, res, next) => {
       allow_comments_from,
       allow_mentions_from,
       allow_tags_from,
+      allow_calls_from,
+      allow_group_add_from,
       show_online_status,
       show_read_receipts,
       story_visibility
@@ -1312,7 +1315,8 @@ const updatePrivacySettings = async (req, res, next) => {
     // Fetch existing settings
     const currentRes = await query(
       `SELECT is_private, allow_messages_from, allow_comments_from, allow_mentions_from,
-              allow_tags_from, show_online_status, show_read_receipts, story_visibility
+              allow_tags_from, allow_calls_from, allow_group_add_from,
+              show_online_status, show_read_receipts, story_visibility
        FROM users
        WHERE id = $1
        LIMIT 1`,
@@ -1330,6 +1334,8 @@ const updatePrivacySettings = async (req, res, next) => {
     const updatedComments = allow_comments_from || current.allow_comments_from;
     const updatedMentions = allow_mentions_from || current.allow_mentions_from;
     const updatedTags = allow_tags_from || current.allow_tags_from;
+    const updatedCalls = allow_calls_from || current.allow_calls_from;
+    const updatedGroupAdd = allow_group_add_from || current.allow_group_add_from;
     const updatedOnline = show_online_status !== undefined ? show_online_status : current.show_online_status;
     const updatedReceipts = show_read_receipts !== undefined ? show_read_receipts : current.show_read_receipts;
     const updatedStories = story_visibility || current.story_visibility;
@@ -1341,19 +1347,24 @@ const updatePrivacySettings = async (req, res, next) => {
            allow_comments_from = $3,
            allow_mentions_from = $4,
            allow_tags_from = $5,
-           show_online_status = $6,
-           show_read_receipts = $7,
-           story_visibility = $8,
+           allow_calls_from = $6,
+           allow_group_add_from = $7,
+           show_online_status = $8,
+           show_read_receipts = $9,
+           story_visibility = $10,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9
+       WHERE id = $11
        RETURNING is_private, allow_messages_from, allow_comments_from, allow_mentions_from,
-                 allow_tags_from, show_online_status, show_read_receipts, story_visibility`,
+                 allow_tags_from, allow_calls_from, allow_group_add_from,
+                 show_online_status, show_read_receipts, story_visibility`,
       [
         updatedPrivate,
         updatedMessages,
         updatedComments,
         updatedMentions,
         updatedTags,
+        updatedCalls,
+        updatedGroupAdd,
         updatedOnline,
         updatedReceipts,
         updatedStories,

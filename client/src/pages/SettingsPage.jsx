@@ -121,6 +121,8 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   const [privacySettings, setPrivacySettings] = useState({
     is_private: false,
     allow_messages_from: 'everyone',
+    allow_calls_from: 'everyone',
+    allow_group_add_from: 'everyone',
     allow_comments_from: 'everyone',
     allow_mentions_from: 'everyone',
     allow_tags_from: 'everyone',
@@ -1675,6 +1677,44 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           className="privacy-select-input"
                           value={privacySettings.allow_messages_from || 'everyone'}
                           onChange={(e) => handleUpdatePrivacy({ allow_messages_from: e.target.value })}
+                          disabled={savingPrivacy || isDemoUser}
+                        >
+                          <option value="everyone">Everyone</option>
+                          <option value="following">People You Follow</option>
+                          <option value="nobody">Nobody</option>
+                        </select>
+                      </div>
+
+                      {/* Audio/Video Calls */}
+                      <div className="privacy-select-row">
+                        <div className="privacy-select-info">
+                          <label htmlFor="settingsCallFrom">Who can call you</label>
+                          <p>Controls who can initiate encrypted audio and video calls with you.</p>
+                        </div>
+                        <select
+                          id="settingsCallFrom"
+                          className="privacy-select-input"
+                          value={privacySettings.allow_calls_from || 'everyone'}
+                          onChange={(e) => handleUpdatePrivacy({ allow_calls_from: e.target.value })}
+                          disabled={savingPrivacy || isDemoUser}
+                        >
+                          <option value="everyone">Everyone</option>
+                          <option value="following">People You Follow</option>
+                          <option value="nobody">Nobody</option>
+                        </select>
+                      </div>
+
+                      {/* Group Chats */}
+                      <div className="privacy-select-row">
+                        <div className="privacy-select-info">
+                          <label htmlFor="settingsGroupFrom">Who can add you to group chats</label>
+                          <p>Controls who can add you to multi-party encrypted group chats.</p>
+                        </div>
+                        <select
+                          id="settingsGroupFrom"
+                          className="privacy-select-input"
+                          value={privacySettings.allow_group_add_from || 'everyone'}
+                          onChange={(e) => handleUpdatePrivacy({ allow_group_add_from: e.target.value })}
                           disabled={savingPrivacy || isDemoUser}
                         >
                           <option value="everyone">Everyone</option>

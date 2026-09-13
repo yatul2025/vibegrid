@@ -132,6 +132,35 @@ const getOrCreateConversation = async (req, res, next) => {
       });
     }
 
+    // Check recipient messaging privacy settings
+    const partnerCheck = await query(
+      'SELECT id, username, full_name, avatar_url, show_read_receipts, allow_messages_from FROM users WHERE id = $1 LIMIT 1',
+      [recipientId]
+    );
+    if (partnerCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+    const partnerUser = partnerCheck.rows[0];
+    const allowMsgs = partnerUser.allow_messages_from || 'everyone';
+    if (allowMsgs === 'nobody') {
+      return res.status(403).json({
+        success: false,
+        error: 'This user does not accept direct messages.'
+      });
+    }
+    if (allowMsgs === 'following') {
+      const followCheck = await query(
+        'SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1',
+        [recipientId, userId]
+      );
+      if (followCheck.rows.length === 0) {
+        return res.status(403).json({
+          success: false,
+          error: 'This user only accepts messages from people they follow.'
+        });
+      }
+    }
+
     // 1. Check if 1-to-1 conversation already exists
     const existingRes = await query(`
       SELECT c.id, c.type, c.created_at, c.updated_at
@@ -556,7 +585,57 @@ const createGroupConversation = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Please select at least 1 member.' });
     }
 
-    const allMemberIds = Array.from(new Set([creatorId, ...memberIds.map(Number)]));
+    const invitedMemberIds = memberIds.map(Number).filter((id) => id && id !== creatorId);
+    if (invitedMemberIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'Please select at least 1 other user.' });
+    }
+
+    // Verify blocking and privacy settings for each invited member
+    for (const memberId of invitedMemberIds) {
+      const blockRes = await query(
+        'SELECT 1 FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1',
+        [creatorId, memberId]
+      );
+      if (blockRes.rows.length > 0) {
+        return res.status(403).json({
+          success: false,
+          error: 'Cannot add a blocked user to the group.'
+        });
+      }
+
+      const userRes = await query(
+        'SELECT username, allow_group_add_from FROM users WHERE id = $1 LIMIT 1',
+        [memberId]
+      );
+      if (userRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: `User ID ${memberId} not found.` });
+      }
+
+      const { username, allow_group_add_from: allowGroup } = userRes.rows[0];
+      const setting = allowGroup || 'everyone';
+
+      if (setting === 'nobody') {
+        return res.status(403).json({
+          success: false,
+          error: `@${username} does not allow being added to groups.`
+        });
+      }
+
+      if (setting === 'following') {
+        const followRes = await query(
+          'SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1',
+          [memberId, creatorId]
+        );
+        if (followRes.rows.length === 0) {
+          return res.status(403).json({
+            success: false,
+            error: `@${username} only allows accounts they follow to add them to groups.`
+          });
+        }
+      }
+    }
+
+    const allMemberIds = Array.from(new Set([creatorId, ...invitedMemberIds]));
 
     const convRes = await query(`
       INSERT INTO conversations (type, title, created_by)

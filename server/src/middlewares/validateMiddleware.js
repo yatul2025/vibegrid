@@ -628,6 +628,14 @@ const validatePrivacySettings = (req, res, next) => {
     errors.push('allow_tags_from must be one of: everyone, following, nobody.');
   }
 
+  if (req.body.allow_calls_from !== undefined && !validInteractions.includes(req.body.allow_calls_from)) {
+    errors.push('allow_calls_from must be one of: everyone, following, nobody.');
+  }
+
+  if (req.body.allow_group_add_from !== undefined && !validInteractions.includes(req.body.allow_group_add_from)) {
+    errors.push('allow_group_add_from must be one of: everyone, following, nobody.');
+  }
+
   if (show_online_status !== undefined && typeof show_online_status !== 'boolean') {
     errors.push('show_online_status must be a boolean.');
   }
