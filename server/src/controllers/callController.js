@@ -65,11 +65,13 @@ const getTurnCredentials = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    // Standard STUN servers (always available)
+    // Standard STUN servers (always available with multi-region redundancy)
     const iceServers = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' }
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: 'stun:openrelay.metered.ca:80' }
     ];
 
     // If a TURN secret is configured in environment, generate ephemeral HMAC-SHA1 credentials

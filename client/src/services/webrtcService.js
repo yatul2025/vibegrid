@@ -19,10 +19,51 @@ const DEFAULT_ICE_SERVERS = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' }
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:openrelay.metered.ca:80' }
   ]
 };
+
+function toSessionDescription(input, defaultType) {
+  if (!input) return null;
+  let type = defaultType;
+  let sdpString = '';
+
+  if (typeof input === 'string') {
+    sdpString = input;
+  } else if (typeof input === 'object') {
+    let curr = input;
+    while (curr && curr.sdp && typeof curr.sdp === 'object') {
+      if (curr.type) type = curr.type;
+      curr = curr.sdp;
+    }
+    type = curr.type || input.type || defaultType;
+    if (typeof curr.sdp === 'string') {
+      sdpString = curr.sdp;
+    } else if (typeof curr === 'string') {
+      sdpString = curr;
+    }
+  }
+
+  if (!sdpString) return null;
+  return new RTCSessionDescription({ type, sdp: sdpString });
+}
+
+function toIceCandidate(input) {
+  if (!input) return null;
+  if (typeof input === 'string') {
+    return new RTCIceCandidate({ candidate: input });
+  }
+  const candidateStr = input.candidate;
+  if (!candidateStr || typeof candidateStr !== 'string' || !candidateStr.trim()) {
+    return null;
+  }
+  return new RTCIceCandidate({
+    candidate: candidateStr,
+    sdpMid: input.sdpMid !== undefined && input.sdpMid !== null ? String(input.sdpMid) : null,
+    sdpMLineIndex: input.sdpMLineIndex !== undefined && input.sdpMLineIndex !== null ? Number(input.sdpMLineIndex) : 0
+  });
+}
 
 class WebRTCService {
   constructor() {
@@ -204,8 +245,13 @@ class WebRTCService {
     const iceConfig = await this.getIceServers();
     const pc = this.createPeerConnection(callerId, callId, iceConfig);
 
-    const sdpObj = (sdp && typeof sdp === 'object' && sdp.sdp) ? sdp : { type: 'offer', sdp };
-    await pc.setRemoteDescription(new RTCSessionDescription(sdpObj));
+    const sessionDesc = toSessionDescription(sdp, 'offer');
+    if (sessionDesc) {
+      await pc.setRemoteDescription(sessionDesc);
+      console.log('✅ [WebRTC] Remote SDP Offer accepted and applied successfully');
+    } else {
+      console.error('[WebRTC] Invalid SDP offer payload:', sdp);
+    }
 
     // Drain queued ICE candidates
     await this._drainCandidateQueue();
@@ -227,22 +273,28 @@ class WebRTCService {
 
   async handleIncomingAnswer(sdp) {
     if (!this.peerConnection) return;
-    const sdpObj = (sdp && typeof sdp === 'object' && sdp.sdp) ? sdp : { type: 'answer', sdp };
-    await this.peerConnection.setRemoteDescription(new RTCSessionDescription(sdpObj));
+    const sessionDesc = toSessionDescription(sdp, 'answer');
+    if (sessionDesc) {
+      await this.peerConnection.setRemoteDescription(sessionDesc);
+      console.log('✅ [WebRTC] Remote SDP Answer accepted and applied successfully!');
+    } else {
+      console.error('[WebRTC] Invalid SDP answer payload:', sdp);
+    }
     await this._drainCandidateQueue();
   }
 
   async handleIncomingIceCandidate(candidate) {
-    if (!candidate || !candidate.candidate) return;
+    const iceCand = toIceCandidate(candidate);
+    if (!iceCand) return;
 
     if (this.peerConnection && this.peerConnection.remoteDescription) {
       try {
-        await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        await this.peerConnection.addIceCandidate(iceCand);
       } catch (err) {
         console.warn('[WebRTC] Error adding ICE candidate:', err);
       }
     } else {
-      this.candidateQueue.push(candidate);
+      this.candidateQueue.push(iceCand);
     }
   }
 
@@ -250,9 +302,10 @@ class WebRTCService {
     if (!this.peerConnection) return;
     while (this.candidateQueue.length > 0) {
       const candidate = this.candidateQueue.shift();
-      if (!candidate || !candidate.candidate) continue;
+      const iceCand = toIceCandidate(candidate);
+      if (!iceCand) continue;
       try {
-        await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        await this.peerConnection.addIceCandidate(iceCand);
       } catch (err) {
         console.warn('[WebRTC] Error draining ICE candidate:', err);
       }
@@ -307,6 +360,9 @@ class WebRTCService {
         if (sender && videoTrack) {
           sender.replaceTrack(videoTrack);
         }
+        if (this.onLocalStream) {
+          this.onLocalStream(this.localStream);
+        }
       }
       return false;
     } else {
@@ -321,10 +377,16 @@ class WebRTCService {
         };
 
         if (this.peerConnection) {
-          const sender = this.peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
+          let sender = this.peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
           if (sender) {
             sender.replaceTrack(screenTrack);
+          } else {
+            this.peerConnection.addTrack(screenTrack, stream);
           }
+        }
+
+        if (this.onLocalStream) {
+          this.onLocalStream(stream);
         }
         return true;
       } catch (err) {

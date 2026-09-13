@@ -418,11 +418,12 @@ function initSocket(httpServer) {
     });
 
     // 5. WebRTC Peer-to-Peer SDP Offer / Answer Relay
-    socket.on('signal:offer', ({ targetUserId, sdp, callId }) => {
+    socket.on('signal:offer', ({ targetUserId, sdp, callId, callType }) => {
       socket.to(`user:${targetUserId}`).emit('signal:offer', {
         callerId: userId,
         sdp,
-        callId
+        callId,
+        callType
       });
     });
 
