@@ -40,6 +40,7 @@ export default function ExplorePage({ onNavigateToProfile }) {
   // Modal States
   const [selectedPost, setSelectedPost] = useState(null);
   const [activeCommentsPost, setActiveCommentsPost] = useState(null);
+  const [moderatingId, setModeratingId] = useState(null);
 
   // Fetch explore posts
   const fetchExplorePosts = async () => {
@@ -188,6 +189,34 @@ export default function ExplorePage({ onNavigateToProfile }) {
       if (selectedPost && selectedPost.id === postId) {
         setSelectedPost((prev) => ({ ...prev, is_saved: prevSaved }));
       }
+    }
+  };
+
+  // Moderate / Hide post (Admin / Test accounts)
+  const handleModeratePost = async (postId) => {
+    const reason = window.prompt(
+      'Enter moderation reason to hide this post (e.g., Adult content, Spam):',
+      'Adult content'
+    );
+    if (reason === null) return;
+
+    try {
+      setModeratingId(postId);
+      const res = await apiClient.patch(`/posts/${postId}/moderate`, {
+        isActive: false,
+        reason: reason.trim() || 'Adult content'
+      });
+      if (res.success) {
+        setPosts((prev) => prev.filter((p) => p.id !== postId));
+        setSelectedPost(null);
+        alert('🛡️ Post hidden from explore and feeds successfully!');
+      } else {
+        alert(res.error || 'Failed to hide post.');
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to hide post.');
+    } finally {
+      setModeratingId(null);
     }
   };
 
@@ -363,9 +392,31 @@ export default function ExplorePage({ onNavigateToProfile }) {
                 )}
                 <strong>@{selectedPost.username}</strong>
               </div>
-              <button type="button" className="modal-close-btn" onClick={() => setSelectedPost(null)}>
-                ✕
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {user && ([1, 2, 3, 4].includes(Number(user.id)) || Number(user.test) === 1) && (
+                  <button
+                    type="button"
+                    onClick={() => handleModeratePost(selectedPost.id)}
+                    disabled={moderatingId === selectedPost.id}
+                    title="Hide Post (Content Moderation)"
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      color: '#ef4444',
+                      borderRadius: '6px',
+                      padding: '4px 8px',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {moderatingId === selectedPost.id ? '⏳' : '🛡️ Hide Post'}
+                  </button>
+                )}
+                <button type="button" className="modal-close-btn" onClick={() => setSelectedPost(null)}>
+                  ✕
+                </button>
+              </div>
             </div>
 
             <div className="detail-modal-media">

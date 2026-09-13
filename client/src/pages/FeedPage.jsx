@@ -47,6 +47,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [moderatingId, setModeratingId] = useState(null);
 
   // Engagement States
   const [activeCommentPost, setActiveCommentPost] = useState(null);
@@ -267,6 +268,37 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
       alert(err.message || 'Error deleting post.');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  // Handle hiding a post via content moderation (Admin / Test accounts)
+  const handleModeratePost = async (postId) => {
+    const reason = window.prompt(
+      'Enter moderation reason to hide this post (e.g., Adult content, Spam, Harassment):',
+      'Adult content'
+    );
+    if (reason === null) return; // cancelled
+
+    try {
+      setModeratingId(postId);
+      const res = await apiClient.patch(`/posts/${postId}/moderate`, {
+        isActive: false,
+        reason: reason.trim() || 'Adult content'
+      });
+      if (res.success) {
+        setPosts((prev) => prev.filter((p) => p.id !== postId));
+        if (activeCommentPost && activeCommentPost.id === postId) {
+          setActiveCommentPost(null);
+        }
+        setReactionToast({ customText: '🛡️ Post hidden from feeds successfully!' });
+        setTimeout(() => setReactionToast(null), 3000);
+      } else {
+        alert(res.error || 'Failed to hide post.');
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to hide post.');
+    } finally {
+      setModeratingId(null);
     }
   };
 
@@ -590,18 +622,46 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     </div>
                   </div>
 
-                {/* Delete button (Author only) */}
-                {user && user.id === post.user_id && (
-                  <button
-                    type="button"
-                    className="post-delete-btn"
-                    onClick={() => handleDeletePost(post.id)}
-                    disabled={deletingId === post.id}
-                    title="Delete post"
-                  >
-                    {deletingId === post.id ? '⏳' : '🗑️'}
-                  </button>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {/* Moderate / Hide post button (Admins & Test Profiles) */}
+                  {user && ([1, 2, 3, 4].includes(Number(user.id)) || Number(user.test) === 1) && (
+                    <button
+                      type="button"
+                      className="post-moderate-btn"
+                      onClick={() => handleModeratePost(post.id)}
+                      disabled={moderatingId === post.id}
+                      title="Hide Post (Content Moderation)"
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.12)',
+                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        color: '#ef4444',
+                        borderRadius: '6px',
+                        padding: '4px 8px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      {moderatingId === post.id ? '⏳' : '🛡️ Hide Post'}
+                    </button>
+                  )}
+
+                  {/* Delete button (Author only) */}
+                  {user && user.id === post.user_id && (
+                    <button
+                      type="button"
+                      className="post-delete-btn"
+                      onClick={() => handleDeletePost(post.id)}
+                      disabled={deletingId === post.id}
+                      title="Delete post"
+                    >
+                      {deletingId === post.id ? '⏳' : '🗑️'}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Card Media: Photo with Double-Tap Support */}
