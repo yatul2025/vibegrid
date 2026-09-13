@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TaskFlow — To-Do List</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Google Fonts for clean modern typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo-group">
+        <div class="logo-icon">✓</div>
+        <div>
+          <h1>TaskFlow</h1>
+          <p class="subtitle">Stay organized & get things done</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div id="dbStatusBadge" class="db-badge" title="Database connection status">
+          <span class="db-dot"></span>
+          <span id="dbStatusText">Checking DB...</span>
+        </div>
+        <div class="user-badge" id="userBadge">
+          <span id="userGreeting">👤 <span id="userName" class="user-name">Guest</span></span>
+          <button id="authActionBtn" class="auth-link-btn" title="Log In / Log Out">Log In</button>
+        </div>
+        <button id="themeToggle" class="icon-btn" title="Toggle Dark/Light Mode" aria-label="Toggle theme">
+          <span id="themeIcon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Progress Tracker -->
+    <div class="progress-card">
+      <div class="progress-info">
+        <span class="progress-label">Task Progress</span>
+        <span id="progressText" class="progress-stat">0 of 0 completed</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div id="progressBar" class="progress-bar-fill" style="width: 0%;"></div>
+      </div>
+    </div>
+
+    <!-- Add Task Form -->
+    <form id="taskForm" class="task-form">
+      <div class="input-row">
+        <input 
+          type="text" 
+          id="taskInput" 
+          placeholder="What needs to be done? (e.g. Learn HTML & JavaScript)" 
+          required 
+          autocomplete="off"
+        />
+        <button type="submit" class="primary-btn">
+          <span>+ Add Task</span>
+        </button>
+      </div>
+
+      <div class="options-row">
+        <div class="select-group">
+          <label for="prioritySelect">Priority</label>
+          <select id="prioritySelect">
+            <option value="low">🟢 Low</option>
+            <option value="medium" selected>🟡 Medium</option>
+            <option value="high">🔴 High</option>
+          </select>
+        </div>
+
+        <div class="select-group">
+          <label for="categorySelect">Category</label>
+          <select id="categorySelect">
+            <option value="General" selected>📌 General</option>
+            <option value="Learning">📚 Learning / AI</option>
+            <option value="Web Dev">💻 Web Dev</option>
+            <option value="Personal">🌱 Personal</option>
+            <option value="Work">💼 Work</option>
+          </select>
+        </div>
+
+        <div class="select-group">
+          <label for="dueDateInput">Due Date</label>
+          <input type="date" id="dueDateInput" />
+        </div>
+      </div>
+    </form>
+
+    <!-- Search & Filters -->
+    <div class="controls-bar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search tasks..." />
+      </div>
+
+      <div class="filter-tabs">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="active">Active</button>
+        <button class="filter-btn" data-filter="completed">Completed</button>
+      </div>
+    </div>
+
+    <!-- Task List -->
+    <main>
+      <ul id="taskList" class="task-list">
+        <!-- Injected dynamically via JavaScript -->
+      </ul>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="empty-state hidden">
+        <div class="empty-icon">📝</div>
+        <h3>No tasks found</h3>
+        <p>Add a new task above to get started!</p>
+      </div>
+    </main>
+
+    <!-- Footer Controls -->
+    <footer class="app-footer">
+      <span id="itemsLeftCount">0 items remaining</span>
+      <button id="clearCompletedBtn" class="text-btn">Clear Completed</button>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
