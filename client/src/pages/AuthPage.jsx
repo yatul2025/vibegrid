@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../api/client';
 
 export default function AuthPage() {
-  const { user, login, verifyLoginOtp, resendLoginOtp, register, logout } = useAuth();
+  const { user, login, verifyLoginOtp, resendLoginOtp, register, verifyRegisterOtp, resendRegisterOtp, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('login'); // 'login' | 'register'
 
   // 2FA Login OTP states
@@ -17,7 +17,18 @@ export default function AuthPage() {
   const [devOtp, setDevOtp] = useState(null);
   const [otpCooldown, setOtpCooldown] = useState(0);
 
-  // Countdown timer for 2FA OTP resend cooldown
+  // Registration OTP states
+  const [registerStep, setRegisterStep] = useState('form'); // 'form' | 'otp'
+  const [registerToken, setRegisterToken] = useState(null);
+  const [registerMaskedEmail, setRegisterMaskedEmail] = useState('');
+  const [registerOtpCode, setRegisterOtpCode] = useState('');
+  const [registerOtpLoading, setRegisterOtpLoading] = useState(false);
+  const [registerOtpError, setRegisterOtpError] = useState(null);
+  const [registerOtpSuccessMsg, setRegisterOtpSuccessMsg] = useState(null);
+  const [registerDevOtp, setRegisterDevOtp] = useState(null);
+  const [registerOtpCooldown, setRegisterOtpCooldown] = useState(0);
+
+  // Countdown timer for 2FA Login OTP resend cooldown
   useEffect(() => {
     let timer;
     if (otpCooldown > 0) {
@@ -27,6 +38,17 @@ export default function AuthPage() {
     }
     return () => clearInterval(timer);
   }, [otpCooldown]);
+
+  // Countdown timer for Registration OTP resend cooldown
+  useEffect(() => {
+    let timer;
+    if (registerOtpCooldown > 0) {
+      timer = setInterval(() => {
+        setRegisterOtpCooldown((prev) => (prev > 1 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [registerOtpCooldown]);
 
   // Form states
   const [loginData, setLoginData] = useState({
@@ -242,17 +264,78 @@ export default function AuthPage() {
     setError(null);
     setLoading(true);
     try {
-      await register({
+      const res = await register({
         username,
         email,
         fullName: fullName || null,
         password
       });
+
+      if (res?.step === 'otp_required') {
+        setRegisterStep('otp');
+        setRegisterToken(res.registerToken);
+        setRegisterMaskedEmail(res.maskedEmail || email);
+        setRegisterDevOtp(res.debugOtp || null);
+        setRegisterOtpCooldown(60);
+        setRegisterOtpCode('');
+        setRegisterOtpError(null);
+        setRegisterOtpSuccessMsg(null);
+      }
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVerifyRegisterOtpSubmit = async (e) => {
+    e.preventDefault();
+    const cleanOtp = registerOtpCode.trim();
+    if (!cleanOtp || cleanOtp.length !== 6) {
+      setRegisterOtpError('Please enter the full 6-digit confirmation code.');
+      return;
+    }
+    setRegisterOtpError(null);
+    setRegisterOtpSuccessMsg(null);
+    setRegisterOtpLoading(true);
+    try {
+      await verifyRegisterOtp(registerToken, cleanOtp);
+    } catch (err) {
+      setRegisterOtpError(err.message || 'Invalid or expired confirmation code.');
+    } finally {
+      setRegisterOtpLoading(false);
+    }
+  };
+
+  const handleResendRegisterOtp = async () => {
+    if (registerOtpCooldown > 0 || !registerToken) return;
+    setRegisterOtpError(null);
+    setRegisterOtpSuccessMsg(null);
+    setRegisterOtpLoading(true);
+    try {
+      const res = await resendRegisterOtp(registerToken);
+      setRegisterOtpSuccessMsg('A fresh verification code has been dispatched to your email.');
+      if (res?.registerToken) {
+        setRegisterToken(res.registerToken);
+      }
+      if (res?.debugOtp) {
+        setRegisterDevOtp(res.debugOtp);
+      }
+      setRegisterOtpCooldown(60);
+    } catch (err) {
+      setRegisterOtpError(err.message || 'Failed to resend code. Please try again.');
+    } finally {
+      setRegisterOtpLoading(false);
+    }
+  };
+
+  const handleBackToRegisterForm = () => {
+    setRegisterStep('form');
+    setRegisterOtpCode('');
+    setRegisterOtpError(null);
+    setRegisterOtpSuccessMsg(null);
+    setRegisterToken(null);
+    setRegisterDevOtp(null);
   };
 
   const handleForgotSubmit = async (e) => {
@@ -709,6 +792,7 @@ export default function AuthPage() {
                     onClick={() => {
                       setActiveTab('register');
                       setLoginStep('credentials');
+                      setRegisterStep('form');
                       setError(null);
                     }}
                   >
@@ -723,8 +807,154 @@ export default function AuthPage() {
                 </div>
               </div>
             )
+          ) : registerStep === 'otp' ? (
+            /* 2B. Signup Email OTP Verification Form */
+            <div className="ig-auth-box">
+              <div style={{ textAlign: 'center', marginBottom: '18px' }}>
+                <div style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '50%',
+                  background: 'rgba(236, 72, 153, 0.12)',
+                  border: '1px solid rgba(236, 72, 153, 0.25)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 12px auto',
+                  fontSize: '24px'
+                }}>
+                  ✨
+                </div>
+                <h2 className="ig-auth-title" style={{ marginBottom: '6px' }}>Verify Your Email</h2>
+                <p className="ig-auth-subtext" style={{ fontSize: '13px', color: '#94a3b8', margin: '0' }}>
+                  Enter the 6-digit confirmation code sent to
+                  <br />
+                  <strong style={{ color: '#f1f5f9', wordBreak: 'break-all' }}>{registerMaskedEmail || registerData.email}</strong>
+                </p>
+              </div>
+
+              {registerDevOtp && (
+                <div style={{
+                  background: 'rgba(234, 179, 8, 0.12)',
+                  border: '1px solid rgba(234, 179, 8, 0.35)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  marginBottom: '16px',
+                  fontSize: '12px',
+                  color: '#facc15',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}>
+                  <span>⚡ <strong>Dev Mode Code:</strong> <code style={{ letterSpacing: '2px', fontSize: '14px', fontWeight: 'bold' }}>{registerDevOtp}</code></span>
+                  <button
+                    type="button"
+                    onClick={() => setRegisterOtpCode(registerDevOtp)}
+                    style={{
+                      background: 'rgba(234, 179, 8, 0.25)',
+                      border: '1px solid rgba(234, 179, 8, 0.5)',
+                      color: '#fff',
+                      borderRadius: '6px',
+                      padding: '3px 10px',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                  >
+                    Auto-Fill
+                  </button>
+                </div>
+              )}
+
+              {registerOtpError && <div className="ig-auth-error">⚠️ {registerOtpError}</div>}
+              {registerOtpSuccessMsg && (
+                <div style={{
+                  background: 'rgba(16, 185, 129, 0.12)',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  color: '#34d399',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  textAlign: 'center',
+                  marginBottom: '16px'
+                }}>
+                  ✓ {registerOtpSuccessMsg}
+                </div>
+              )}
+
+              <form onSubmit={handleVerifyRegisterOtpSubmit} className="ig-form">
+                <div className="ig-input-group">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={registerOtpCode}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setRegisterOtpCode(val);
+                      if (registerOtpError) setRegisterOtpError(null);
+                    }}
+                    autoFocus
+                    style={{
+                      textAlign: 'center',
+                      letterSpacing: '10px',
+                      fontSize: '24px',
+                      fontWeight: '700',
+                      padding: '12px',
+                      fontFamily: 'monospace'
+                    }}
+                    className="ig-input"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={registerOtpLoading || registerOtpCode.trim().length !== 6}
+                  className="ig-btn-primary"
+                  style={{ marginTop: '12px' }}
+                >
+                  {registerOtpLoading ? 'Verifying & Creating Account...' : 'Confirm & Activate Account'}
+                </button>
+              </form>
+
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '18px',
+                paddingTop: '12px',
+                borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))',
+                fontSize: '13px'
+              }}>
+                <button
+                  type="button"
+                  onClick={handleBackToRegisterForm}
+                  className="ig-link-button"
+                  style={{ color: '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                >
+                  ← Edit Details
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResendRegisterOtp}
+                  disabled={registerOtpCooldown > 0 || registerOtpLoading}
+                  className="ig-link-button"
+                  style={{ color: registerOtpCooldown > 0 ? '#64748b' : 'var(--primary, #3897f0)' }}
+                >
+                  {registerOtpCooldown > 0 ? `Resend in ${registerOtpCooldown}s` : 'Resend Code'}
+                </button>
+              </div>
+
+              <div className="vg-auth-brand-badge" style={{ marginTop: '20px' }}>
+                <span className="vg-badge-v">V</span>
+                <span className="vg-badge-text">VibeGrid Secure Sign-Up</span>
+              </div>
+            </div>
           ) : (
-            /* 2. Create Account / Register Form */
+            /* 2A. Create Account / Register Form */
             <div className="ig-auth-box">
               <h2 className="ig-auth-title">Create your account</h2>
               <p className="ig-auth-subtext">
@@ -912,6 +1142,7 @@ export default function AuthPage() {
                   onClick={() => {
                     setActiveTab('login');
                     setLoginStep('credentials');
+                    setRegisterStep('form');
                     setError(null);
                   }}
                 >

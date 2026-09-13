@@ -14,7 +14,14 @@ const jwt = require('jsonwebtoken');
 const config = require('../config/env');
 const { generateToken, setAuthCookie } = require('../utils/jwt');
 const { parseUserAgent, getClientIp, getApproxLocation } = require('../utils/deviceParser');
-const { sendLoginOtpEmail } = require('../utils/mailer');
+const { sendLoginOtpEmail, sendSignupOtpEmail } = require('../utils/mailer');
+
+const maskEmail = (email) => {
+  if (!email || !email.includes('@')) return email || '';
+  const [namePart, domainPart] = email.split('@');
+  const visible = namePart.length > 2 ? namePart.slice(0, 2) : namePart.slice(0, 1);
+  return `${visible}***@${domainPart}`;
+};
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -38,7 +45,7 @@ const createSessionRecord = async (userId, req) => {
 };
 
 /**
- * Register a new user
+ * Register a new user (Step 1: Validate Details & Dispatch Signup OTP)
  * Route: POST /api/auth/register
  */
 const register = async (req, res, next) => {
@@ -70,25 +77,119 @@ const register = async (req, res, next) => {
     // 2. Hash the password securely using bcrypt (12 rounds)
     const passwordHash = await hashPassword(password);
 
-    // 3. Insert the new user into the PostgreSQL database
+    // 3. Generate 6-digit OTP code & cryptographic HMAC
+    const otpCode = crypto.randomInt(100000, 999999).toString();
+    const otpHmac = crypto.createHmac('sha256', config.jwtSecret).update(otpCode).digest('hex');
+
+    // 4. Dispatch Signup verification email via Gmail SMTP
+    const mailResult = await sendSignupOtpEmail(email, otpCode);
+
+    // 5. Generate signed registration token (valid for 10 minutes)
+    const registerToken = jwt.sign(
+      {
+        action: 'signup_verification',
+        username,
+        email,
+        passwordHash,
+        fullName: fullName || null,
+        otpHmac
+      },
+      config.jwtSecret,
+      { expiresIn: '10m' }
+    );
+
+    const masked = maskEmail(email);
+
+    return res.status(200).json({
+      success: true,
+      message: `A 6-digit verification code has been dispatched to ${masked}.`,
+      data: {
+        step: 'otp_required',
+        registerToken,
+        maskedEmail: masked,
+        debugOtp: config.nodeEnv === 'development' && (!config.email.user || !config.email.pass) ? otpCode : undefined
+      }
+    });
+  } catch (error) {
+    console.error('[Register Error]', error);
+    next(error);
+  }
+};
+
+/**
+ * Verify Signup OTP & Create Account (Step 2)
+ * Route: POST /api/auth/verify-register-otp
+ */
+const verifyRegisterOtp = async (req, res, next) => {
+  try {
+    const { registerToken, otpCode } = req.body;
+
+    if (!registerToken || !otpCode) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please provide both the registration token and verification code.'
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(registerToken, config.jwtSecret);
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
+        error: 'Your verification session has expired. Please sign up again.'
+      });
+    }
+
+    if (decoded.action !== 'signup_verification') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid registration token.'
+      });
+    }
+
+    // Verify 6-digit OTP code against HMAC
+    const expectedHmac = crypto.createHmac('sha256', config.jwtSecret).update(otpCode.trim()).digest('hex');
+    if (decoded.otpHmac !== expectedHmac) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid verification code. Please check your email and try again.'
+      });
+    }
+
+    const { username, email, passwordHash, fullName } = decoded;
+
+    // Concurrency safeguard: ensure username/email were not taken while waiting for OTP
+    const existingCheck = await query(
+      'SELECT id FROM users WHERE username = $1 OR email = $2 LIMIT 1',
+      [username, email]
+    );
+    if (existingCheck.rows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: 'This username or email was registered by someone else in the meantime.'
+      });
+    }
+
+    // Insert verified user into database
     const insertQuery = `
-      INSERT INTO users (username, email, password_hash, full_name)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO users (username, email, password_hash, full_name, is_email_verified)
+      VALUES ($1, $2, $3, $4, TRUE)
       RETURNING id, username, email, full_name, bio, avatar_url, COALESCE(test, 0) AS test, token_version, created_at
     `;
     const result = await query(insertQuery, [
       username,
       email,
       passwordHash,
-      fullName || null
+      fullName
     ]);
 
     const newUser = result.rows[0];
 
-    // 4. Create active session record in database
+    // Create session record in database
     const sessionId = await createSessionRecord(newUser.id, req);
 
-    // 5. Generate signed JWT token with token version and session ID
+    // Generate signed session JWT token
     const token = generateToken({
       id: newUser.id,
       username: newUser.username,
@@ -96,21 +197,86 @@ const register = async (req, res, next) => {
       sessionId
     });
 
-    // 6. Attach token as a secure HTTP-Only cookie to the response
+    // Attach token as HTTP-Only cookie
     setAuthCookie(res, token);
-
-    // 7. Exclude internal security fields from response
     delete newUser.token_version;
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: 'Account created successfully!',
+      message: 'Email verified and account created successfully!',
       data: {
         user: newUser
       }
     });
   } catch (error) {
-    console.error('[Register Error]', error);
+    console.error('[Verify Register OTP Error]', error);
+    next(error);
+  }
+};
+
+/**
+ * Resend Signup OTP
+ * Route: POST /api/auth/resend-register-otp
+ */
+const resendRegisterOtp = async (req, res, next) => {
+  try {
+    const { registerToken } = req.body;
+
+    if (!registerToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Registration token is required to resend verification code.'
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(registerToken, config.jwtSecret);
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
+        error: 'Your registration session has expired. Please sign up again.'
+      });
+    }
+
+    if (decoded.action !== 'signup_verification') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid token.'
+      });
+    }
+
+    // Generate new OTP & HMAC
+    const newOtp = crypto.randomInt(100000, 999999).toString();
+    const newOtpHmac = crypto.createHmac('sha256', config.jwtSecret).update(newOtp).digest('hex');
+
+    // Dispatch email
+    const mailResult = await sendSignupOtpEmail(decoded.email, newOtp);
+
+    // Re-sign registerToken with updated HMAC
+    const newRegisterToken = jwt.sign(
+      {
+        action: 'signup_verification',
+        username: decoded.username,
+        email: decoded.email,
+        passwordHash: decoded.passwordHash,
+        fullName: decoded.fullName,
+        otpHmac: newOtpHmac
+      },
+      config.jwtSecret,
+      { expiresIn: '10m' }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'A fresh verification code has been dispatched to your email.',
+      data: {
+        registerToken: newRegisterToken,
+        debugOtp: config.nodeEnv === 'development' && (!config.email.user || !config.email.pass) ? newOtp : undefined
+      }
+    });
+  } catch (error) {
+    console.error('[Resend Register OTP Error]', error);
     next(error);
   }
 };
@@ -752,6 +918,8 @@ const changePassword = async (req, res, next) => {
 
 module.exports = {
   register,
+  verifyRegisterOtp,
+  resendRegisterOtp,
   login,
   verifyLoginOtp,
   resendLoginOtp,

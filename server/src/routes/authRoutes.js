@@ -9,7 +9,19 @@
 const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
-const { register, login, logout, getMe, forgotPassword, resetPassword, changePassword, verifyLoginOtp, resendLoginOtp } = require('../controllers/authController');
+const { 
+  register, 
+  verifyRegisterOtp,
+  resendRegisterOtp,
+  login, 
+  logout, 
+  getMe, 
+  forgotPassword, 
+  resetPassword, 
+  changePassword, 
+  verifyLoginOtp, 
+  resendLoginOtp 
+} = require('../controllers/authController');
 const { 
   validateRegistration, 
   validateLogin, 
@@ -69,6 +81,12 @@ const resetPasswordLimiter = rateLimit({
 
 // POST /api/auth/register — Register a new account (Rate-limited, Validated)
 router.post('/register', registerLimiter, validateRegistration, register);
+
+// POST /api/auth/verify-register-otp — Verify 6-digit email OTP and activate account
+router.post('/verify-register-otp', resetPasswordLimiter, verifyRegisterOtp);
+
+// POST /api/auth/resend-register-otp — Resend 6-digit email OTP for registration
+router.post('/resend-register-otp', forgotPasswordLimiter, resendRegisterOtp);
 
 // POST /api/auth/login — Sign in with username/email & password (Rate-limited, Validated)
 router.post('/login', loginLimiter, validateLogin, login);
