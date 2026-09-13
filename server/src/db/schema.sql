@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     website VARCHAR(255),
     location VARCHAR(100),
     date_of_birth DATE,
+    gender VARCHAR(20) DEFAULT 'unspecified',
     phone_number VARCHAR(20) UNIQUE,
     is_email_verified BOOLEAN DEFAULT TRUE,
     is_phone_verified BOOLEAN DEFAULT FALSE,

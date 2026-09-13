@@ -2038,7 +2038,7 @@ export default function ProfilePage({
                 <span>📸</span> Upload New Photo
               </button>
 
-              {profile.avatar_url && !profile.avatar_url.includes('default-avatar.png') && (
+              {profile.avatar_url && !profile.avatar_url.includes('default-') && (
                 <button
                   type="button"
                   className="avatar-modal-btn btn-photo-remove"

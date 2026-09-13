@@ -12,6 +12,7 @@ const bcrypt = require('bcrypt');
 const { query } = require('../config/db');
 const { generateToken, setAuthCookie } = require('../utils/jwt');
 const { sendEmailChangeOtpEmail } = require('../utils/mailer');
+const { getDefaultAvatar, isDefaultAvatar } = require('../utils/avatar');
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -32,7 +33,7 @@ const getProfile = async (req, res, next) => {
 
     // 1. Fetch user record from PostgreSQL with extended profile fields
     const userResult = await query(
-      `SELECT id, username, email, phone_number, full_name, bio, avatar_url, website, location, date_of_birth, 
+      `SELECT id, username, email, phone_number, full_name, bio, avatar_url, website, location, date_of_birth, gender, 
               is_email_verified, is_phone_verified, is_private, is_deactivated, COALESCE(test, 0) AS test, created_at 
        FROM users 
        WHERE username = $1 
@@ -118,7 +119,7 @@ const updateProfile = async (req, res, next) => {
     }
 
     const userId = req.user.id;
-    const { fullName, bio, website, location, dateOfBirth, username } = req.body;
+    const { fullName, bio, website, location, dateOfBirth, username, gender } = req.body;
 
     // Check if username change requested
     let newUsername = req.user.username;
@@ -145,6 +146,17 @@ const updateProfile = async (req, res, next) => {
     const cleanLocation = location !== undefined && location !== null ? (location.trim().slice(0, 100) || null) : (req.user.location || null);
     const cleanDob = dateOfBirth !== undefined && dateOfBirth !== null ? (dateOfBirth.trim() || null) : (req.user.date_of_birth || null);
 
+    // Gender handling & default avatar update
+    const validGenders = ['male', 'female', 'other', 'unspecified'];
+    const cleanGender = (gender && validGenders.includes(gender.trim().toLowerCase()))
+      ? gender.trim().toLowerCase()
+      : (req.user.gender || 'unspecified');
+
+    let newAvatarUrl = req.user.avatar_url;
+    if (isDefaultAvatar(req.user.avatar_url)) {
+      newAvatarUrl = getDefaultAvatar(cleanGender);
+    }
+
     // Normalize website URL if provided (e.g., 'example.com' -> 'https://example.com')
     let formattedWebsite = null;
     if (website !== undefined && website !== null && website.trim() !== '') {
@@ -159,9 +171,9 @@ const updateProfile = async (req, res, next) => {
     // Parameterized update query
     const updateQuery = `
       UPDATE users 
-      SET username = $1, full_name = $2, bio = $3, website = $4, location = $5, date_of_birth = $6, updated_at = CURRENT_TIMESTAMP 
-      WHERE id = $7 
-      RETURNING id, username, email, full_name, bio, avatar_url, website, location, date_of_birth, COALESCE(test, 0) AS test, token_version, created_at
+      SET username = $1, full_name = $2, bio = $3, website = $4, location = $5, date_of_birth = $6, gender = $7, avatar_url = $8, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = $9 
+      RETURNING id, username, email, full_name, bio, avatar_url, website, location, date_of_birth, gender, COALESCE(test, 0) AS test, token_version, created_at
     `;
     const result = await query(updateQuery, [
       newUsername,
@@ -170,6 +182,8 @@ const updateProfile = async (req, res, next) => {
       formattedWebsite,
       cleanLocation,
       cleanDob,
+      cleanGender,
+      newAvatarUrl,
       userId
     ]);
 
@@ -359,17 +373,18 @@ const removeAvatar = async (req, res, next) => {
     }
 
     const userId = req.user.id;
-    const defaultAvatar = '/uploads/avatars/default-avatar.png';
 
-    // Fetch existing avatar to check if an uploaded file should be removed
-    const userRes = await query('SELECT avatar_url FROM users WHERE id = $1', [userId]);
+    // Fetch existing avatar & gender to check if an uploaded file should be removed and assign gender default avatar
+    const userRes = await query('SELECT avatar_url, gender FROM users WHERE id = $1', [userId]);
     const currentAvatar = userRes.rows[0]?.avatar_url;
+    const userGender = userRes.rows[0]?.gender || req.user?.gender || 'unspecified';
+    const defaultAvatar = getDefaultAvatar(userGender);
 
     const result = await query(
       `UPDATE users 
        SET avatar_url = $1, updated_at = CURRENT_TIMESTAMP 
        WHERE id = $2 
-       RETURNING id, username, email, full_name, bio, avatar_url, website, location, date_of_birth`,
+       RETURNING id, username, email, full_name, bio, avatar_url, website, location, date_of_birth, gender`,
       [defaultAvatar, userId]
     );
 
@@ -460,7 +475,7 @@ const sendEmailOtp = async (req, res, next) => {
            SET email = $1, is_email_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
            WHERE id = $2 
            RETURNING id, username, email, full_name, bio, avatar_url, website, location, 
-                     date_of_birth, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
+                     date_of_birth, gender, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
           [cleanNewEmail, userId]
         );
         return res.status(200).json({
@@ -491,7 +506,7 @@ const sendEmailOtp = async (req, res, next) => {
            SET is_email_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
            WHERE id = $1 
            RETURNING id, username, email, full_name, bio, avatar_url, website, location, 
-                     date_of_birth, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
+                     date_of_birth, gender, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
           [userId]
         );
         return res.status(200).json({
@@ -658,7 +673,7 @@ const verifyEmailOtp = async (req, res, next) => {
          SET email = $1, is_email_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
          WHERE id = $2 
          RETURNING id, username, email, full_name, bio, avatar_url, website, location, 
-                   date_of_birth, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
+                   date_of_birth, gender, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
         [targetEmail, userId]
       );
       updatedUser = updateRes.rows[0];
@@ -669,7 +684,7 @@ const verifyEmailOtp = async (req, res, next) => {
          SET is_email_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
          WHERE id = $1 
          RETURNING id, username, email, full_name, bio, avatar_url, website, location, 
-                   date_of_birth, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
+                   date_of_birth, gender, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
         [userId]
       );
       updatedUser = updateRes.rows[0];
@@ -755,7 +770,7 @@ const sendPhoneOtp = async (req, res, next) => {
          SET phone_number = $1, is_phone_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
          WHERE id = $2 
          RETURNING id, username, email, phone_number, full_name, bio, avatar_url, website, 
-                   location, date_of_birth, is_email_verified, is_phone_verified, is_private, created_at`,
+                   location, date_of_birth, gender, is_email_verified, is_phone_verified, is_private, created_at`,
         [cleanPhone, userId]
       );
       return res.status(200).json({
@@ -910,7 +925,7 @@ const verifyPhoneOtp = async (req, res, next) => {
        SET phone_number = $1, is_phone_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
        WHERE id = $2 
        RETURNING id, username, email, phone_number, full_name, bio, avatar_url, website, 
-                 location, date_of_birth, is_email_verified, is_phone_verified, is_private, created_at`,
+                 location, date_of_birth, gender, is_email_verified, is_phone_verified, is_private, created_at`,
       [cleanPhone, userId]
     );
 
@@ -962,7 +977,7 @@ const removePhoneNumber = async (req, res, next) => {
        SET phone_number = NULL, is_phone_verified = FALSE, updated_at = CURRENT_TIMESTAMP 
        WHERE id = $1 
        RETURNING id, username, email, phone_number, full_name, bio, avatar_url, website, 
-                 location, date_of_birth, is_email_verified, is_phone_verified, is_private, created_at`,
+                 location, date_of_birth, gender, is_email_verified, is_phone_verified, is_private, created_at`,
       [userId]
     );
 

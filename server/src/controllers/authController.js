@@ -50,7 +50,7 @@ const createSessionRecord = async (userId, req) => {
  */
 const register = async (req, res, next) => {
   try {
-    const { username, email, password, fullName } = req.body;
+    const { username, email, password, fullName, dateOfBirth, gender } = req.body;
 
     // 1. Check if username or email is already registered
     const existingUserCheck = await query(
@@ -92,6 +92,8 @@ const register = async (req, res, next) => {
         email,
         passwordHash,
         fullName: fullName || null,
+        dateOfBirth: dateOfBirth || null,
+        gender: gender || 'unspecified',
         otpHmac
       },
       config.jwtSecret,
@@ -157,7 +159,9 @@ const verifyRegisterOtp = async (req, res, next) => {
       });
     }
 
-    const { username, email, passwordHash, fullName } = decoded;
+    const { username, email, passwordHash, fullName, dateOfBirth, gender } = decoded;
+    const { getDefaultAvatar } = require('../utils/avatar');
+    const avatarUrl = getDefaultAvatar(gender);
 
     // Concurrency safeguard: ensure username/email were not taken while waiting for OTP
     const existingCheck = await query(
@@ -171,17 +175,20 @@ const verifyRegisterOtp = async (req, res, next) => {
       });
     }
 
-    // Insert verified user into database
+    // Insert verified user into database with gender and date of birth
     const insertQuery = `
-      INSERT INTO users (username, email, password_hash, full_name, is_email_verified)
-      VALUES ($1, $2, $3, $4, TRUE)
-      RETURNING id, username, email, full_name, bio, avatar_url, COALESCE(test, 0) AS test, token_version, created_at
+      INSERT INTO users (username, email, password_hash, full_name, date_of_birth, gender, avatar_url, is_email_verified)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+      RETURNING id, username, email, full_name, bio, avatar_url, gender, date_of_birth, COALESCE(test, 0) AS test, token_version, created_at
     `;
     const result = await query(insertQuery, [
       username,
       email,
       passwordHash,
-      fullName
+      fullName || null,
+      dateOfBirth || null,
+      gender || 'unspecified',
+      avatarUrl
     ]);
 
     const newUser = result.rows[0];
@@ -505,7 +512,7 @@ const verifyLoginOtp = async (req, res, next) => {
     // Fetch user details
     const userRes = await query(
       `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
-              date_of_birth, is_email_verified, is_phone_verified, is_private, is_deactivated, 
+              date_of_birth, gender, is_email_verified, is_phone_verified, is_private, is_deactivated, 
               COALESCE(test, 0) AS test, token_version, created_at 
        FROM users 
        WHERE id = $1 

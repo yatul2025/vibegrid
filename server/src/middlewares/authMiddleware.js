@@ -47,7 +47,7 @@ const protect = async (req, res, next) => {
     // 3. Fetch current user from PostgreSQL database to ensure account still exists
     const userResult = await query(
       `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
-              date_of_birth, is_email_verified, is_phone_verified, is_private, is_deactivated, 
+              date_of_birth, gender, is_email_verified, is_phone_verified, is_private, is_deactivated, 
               COALESCE(test, 0) AS test, token_version, created_at 
        FROM users 
        WHERE id = $1 

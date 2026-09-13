@@ -19,6 +19,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
+import { getDefaultAvatar, isDefaultAvatar } from '../utils/avatar';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -51,13 +52,30 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   const [editDateOfBirth, setEditDateOfBirth] = useState(
     currentUser?.date_of_birth ? String(currentUser.date_of_birth).substring(0, 10) : ''
   );
+  const [editGender, setEditGender] = useState(currentUser?.gender || 'unspecified');
   const [savingProfile, setSavingProfile] = useState(false);
 
+  // Maximum allowed date of birth (must be at least 18 years old)
+  const maxDobDate = (() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 18);
+    return d.toISOString().split('T')[0];
+  })();
+
   // Avatar Upload States
-  const [avatarPreview, setAvatarPreview] = useState(currentUser?.avatar_url || '/uploads/avatars/default-avatar.png');
+  const [avatarPreview, setAvatarPreview] = useState(
+    currentUser?.avatar_url || getDefaultAvatar(currentUser?.gender)
+  );
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const fileInputRef = useRef(null);
+
+  const handleGenderChange = (newGender) => {
+    setEditGender(newGender);
+    if (isDefaultAvatar(avatarPreview)) {
+      setAvatarPreview(getDefaultAvatar(newGender));
+    }
+  };
 
   // Email Management States
   const [newEmail, setNewEmail] = useState('');
@@ -201,7 +219,8 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
           setEditWebsite(u.website || currentUser.website || '');
           setEditLocation(u.location || currentUser.location || '');
           setEditDateOfBirth(u.date_of_birth ? String(u.date_of_birth).substring(0, 10) : '');
-          setAvatarPreview(u.avatar_url || currentUser.avatar_url || '/uploads/avatars/default-avatar.png');
+          setEditGender(u.gender || currentUser.gender || 'unspecified');
+          setAvatarPreview(u.avatar_url || currentUser.avatar_url || getDefaultAvatar(u.gender || currentUser.gender));
         }
       } catch (err) {
         setFeedbackMsg({ type: 'error', text: err.message || 'Failed to load profile details.' });
@@ -305,6 +324,25 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
       setFeedbackMsg({ type: 'error', text: '🔒 Profile details cannot be modified on official demo accounts.' });
       return;
     }
+
+    if (editDateOfBirth) {
+      const dob = new Date(editDateOfBirth);
+      if (isNaN(dob.getTime())) {
+        setFeedbackMsg({ type: 'error', text: 'Please provide a valid date of birth.' });
+        return;
+      }
+      const today = new Date();
+      let age = today.getFullYear() - dob.getFullYear();
+      const monthDiff = today.getMonth() - dob.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+        age--;
+      }
+      if (age < 18) {
+        setFeedbackMsg({ type: 'error', text: 'You must be at least 18 years old.' });
+        return;
+      }
+    }
+
     try {
       setSavingProfile(true);
       const res = await apiClient.put('/users/profile', {
@@ -313,11 +351,15 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
         bio: editBio.trim(),
         website: editWebsite.trim(),
         location: editLocation.trim(),
-        date_of_birth: editDateOfBirth || null
+        date_of_birth: editDateOfBirth || null,
+        gender: editGender || 'unspecified'
       });
 
       if (res.success && res.data?.user) {
         setProfile(res.data.user);
+        if (res.data.user.avatar_url) {
+          setAvatarPreview(res.data.user.avatar_url);
+        }
         updateUser(res.data.user);
         setFeedbackMsg({ type: 'success', text: 'Profile details saved successfully!' });
       } else {
@@ -929,12 +971,12 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                   <div className="settings-avatar-row">
                     <div className="settings-avatar-wrapper">
                       <img
-                        src={avatarPreview || profile?.avatar_url || currentUser?.avatar_url || '/uploads/avatars/default-avatar.png'}
+                        src={avatarPreview || profile?.avatar_url || currentUser?.avatar_url || getDefaultAvatar(editGender || profile?.gender || currentUser?.gender)}
                         alt="Profile Preview"
                         className="settings-avatar-img"
                         onError={(e) => {
                           e.target.onerror = null;
-                          e.target.src = '/uploads/avatars/default-avatar.png';
+                          e.target.src = getDefaultAvatar(editGender || profile?.gender || currentUser?.gender);
                         }}
                       />
                       {avatarUploading && (
@@ -971,7 +1013,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             Save Photo
                           </button>
                         )}
-                        {profile?.avatar_url && !profile.avatar_url.includes('default-avatar.png') && (
+                        {profile?.avatar_url && !isDefaultAvatar(profile.avatar_url) && (
                           <button
                             type="button"
                             className="btn-secondary btn-sm"
@@ -1070,15 +1112,35 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         />
                       </div>
                       <div className="form-group form-col">
-                        <label htmlFor="settingsDob">Date of Birth</label>
+                        <label htmlFor="settingsDob">Date of Birth (Must be 18+)</label>
                         <input
                           id="settingsDob"
                           type="date"
+                          max={maxDobDate}
                           className="form-input"
                           value={editDateOfBirth || ''}
                           onChange={(e) => setEditDateOfBirth(e.target.value)}
                           disabled={savingProfile || isDemoUser}
                         />
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group form-col">
+                        <label htmlFor="settingsGender">Gender</label>
+                        <select
+                          id="settingsGender"
+                          className="form-input"
+                          value={editGender || 'unspecified'}
+                          onChange={(e) => handleGenderChange(e.target.value)}
+                          disabled={savingProfile || isDemoUser}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <option value="unspecified">Prefer not to say / Unspecified</option>
+                          <option value="male">Male 👨</option>
+                          <option value="female">Female 👩</option>
+                          <option value="other">Other 🧑</option>
+                        </select>
                       </div>
                     </div>
 

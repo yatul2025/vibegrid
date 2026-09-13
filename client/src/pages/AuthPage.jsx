@@ -61,7 +61,9 @@ export default function AuthPage() {
     fullName: '',
     username: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    dateOfBirth: '',
+    gender: 'unspecified'
   });
 
   // Password Recovery / Reset states
@@ -82,10 +84,28 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Maximum allowed date of birth (must be at least 18 years old)
+  const maxDobDate = (() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 18);
+    return d.toISOString().split('T')[0];
+  })();
+
   // Real-time client-side validation helpers
   const cleanUsername = registerData.username.trim();
   const usernameFormatValid = !cleanUsername || /^[a-zA-Z0-9_]+$/.test(cleanUsername);
   const passwordMatch = !registerData.confirmPassword || registerData.password === registerData.confirmPassword;
+  const isAgeValid = !registerData.dateOfBirth || (() => {
+    const dob = new Date(registerData.dateOfBirth);
+    if (isNaN(dob.getTime())) return false;
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+    return age >= 18;
+  })();
 
   // Real-time Password strength calculator
   const getPasswordStrength = (pwd) => {
@@ -261,6 +281,27 @@ export default function AuthPage() {
       return;
     }
 
+    const { dateOfBirth, gender } = registerData;
+    if (!dateOfBirth) {
+      setError('Please provide your date of birth.');
+      return;
+    }
+    const dob = new Date(dateOfBirth);
+    if (isNaN(dob.getTime())) {
+      setError('Please enter a valid date of birth.');
+      return;
+    }
+    const today = new Date();
+    let calculatedAge = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      calculatedAge--;
+    }
+    if (calculatedAge < 18) {
+      setError('You must be at least 18 years old to join VibeGrid.');
+      return;
+    }
+
     setError(null);
     setLoading(true);
     try {
@@ -268,7 +309,9 @@ export default function AuthPage() {
         username,
         email,
         fullName: fullName || null,
-        password
+        password,
+        dateOfBirth,
+        gender: gender || 'unspecified'
       });
 
       if (res?.step === 'otp_required') {
@@ -1085,6 +1128,64 @@ export default function AuthPage() {
                   {passwordMatch && registerData.confirmPassword && (
                     <span className="ig-field-hint" style={{ color: 'var(--success, #10b981)' }}>✓ Passwords match</span>
                   )}
+                </div>
+
+                <div className="ig-input-group">
+                  <label 
+                    htmlFor="reg-dob" 
+                    style={{ 
+                      display: 'block', 
+                      fontSize: '11px', 
+                      fontWeight: 600, 
+                      color: 'var(--text-muted, #8e8e8e)', 
+                      marginBottom: '4px', 
+                      textAlign: 'left' 
+                    }}
+                  >
+                    Date of Birth (Must be 18+) *
+                  </label>
+                  <input
+                    id="reg-dob"
+                    type="date"
+                    name="dateOfBirth"
+                    max={maxDobDate}
+                    value={registerData.dateOfBirth}
+                    onChange={handleRegisterChange}
+                    required
+                    className={`ig-input ${registerData.dateOfBirth && !isAgeValid ? 'input-error' : ''}`}
+                  />
+                  {registerData.dateOfBirth && !isAgeValid && (
+                    <span className="ig-field-error">You must be at least 18 years old to join VibeGrid</span>
+                  )}
+                </div>
+
+                <div className="ig-input-group">
+                  <label 
+                    htmlFor="reg-gender" 
+                    style={{ 
+                      display: 'block', 
+                      fontSize: '11px', 
+                      fontWeight: 600, 
+                      color: 'var(--text-muted, #8e8e8e)', 
+                      marginBottom: '4px', 
+                      textAlign: 'left' 
+                    }}
+                  >
+                    Gender
+                  </label>
+                  <select
+                    id="reg-gender"
+                    name="gender"
+                    value={registerData.gender}
+                    onChange={handleRegisterChange}
+                    className="ig-input"
+                    style={{ cursor: 'pointer', appearance: 'auto' }}
+                  >
+                    <option value="unspecified">Prefer not to say / Unspecified</option>
+                    <option value="male">Male 👨</option>
+                    <option value="female">Female 👩</option>
+                    <option value="other">Other 🧑</option>
+                  </select>
                 </div>
 
                 {/* Dummy T&C and Contact Uploading Notice as in Screenshot */}

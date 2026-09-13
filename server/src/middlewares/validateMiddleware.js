@@ -11,7 +11,7 @@
  */
 
 const validateRegistration = (req, res, next) => {
-  const { username, email, password, fullName } = req.body;
+  const { username, email, password, fullName, dateOfBirth, gender } = req.body;
   const errors = [];
 
   // Username validation
@@ -70,6 +70,38 @@ const validateRegistration = (req, res, next) => {
     }
   }
 
+  // Date of birth validation (Required: User must be at least 18 years old)
+  if (!dateOfBirth || typeof dateOfBirth !== 'string' || !dateOfBirth.trim()) {
+    errors.push('Date of birth is required.');
+  } else {
+    const dobDate = new Date(dateOfBirth.trim());
+    if (isNaN(dobDate.getTime())) {
+      errors.push('Please enter a valid date of birth (YYYY-MM-DD).');
+    } else if (dobDate > new Date()) {
+      errors.push('Date of birth cannot be in the future.');
+    } else {
+      const today = new Date();
+      let age = today.getFullYear() - dobDate.getFullYear();
+      const monthDiff = today.getMonth() - dobDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
+        age--;
+      }
+      if (age < 18) {
+        errors.push('You must be at least 18 years old to create an account.');
+      }
+    }
+  }
+
+  // Gender validation (optional, defaults to 'unspecified')
+  const validGenders = ['male', 'female', 'other', 'unspecified'];
+  let cleanGender = 'unspecified';
+  if (gender && typeof gender === 'string') {
+    const lower = gender.trim().toLowerCase();
+    if (validGenders.includes(lower)) {
+      cleanGender = lower;
+    }
+  }
+
   if (errors.length > 0) {
     return res.status(400).json({
       success: false,
@@ -81,6 +113,8 @@ const validateRegistration = (req, res, next) => {
   // Normalize trimmed fields
   req.body.username = username.trim().toLowerCase();
   req.body.email = email.trim().toLowerCase();
+  req.body.dateOfBirth = dateOfBirth.trim();
+  req.body.gender = cleanGender;
   if (fullName && typeof fullName === 'string') {
     req.body.fullName = fullName.trim();
   }
@@ -138,7 +172,7 @@ const RESERVED_USERNAMES = [
 ];
 
 const validateProfileUpdate = (req, res, next) => {
-  const { fullName, bio, website, location, dateOfBirth, username } = req.body;
+  const { fullName, bio, website, location, dateOfBirth, username, gender } = req.body;
   const errors = [];
 
   // Username validation (if user requested a username change)
@@ -202,7 +236,7 @@ const validateProfileUpdate = (req, res, next) => {
     }
   }
 
-  // Validate date of birth (optional, YYYY-MM-DD format, must not be in the future)
+  // Validate date of birth (optional, YYYY-MM-DD format, must be at least 18 years old)
   if (dateOfBirth !== undefined && dateOfBirth !== null && dateOfBirth.trim() !== '') {
     if (typeof dateOfBirth !== 'string') {
       errors.push('Date of birth must be a valid date string (YYYY-MM-DD).');
@@ -212,7 +246,27 @@ const validateProfileUpdate = (req, res, next) => {
         errors.push('Date of birth is invalid.');
       } else if (dobDate > new Date()) {
         errors.push('Date of birth cannot be in the future.');
+      } else {
+        const today = new Date();
+        let age = today.getFullYear() - dobDate.getFullYear();
+        const monthDiff = today.getMonth() - dobDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
+          age--;
+        }
+        if (age < 18) {
+          errors.push('You must be at least 18 years old.');
+        }
       }
+    }
+  }
+
+  // Validate gender if provided
+  const validGenders = ['male', 'female', 'other', 'unspecified'];
+  if (gender !== undefined && gender !== null) {
+    if (typeof gender !== 'string' || !validGenders.includes(gender.trim().toLowerCase())) {
+      errors.push('Gender must be one of: male, female, other, unspecified.');
+    } else {
+      req.body.gender = gender.trim().toLowerCase();
     }
   }
 
