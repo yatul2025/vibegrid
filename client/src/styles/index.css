@@ -2239,6 +2239,67 @@ body {
   text-decoration: underline;
 }
 
+/* Account Current Value Badge / Card (Phone & Email) */
+.account-mgmt-current-val {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 10px !important;
+  padding: 10px 14px !important;
+  margin: 10px 0 14px 0 !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+.account-mgmt-val-text {
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  color: var(--text-main, #f8fafc) !important;
+  letter-spacing: 0.3px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  word-break: break-all !important;
+}
+
+.btn-text-danger {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background: rgba(239, 68, 68, 0.12) !important;
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+  color: #ef4444 !important;
+  border-radius: 8px !important;
+  padding: 6px 14px !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  white-space: nowrap !important;
+  outline: none !important;
+  line-height: 1.4 !important;
+}
+
+.btn-text-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.22) !important;
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  color: #f87171 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2) !important;
+}
+
+.btn-text-danger:active:not(:disabled) {
+  transform: translateY(0) !important;
+}
+
+.btn-text-danger:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
 .email-unverified-prompt {
   background: rgba(245, 158, 11, 0.08);
   border: 1px solid rgba(245, 158, 11, 0.25);
@@ -2393,34 +2454,67 @@ body {
 }
 
 .password-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
 }
 
+.password-input-wrapper .form-input,
 .password-input-wrapper input {
-  width: 100%;
-  padding-right: 44px;
+  width: 100% !important;
+  padding-right: 44px !important;
+  box-sizing: border-box !important;
 }
 
+.password-toggle-btn,
 .btn-pass-toggle {
-  position: absolute;
-  right: 8px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 1rem;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.75;
-  transition: var(--transition);
+  position: absolute !important;
+  right: 8px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  cursor: pointer !important;
+  padding: 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--text-muted, #94a3b8) !important;
+  border-radius: 8px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  z-index: 3 !important;
+  line-height: 1 !important;
+  user-select: none !important;
+  box-shadow: none !important;
+  width: 32px !important;
+  height: 32px !important;
 }
 
+.password-toggle-btn:hover,
 .btn-pass-toggle:hover {
-  opacity: 1;
-  transform: scale(1.1);
+  color: var(--text-main, #f8fafc) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  transform: translateY(-50%) scale(1.08) !important;
+}
+
+.password-toggle-btn:active,
+.btn-pass-toggle:active {
+  transform: translateY(-50%) scale(0.96) !important;
+}
+
+.password-toggle-btn:focus-visible,
+.btn-pass-toggle:focus-visible {
+  outline: 2px solid var(--accent, #6366f1) !important;
+  outline-offset: 1px !important;
+}
+
+.password-toggle-btn svg,
+.btn-pass-toggle svg {
+  display: block !important;
+  pointer-events: none !important;
+  flex-shrink: 0 !important;
 }
 
 .pass-strength-label {

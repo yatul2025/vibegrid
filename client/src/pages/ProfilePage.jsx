@@ -18,6 +18,7 @@ import CommentsModal from '../components/CommentsModal';
 import FollowListModal from '../components/FollowListModal';
 import HashtagFeedModal from '../components/HashtagFeedModal';
 import ConfirmModal from '../components/ConfirmModal';
+import PasswordToggleButton from '../components/PasswordToggleIcon';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
@@ -1914,15 +1915,10 @@ export default function ProfilePage({
                     required
                     autoFocus
                   />
-                  <button
-                    type="button"
-                    className="password-toggle-btn"
-                    onClick={() => setShowDeactivatePassword(!showDeactivatePassword)}
-                    tabIndex="-1"
-                    title={showDeactivatePassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showDeactivatePassword ? '👁️' : '👁️‍🗨️'}
-                  </button>
+                  <PasswordToggleButton
+                    isVisible={showDeactivatePassword}
+                    onToggle={() => setShowDeactivatePassword(!showDeactivatePassword)}
+                  />
                 </div>
               </div>
 
@@ -1998,15 +1994,10 @@ export default function ProfilePage({
                     disabled={deletingAccount}
                     required
                   />
-                  <button
-                    type="button"
-                    className="password-toggle-btn"
-                    onClick={() => setShowDeletePassword(!showDeletePassword)}
-                    tabIndex="-1"
-                    title={showDeletePassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showDeletePassword ? '👁️' : '👁️‍🗨️'}
-                  </button>
+                  <PasswordToggleButton
+                    isVisible={showDeletePassword}
+                    onToggle={() => setShowDeletePassword(!showDeletePassword)}
+                  />
                 </div>
               </div>
 

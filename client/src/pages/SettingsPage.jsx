@@ -20,6 +20,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import { getDefaultAvatar, isDefaultAvatar } from '../utils/avatar';
+import ConfirmModal from '../components/ConfirmModal';
+import PasswordToggleButton from '../components/PasswordToggleIcon';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -33,6 +35,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   // Global message banner for settings
   const [feedbackMsg, setFeedbackMsg] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
 
   // Profile data & form states (initialized with currentUser to prevent flash of empty/undefined data)
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -506,26 +509,38 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
     }
   };
 
-  const handleRemovePhone = async () => {
-    if (!window.confirm('Are you sure you want to remove your linked phone number?')) return;
-    try {
-      setRemovingPhone(true);
-      const res = await apiClient.delete('/users/phone');
-      if (res.success && res.data?.user) {
-        setProfile((prev) => ({ ...prev, ...res.data.user }));
-        updateUser(res.data.user);
-        setNewPhone('');
-        setPhoneOtpSent(false);
-        setPhoneOtp('');
-        setFeedbackMsg({ type: 'success', text: 'Phone number removed from your account.' });
-      } else {
-        setFeedbackMsg({ type: 'error', text: res.error || 'Failed to remove phone number.' });
-      }
-    } catch (err) {
-      setFeedbackMsg({ type: 'error', text: err.message || 'Failed to remove phone number.' });
-    } finally {
-      setRemovingPhone(false);
+  const handleRemovePhone = () => {
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Phone modification is locked on official demo accounts.' });
+      return;
     }
+    setConfirmAction({
+      title: 'Unlink Phone Number?',
+      description: 'Are you sure you want to remove your linked phone number from your account?',
+      confirmText: 'Unlink Phone',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          setRemovingPhone(true);
+          const res = await apiClient.delete('/users/phone');
+          if (res.success && res.data?.user) {
+            setProfile((prev) => ({ ...prev, ...res.data.user }));
+            updateUser(res.data.user);
+            setNewPhone('');
+            setPhoneOtpSent(false);
+            setPhoneOtp('');
+            setFeedbackMsg({ type: 'success', text: 'Phone number removed from your account.' });
+            setConfirmAction(null);
+          } else {
+            setFeedbackMsg({ type: 'error', text: res.error || 'Failed to remove phone number.' });
+          }
+        } catch (err) {
+          setFeedbackMsg({ type: 'error', text: err.message || 'Failed to remove phone number.' });
+        } finally {
+          setRemovingPhone(false);
+        }
+      }
+    });
   };
 
   // 4. Password Change & Sessions Handlers
@@ -611,36 +626,52 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
     }
   };
 
-  const handleLogoutOthers = async () => {
-    if (!window.confirm('Log out of all other devices except this current session?')) return;
-    try {
-      setLoggingOutOthers(true);
-      const res = await apiClient.post('/users/security/sessions/logout-others');
-      if (res.success) {
-        setFeedbackMsg({ type: 'success', text: res.message || 'Logged out of all other devices.' });
-        fetchSessions();
-      } else {
-        setFeedbackMsg({ type: 'error', text: res.error || 'Failed to log out of other devices.' });
+  const handleLogoutOthers = () => {
+    setConfirmAction({
+      title: 'Log Out Other Sessions?',
+      description: 'Log out of all other devices except this current session?',
+      confirmText: 'Log Out Others',
+      variant: 'warning',
+      onConfirm: async () => {
+        try {
+          setLoggingOutOthers(true);
+          const res = await apiClient.post('/users/security/sessions/logout-others');
+          if (res.success) {
+            setFeedbackMsg({ type: 'success', text: res.message || 'Logged out of all other devices.' });
+            fetchSessions();
+            setConfirmAction(null);
+          } else {
+            setFeedbackMsg({ type: 'error', text: res.error || 'Failed to log out of other devices.' });
+          }
+        } catch (err) {
+          setFeedbackMsg({ type: 'error', text: err.message || 'Failed to log out of other devices.' });
+        } finally {
+          setLoggingOutOthers(false);
+        }
       }
-    } catch (err) {
-      setFeedbackMsg({ type: 'error', text: err.message || 'Failed to log out of other devices.' });
-    } finally {
-      setLoggingOutOthers(false);
-    }
+    });
   };
 
-  const handleLogoutAll = async () => {
-    if (!window.confirm('Are you sure you want to log out of ALL devices including this one?')) return;
-    try {
-      setLoggingOutAll(true);
-      const res = await apiClient.post('/users/security/sessions/logout-all');
-      if (res.success) {
-        await logout();
+  const handleLogoutAll = () => {
+    setConfirmAction({
+      title: 'Log Out All Devices?',
+      description: 'Are you sure you want to log out of ALL devices including this one? You will need to log in again.',
+      confirmText: 'Log Out All',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          setLoggingOutAll(true);
+          const res = await apiClient.post('/users/security/sessions/logout-all');
+          if (res.success) {
+            setConfirmAction(null);
+            await logout();
+          }
+        } catch (err) {
+          setFeedbackMsg({ type: 'error', text: err.message || 'Failed to log out of all devices.' });
+          setLoggingOutAll(false);
+        }
       }
-    } catch (err) {
-      setFeedbackMsg({ type: 'error', text: err.message || 'Failed to log out of all devices.' });
-      setLoggingOutAll(false);
-    }
+    });
   };
 
   // 5. Privacy Settings Handlers
@@ -1180,7 +1211,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     </div>
 
                     <div className="account-mgmt-current-val">
-                      <span className="account-mgmt-val-text">{profile?.email || 'No email registered'}</span>
+                      <span className="account-mgmt-val-text">
+                        <span style={{ fontSize: '1.05rem' }}>✉️</span>
+                        {profile?.email || 'No email registered'}
+                      </span>
                     </div>
 
                     {isDemoUser && (
@@ -1211,14 +1245,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             onChange={(e) => setEmailPassword(e.target.value)}
                             disabled={sendingEmailOtp || verifyingEmailOtp || isDemoUser}
                           />
-                          <button
-                            type="button"
-                            className="btn-pass-toggle"
-                            onClick={() => setShowEmailPassword(!showEmailPassword)}
-                            tabIndex="-1"
-                          >
-                            {showEmailPassword ? '👁️' : '👁️‍🗨️'}
-                          </button>
+                          <PasswordToggleButton
+                            isVisible={showEmailPassword}
+                            onToggle={() => setShowEmailPassword(!showEmailPassword)}
+                          />
                         </div>
                       )}
 
@@ -1288,6 +1318,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
                     <div className="account-mgmt-current-val">
                       <span className="account-mgmt-val-text">
+                        <span style={{ fontSize: '1.05rem' }}>📞</span>
                         {profile?.phone_number ? profile.phone_number : 'No phone number linked'}
                       </span>
                       {profile?.phone_number && (
@@ -1296,8 +1327,9 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           className="btn-text-danger"
                           onClick={handleRemovePhone}
                           disabled={removingPhone || isDemoUser}
+                          title="Unlink phone number"
                         >
-                          {removingPhone ? 'Removing...' : 'Unlink Phone'}
+                          {removingPhone ? 'Removing...' : '✕ Unlink Phone'}
                         </button>
                       )}
                     </div>
@@ -1324,14 +1356,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             onChange={(e) => setPhonePassword(e.target.value)}
                             disabled={sendingPhoneOtp || verifyingPhoneOtp || isDemoUser}
                           />
-                          <button
-                            type="button"
-                            className="btn-pass-toggle"
-                            onClick={() => setShowPhonePassword(!showPhonePassword)}
-                            tabIndex="-1"
-                          >
-                            {showPhonePassword ? '👁️' : '👁️‍🗨️'}
-                          </button>
+                          <PasswordToggleButton
+                            isVisible={showPhonePassword}
+                            onToggle={() => setShowPhonePassword(!showPhonePassword)}
+                          />
                         </div>
                       )}
 
@@ -1430,14 +1458,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             disabled={changingPassword || isDemoUser}
                             required
                           />
-                          <button
-                            type="button"
-                            className="password-toggle-btn"
-                            onClick={() => setShowCurrentPass(!showCurrentPass)}
-                            tabIndex="-1"
-                          >
-                            {showCurrentPass ? '👁️' : '👁️‍🗨️'}
-                          </button>
+                          <PasswordToggleButton
+                            isVisible={showCurrentPass}
+                            onToggle={() => setShowCurrentPass(!showCurrentPass)}
+                          />
                         </div>
                       </div>
 
@@ -1454,14 +1478,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             disabled={changingPassword || isDemoUser}
                             required
                           />
-                          <button
-                            type="button"
-                            className="password-toggle-btn"
-                            onClick={() => setShowNewPass(!showNewPass)}
-                            tabIndex="-1"
-                          >
-                            {showNewPass ? '👁️' : '👁️‍🗨️'}
-                          </button>
+                          <PasswordToggleButton
+                            isVisible={showNewPass}
+                            onToggle={() => setShowNewPass(!showNewPass)}
+                          />
                         </div>
 
                         {newPassword.length > 0 && (
@@ -1497,14 +1517,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             disabled={changingPassword || isDemoUser}
                             required
                           />
-                          <button
-                            type="button"
-                            className="password-toggle-btn"
-                            onClick={() => setShowConfirmPass(!showConfirmPass)}
-                            tabIndex="-1"
-                          >
-                            {showConfirmPass ? '👁️' : '👁️‍🗨️'}
-                          </button>
+                          <PasswordToggleButton
+                            isVisible={showConfirmPass}
+                            onToggle={() => setShowConfirmPass(!showConfirmPass)}
+                          />
                         </div>
                         {confirmPassword.length > 0 && newPassword !== confirmPassword && (
                           <span className="form-input-hint" style={{ color: 'var(--danger)' }}>
@@ -2097,14 +2113,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     required
                     autoFocus
                   />
-                  <button
-                    type="button"
-                    className="password-toggle-btn"
-                    onClick={() => setShowDeactivatePassword(!showDeactivatePassword)}
-                    tabIndex="-1"
-                  >
-                    {showDeactivatePassword ? '👁️' : '👁️‍🗨️'}
-                  </button>
+                  <PasswordToggleButton
+                    isVisible={showDeactivatePassword}
+                    onToggle={() => setShowDeactivatePassword(!showDeactivatePassword)}
+                  />
                 </div>
               </div>
 
@@ -2182,14 +2194,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     disabled={deletingAccount}
                     required
                   />
-                  <button
-                    type="button"
-                    className="password-toggle-btn"
-                    onClick={() => setShowDeletePassword(!showDeletePassword)}
-                    tabIndex="-1"
-                  >
-                    {showDeletePassword ? '👁️' : '👁️‍🗨️'}
-                  </button>
+                  <PasswordToggleButton
+                    isVisible={showDeletePassword}
+                    onToggle={() => setShowDeletePassword(!showDeletePassword)}
+                  />
                 </div>
               </div>
 
@@ -2218,6 +2226,21 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modern Market-Level Confirmation Modal */}
+      {confirmAction && (
+        <ConfirmModal
+          isOpen={true}
+          title={confirmAction.title}
+          description={confirmAction.description}
+          confirmText={confirmAction.confirmText || 'Confirm'}
+          cancelText="Cancel"
+          variant={confirmAction.variant || 'danger'}
+          isLoading={confirmAction.isLoading || false}
+          onConfirm={confirmAction.onConfirm}
+          onClose={() => setConfirmAction(null)}
+        />
       )}
     </div>
   );
