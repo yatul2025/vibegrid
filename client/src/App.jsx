@@ -11,6 +11,9 @@ import NotificationsModal from './components/NotificationsModal';
 import MessagesPage from './pages/MessagesPage';
 import SettingsPage from './pages/SettingsPage';
 import ErrorBoundary from './components/ErrorBoundary';
+import CallModal from './components/CallModal';
+import socketService from './services/socketService';
+import e2eeService from './services/crypto/e2eeService';
 
 function AppContent() {
   const { user, loading, logout } = useAuth();
@@ -90,6 +93,11 @@ function AppContent() {
         }
         return prev;
       });
+
+      // Connect real-time socket and initialize E2EE crypto identity
+      socketService.connect();
+      e2eeService.initDeviceKeys(user.id);
+
       fetchUnreadCount();
       fetchUnreadMessagesCount();
       const notifTimer = setInterval(fetchUnreadCount, 20000);
@@ -99,6 +107,7 @@ function AppContent() {
         clearInterval(msgTimer);
       };
     } else {
+      socketService.disconnect();
       setCurrentTab('auth');
       try {
         sessionStorage.removeItem('vibegrid_active_tab');
@@ -574,6 +583,9 @@ function AppContent() {
           }
         }}
       />
+
+      {/* Global WebRTC 1-to-1 Audio/Video Call Modal */}
+      {user && <CallModal />}
     </div>
   );
 }

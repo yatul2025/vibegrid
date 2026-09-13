@@ -9,14 +9,19 @@
  */
 
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const config = require('./config/env');
 const db = require('./config/db');
+const { initSocket } = require('./socket');
 
 const app = express();
+const httpServer = http.createServer(app);
+const io = initSocket(httpServer);
+app.set('io', io);
 
 // Security: Enable reverse proxy trust (1 hop) for accurate client IP in rate limiters
 app.set('trust proxy', 1);
@@ -97,10 +102,14 @@ app.get('/api/health', async (req, res) => {
 
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/users', require('./routes/blockRoutes'));
 app.use('/api/posts', require('./routes/postRoutes'));
 app.use('/api/stories', require('./routes/storyRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/messages', require('./routes/messageRoutes'));
+app.use('/api/conversations', require('./routes/conversationRoutes'));
+app.use('/api/e2ee', require('./routes/e2eeRoutes'));
+app.use('/api/calls', require('./routes/callRoutes'));
 app.use('/api/hashtags', require('./routes/hashtagRoutes'));
 
 // ============================================================================
@@ -145,9 +154,9 @@ const startServer = async () => {
     console.warn('[DB Tip] Check your .env DATABASE_URL credentials or ensure PostgreSQL service is running.');
   }
 
-  app.listen(config.port, '0.0.0.0', () => {
+  httpServer.listen(config.port, '0.0.0.0', () => {
     console.log('============================================================');
-    console.log(`🚀 VibeGrid Express Server running at http://localhost:${config.port}`);
+    console.log(`🚀 VibeGrid Express + Socket.IO Server running at http://localhost:${config.port}`);
     console.log(`📡 Client URL allowed by CORS: ${config.clientUrl}`);
     console.log(`🩺 Health check endpoint: http://localhost:${config.port}/api/health`);
     console.log('============================================================');
@@ -159,3 +168,5 @@ if (require.main === module) {
 }
 
 module.exports = app;
+module.exports.httpServer = httpServer;
+module.exports.io = io;

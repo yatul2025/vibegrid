@@ -226,6 +226,15 @@ const sendMessage = async (req, res, next) => {
       is_mine: true
     };
 
+    // Real-time broadcast to recipient
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${recipient.id}`).emit('message:receive', {
+        ...newMessage,
+        is_mine: false
+      });
+    }
+
     res.status(201).json({
       success: true,
       data: {
