@@ -184,7 +184,10 @@ class SocketService {
           await apiClient.post(`/calls/${callId}/signal`, {
             toUserId: data.targetUserId,
             signalType: 'offer',
-            payload: data.sdp
+            payload: {
+              sdp: data.sdp,
+              callType: data.callType || 'audio'
+            }
           });
         }
       } else if (event === 'signal:answer') {
@@ -198,11 +201,12 @@ class SocketService {
         }
       } else if (event === 'signal:ice-candidate') {
         const callId = data.callId || this.activeCallId;
-        if (callId) {
+        const candidatePayload = data.candidate?.toJSON ? data.candidate.toJSON() : data.candidate;
+        if (callId && candidatePayload && (candidatePayload.candidate || candidatePayload.sdpMid !== undefined)) {
           await apiClient.post(`/calls/${callId}/signal`, {
             toUserId: data.targetUserId,
             signalType: 'ice-candidate',
-            payload: data.candidate
+            payload: candidatePayload
           });
         }
       } else if (event === 'presence:get') {
@@ -294,9 +298,17 @@ class SocketService {
               this._dispatch('call:ended', { callId: this.activeCallId });
               this.stopSignalPolling();
             } else if (s.signal_type === 'offer') {
-              this._dispatch('signal:offer', { callerId: s.from_user_id, sdp: s.payload, callId: this.activeCallId });
+              const offerSdp = s.payload?.sdp || s.payload;
+              const offerCallType = s.payload?.callType || 'audio';
+              this._dispatch('signal:offer', {
+                callerId: s.from_user_id,
+                sdp: offerSdp,
+                callType: offerCallType,
+                callId: this.activeCallId
+              });
             } else if (s.signal_type === 'answer') {
-              this._dispatch('signal:answer', { sdp: s.payload, callId: this.activeCallId });
+              const answerSdp = s.payload?.sdp || s.payload;
+              this._dispatch('signal:answer', { sdp: answerSdp, callId: this.activeCallId });
             } else if (s.signal_type === 'ice-candidate') {
               this._dispatch('signal:ice-candidate', { candidate: s.payload, callId: this.activeCallId });
             }
@@ -305,7 +317,7 @@ class SocketService {
       } catch (err) {
         // Signal polling error
       }
-    }, 1000);
+    }, 600);
   }
 
   stopSignalPolling() {

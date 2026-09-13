@@ -114,25 +114,39 @@ class WebRTCService {
       });
     }
 
-    // Handle incoming remote media tracks
+    // Handle incoming remote media tracks (supports both streams array and Unified Plan direct tracks)
     pc.ontrack = (event) => {
-      console.log('[WebRTC] Remote track received:', event.track.kind);
-      event.streams[0]?.getTracks().forEach((track) => {
-        if (!this.remoteStream.getTracks().some((t) => t.id === track.id)) {
-          this.remoteStream.addTrack(track);
+      console.log('[WebRTC] Remote track received:', event.track.kind, event.track.id);
+
+      if (event.streams && event.streams[0]) {
+        this.remoteStream = event.streams[0];
+      } else {
+        if (!this.remoteStream) {
+          this.remoteStream = new MediaStream();
         }
-      });
+        if (!this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
+          this.remoteStream.addTrack(event.track);
+        }
+      }
+
       if (this.onRemoteStream) {
         this.onRemoteStream(this.remoteStream);
       }
     };
 
-    // Handle local ICE candidates to relay over Socket.IO
+    // Handle local ICE candidates to relay over Socket.IO / HTTP Serverless
     pc.onicecandidate = (event) => {
-      if (event.candidate) {
+      if (event.candidate && event.candidate.candidate) {
+        const candidatePayload = event.candidate.toJSON ? event.candidate.toJSON() : {
+          candidate: event.candidate.candidate,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex,
+          usernameFragment: event.candidate.usernameFragment
+        };
+
         socketService.emit('signal:ice-candidate', {
           targetUserId: this.targetUserId,
-          candidate: event.candidate,
+          candidate: candidatePayload,
           callId: this.callId
         });
       }
@@ -172,10 +186,16 @@ class WebRTCService {
 
     await pc.setLocalDescription(offer);
 
+    const offerPayload = offer.toJSON ? offer.toJSON() : {
+      type: offer.type,
+      sdp: offer.sdp
+    };
+
     socketService.emit('signal:offer', {
       targetUserId,
-      sdp: pc.localDescription,
-      callId
+      sdp: offerPayload,
+      callId,
+      callType
     });
   }
 
@@ -184,7 +204,8 @@ class WebRTCService {
     const iceConfig = await this.getIceServers();
     const pc = this.createPeerConnection(callerId, callId, iceConfig);
 
-    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    const sdpObj = (sdp && typeof sdp === 'object' && sdp.sdp) ? sdp : { type: 'offer', sdp };
+    await pc.setRemoteDescription(new RTCSessionDescription(sdpObj));
 
     // Drain queued ICE candidates
     await this._drainCandidateQueue();
@@ -192,21 +213,27 @@ class WebRTCService {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
+    const answerPayload = answer.toJSON ? answer.toJSON() : {
+      type: answer.type,
+      sdp: answer.sdp
+    };
+
     socketService.emit('signal:answer', {
       targetUserId: callerId,
-      sdp: pc.localDescription,
+      sdp: answerPayload,
       callId
     });
   }
 
   async handleIncomingAnswer(sdp) {
     if (!this.peerConnection) return;
-    await this.peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+    const sdpObj = (sdp && typeof sdp === 'object' && sdp.sdp) ? sdp : { type: 'answer', sdp };
+    await this.peerConnection.setRemoteDescription(new RTCSessionDescription(sdpObj));
     await this._drainCandidateQueue();
   }
 
   async handleIncomingIceCandidate(candidate) {
-    if (!candidate) return;
+    if (!candidate || !candidate.candidate) return;
 
     if (this.peerConnection && this.peerConnection.remoteDescription) {
       try {
@@ -223,6 +250,7 @@ class WebRTCService {
     if (!this.peerConnection) return;
     while (this.candidateQueue.length > 0) {
       const candidate = this.candidateQueue.shift();
+      if (!candidate || !candidate.candidate) continue;
       try {
         await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {

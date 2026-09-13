@@ -32,6 +32,7 @@ export default function CallModal() {
   // Media Stream References
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
   const audioContextRef = useRef(null);
   const ringToneOscillatorRef = useRef(null);
   const durationTimerRef = useRef(null);
@@ -140,14 +141,21 @@ export default function CallModal() {
     };
 
     // 5. WebRTC SDP Offer Relay
-    const handleSignalOffer = async ({ callerId, sdp, callId }) => {
-      console.log('📡 [WebRTC] Signal offer received from caller:', callerId);
+    const handleSignalOffer = async ({ callerId, sdp, callId, callType }) => {
+      console.log('📡 [WebRTC] Signal offer received from caller:', callerId, callType);
+      const effectiveCallType = callType || callData?.callType || 'audio';
       try {
+        setCallData((prev) => (prev ? { ...prev, callType: effectiveCallType } : {
+          callId,
+          peer: { id: callerId, username: 'Peer' },
+          callType: effectiveCallType,
+          isInitiator: false
+        }));
         await webrtcService.handleIncomingOffer(
           callerId,
           sdp,
           callId,
-          callData?.callType || 'audio'
+          effectiveCallType
         );
       } catch (err) {
         console.error('Error handling incoming SDP offer:', err);
@@ -220,34 +228,65 @@ export default function CallModal() {
   }, [user, callData]);
 
   // ==========================================================================
-  // Attach Media Streams to HTML Video Elements
+  // Attach Media Streams to HTML Video & Audio Elements
   // ==========================================================================
   useEffect(() => {
+    const bindStreams = () => {
+      if (localVideoRef.current && webrtcService.localStream) {
+        if (localVideoRef.current.srcObject !== webrtcService.localStream) {
+          localVideoRef.current.srcObject = webrtcService.localStream;
+        }
+        localVideoRef.current.play().catch(() => {});
+      }
+
+      if (webrtcService.remoteStream) {
+        if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== webrtcService.remoteStream) {
+          remoteVideoRef.current.srcObject = webrtcService.remoteStream;
+          remoteVideoRef.current.play().catch((e) => console.debug('Video play error:', e));
+        }
+        if (remoteAudioRef.current && remoteAudioRef.current.srcObject !== webrtcService.remoteStream) {
+          remoteAudioRef.current.srcObject = webrtcService.remoteStream;
+          remoteAudioRef.current.play().catch((e) => console.debug('Audio play error:', e));
+        }
+      }
+    };
+
     webrtcService.onLocalStream = (stream) => {
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(() => {});
       }
     };
 
     webrtcService.onRemoteStream = (stream) => {
+      console.log('📺 [CallModal] Remote stream received:', stream);
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = stream;
+        remoteVideoRef.current.play().catch((e) => console.debug('Remote video play error:', e));
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = stream;
+        remoteAudioRef.current.play().catch((e) => console.debug('Remote audio play error:', e));
       }
     };
 
     webrtcService.onConnectionStateChange = (state) => {
+      console.log('🔄 [CallModal] WebRTC connection state:', state);
       if (state === 'connected') {
         setCallState('connected');
+        setTimeout(bindStreams, 50);
       } else if (state === 'disconnected' || state === 'failed') {
         handleEndCall();
       }
     };
 
+    bindStreams();
+
     return () => {
       webrtcService.onLocalStream = null;
       webrtcService.onRemoteStream = null;
     };
-  }, []);
+  }, [callState]);
 
   // Duration Timer
   useEffect(() => {
@@ -425,6 +464,8 @@ export default function CallModal() {
 
             {/* Remote Screen / Avatar */}
             <div className="call-remote-screen">
+              {/* Dedicated remote voice audio tag (unmuted for crystal-clear audio playback) */}
+              <audio ref={remoteAudioRef} autoPlay playsInline />
               <video
                 ref={remoteVideoRef}
                 autoPlay
@@ -678,7 +719,11 @@ export default function CallModal() {
         }
 
         .remote-video-elem.hidden {
-          display: none;
+          opacity: 0;
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          pointer-events: none;
         }
 
         .audio-call-placeholder {
