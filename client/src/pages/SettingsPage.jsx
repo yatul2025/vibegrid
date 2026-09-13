@@ -743,6 +743,31 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
           </div>
         )}
 
+        {/* Demo Mode Security Notice */}
+        {currentUser?.is_demo_session && (
+          <div className="settings-alert-banner warning" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            background: 'rgba(239, 68, 68, 0.12)',
+            border: '1px solid rgba(239, 68, 68, 0.35)',
+            color: '#f87171',
+            borderRadius: '10px',
+            padding: '12px 16px',
+            marginBottom: '16px'
+          }}>
+            <span style={{ fontSize: '20px' }}>🔒</span>
+            <div style={{ flex: 1 }}>
+              <strong style={{ color: '#fff', display: 'block', fontSize: '14px', marginBottom: '2px' }}>
+                Demo Access Mode Active
+              </strong>
+              <span>
+                You are currently browsing via 1-click Demo Access. Modifying credentials (username, email, phone, password, or deleting account) is locked. To edit credentials, log in directly using your account password.
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="settings-layout">
           {/* Left Navigation Sidebar (Desktop or Mobile Menu View) */}
           {(!isMobile || !mobileViewingSection) && (
@@ -885,7 +910,9 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                   {/* Profile Edit Form */}
                   <form onSubmit={handleSaveProfile} className="settings-form">
                     <div className="form-group">
-                      <label htmlFor="settingsUsername">Username</label>
+                      <label htmlFor="settingsUsername">
+                        Username {currentUser?.is_demo_session && <span style={{ fontSize: '11px', color: '#f87171' }}>🔒 (Locked in Demo Mode)</span>}
+                      </label>
                       <input
                         id="settingsUsername"
                         type="text"
@@ -894,8 +921,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                         maxLength={30}
                         required
+                        disabled={savingProfile || currentUser?.is_demo_session}
                       />
-                      <span className="form-input-hint">Your unique @handle on VibeGrid (letters, numbers, underscore).</span>
+                      <span className="form-input-hint" style={{ color: currentUser?.is_demo_session ? '#f87171' : undefined }}>
+                        {currentUser?.is_demo_session
+                          ? '🔒 Username cannot be modified in demo access mode. Log in with password to change it.'
+                          : 'Your unique @handle on VibeGrid (letters, numbers, underscore).'}
+                      </span>
                     </div>
 
                     <div className="form-group">
@@ -1003,6 +1035,12 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <span className="account-mgmt-val-text">{profile?.email || 'No email registered'}</span>
                     </div>
 
+                    {currentUser?.is_demo_session && (
+                      <span className="settings-subtext" style={{ color: '#f87171', display: 'block', marginBottom: '8px' }}>
+                        🔒 Email modification is locked in demo access mode.
+                      </span>
+                    )}
+
                     <div className="account-mgmt-field-row">
                       <input
                         type="email"
@@ -1010,13 +1048,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         placeholder="Enter new email address (e.g. user@example.com)"
                         value={newEmail}
                         onChange={(e) => setNewEmail(e.target.value)}
-                        disabled={sendingEmailOtp || verifyingEmailOtp}
+                        disabled={sendingEmailOtp || verifyingEmailOtp || currentUser?.is_demo_session}
                       />
                       <button
                         type="button"
                         className="btn-primary"
                         onClick={handleSendEmailOtp}
-                        disabled={sendingEmailOtp || verifyingEmailOtp || otpCountdown > 0}
+                        disabled={sendingEmailOtp || verifyingEmailOtp || otpCountdown > 0 || currentUser?.is_demo_session}
                       >
                         {sendingEmailOtp
                           ? 'Sending...'
@@ -1041,13 +1079,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             maxLength={6}
                             value={emailOtp}
                             onChange={(e) => setEmailOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                            disabled={verifyingEmailOtp}
+                            disabled={verifyingEmailOtp || currentUser?.is_demo_session}
                           />
                           <button
                             type="button"
                             className="btn-primary"
                             onClick={handleVerifyEmailOtp}
-                            disabled={verifyingEmailOtp || emailOtp.length !== 6}
+                            disabled={verifyingEmailOtp || emailOtp.length !== 6 || currentUser?.is_demo_session}
                           >
                             {verifyingEmailOtp ? 'Verifying...' : 'Verify & Save'}
                           </button>
@@ -1068,6 +1106,12 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <span className="account-mgmt-subtitle">Used for multi-factor security and account recovery</span>
                     </div>
 
+                    {currentUser?.is_demo_session && (
+                      <span className="settings-subtext" style={{ color: '#f87171', display: 'block', marginBottom: '8px' }}>
+                        🔒 Phone number modification is locked in demo access mode.
+                      </span>
+                    )}
+
                     <div className="account-mgmt-current-val">
                       <span className="account-mgmt-val-text">
                         {profile?.phone_number ? profile.phone_number : 'No phone number linked'}
@@ -1077,7 +1121,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           type="button"
                           className="btn-text-danger"
                           onClick={handleRemovePhone}
-                          disabled={removingPhone}
+                          disabled={removingPhone || currentUser?.is_demo_session}
                         >
                           {removingPhone ? 'Removing...' : 'Unlink Phone'}
                         </button>
@@ -1091,13 +1135,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         placeholder="Enter phone with country code (e.g. +14155552671)"
                         value={newPhone}
                         onChange={(e) => setNewPhone(e.target.value)}
-                        disabled={sendingPhoneOtp || verifyingPhoneOtp}
+                        disabled={sendingPhoneOtp || verifyingPhoneOtp || currentUser?.is_demo_session}
                       />
                       <button
                         type="button"
                         className="btn-primary"
                         onClick={handleSendPhoneOtp}
-                        disabled={sendingPhoneOtp || verifyingPhoneOtp || phoneOtpCountdown > 0 || !newPhone.trim()}
+                        disabled={sendingPhoneOtp || verifyingPhoneOtp || phoneOtpCountdown > 0 || !newPhone.trim() || currentUser?.is_demo_session}
                       >
                         {sendingPhoneOtp
                           ? 'Sending...'
@@ -1158,6 +1202,20 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <span className="account-mgmt-subtitle">Choose a strong password with at least 8 characters</span>
                     </div>
 
+                    {currentUser?.is_demo_session && (
+                      <div style={{
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        margin: '12px 0',
+                        color: '#f87171',
+                        fontSize: '13px'
+                      }}>
+                        🔒 Password modification is locked in demo access mode. Please log in using your account password to update it.
+                      </div>
+                    )}
+
                     <form onSubmit={handleChangePassword} className="security-password-form">
                       <div className="form-group">
                         <label htmlFor="settingsCurrPass">Current Password</label>
@@ -1169,7 +1227,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             placeholder="Enter current password"
                             value={currentPassword}
                             onChange={(e) => setCurrentPassword(e.target.value)}
-                            disabled={changingPassword}
+                            disabled={changingPassword || currentUser?.is_demo_session}
                             required
                           />
                           <button
@@ -1193,7 +1251,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             placeholder="Enter new password (8+ chars)"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            disabled={changingPassword}
+                            disabled={changingPassword || currentUser?.is_demo_session}
                             required
                           />
                           <button
@@ -1236,7 +1294,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             placeholder="Confirm new password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            disabled={changingPassword}
+                            disabled={changingPassword || currentUser?.is_demo_session}
                             required
                           />
                           <button
@@ -1259,7 +1317,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         <button
                           type="submit"
                           className="btn-primary"
-                          disabled={changingPassword || !currentPassword || !newPassword || newPassword !== confirmPassword}
+                          disabled={changingPassword || !currentPassword || !newPassword || newPassword !== confirmPassword || currentUser?.is_demo_session}
                         >
                           {changingPassword ? 'Updating Password...' : 'Update Password'}
                         </button>
@@ -1684,6 +1742,20 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                   </div>
 
                   <div className="account-mgmt-card danger-zone-card">
+                    {currentUser?.is_demo_session && (
+                      <div style={{
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        marginBottom: '16px',
+                        color: '#f87171',
+                        fontSize: '13px'
+                      }}>
+                        🔒 Account deactivation and deletion are disabled in demo access mode.
+                      </div>
+                    )}
+
                     {/* Temporary Deactivation */}
                     <div className="danger-zone-body">
                       <div className="danger-zone-info">
@@ -1696,6 +1768,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <button
                         type="button"
                         className="btn-danger-outline"
+                        disabled={currentUser?.is_demo_session}
                         onClick={() => {
                           setDeactivatePassword('');
                           setDeactivateError('');
@@ -1721,6 +1794,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <button
                         type="button"
                         className="btn-danger-solid"
+                        disabled={currentUser?.is_demo_session}
                         style={{ fontSize: '0.82rem', padding: '8px 16px', whiteSpace: 'nowrap' }}
                         onClick={() => {
                           setDeletePassword('');

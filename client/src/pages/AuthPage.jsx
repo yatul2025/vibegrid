@@ -98,7 +98,7 @@ export default function AuthPage() {
     setError(null);
     setLoading(true);
     try {
-      await login(identifier, password);
+      await login(identifier, password, false);
     } catch (err) {
       setError(err.message || 'Invalid username/email or password.');
     } finally {
@@ -110,7 +110,7 @@ export default function AuthPage() {
     setError(null);
     setLoading(true);
     try {
-      await login(username, 'Password123!');
+      await login(username, 'Password123!', true);
     } catch (err) {
       setError(err.message || 'Demo login failed.');
     } finally {

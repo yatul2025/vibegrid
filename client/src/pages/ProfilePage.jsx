@@ -419,6 +419,12 @@ export default function ProfilePage({
       return;
     }
 
+    if (currentUser?.is_demo_session && cleanUsername !== currentUser.username.toLowerCase()) {
+      setProfileMsg({ type: 'error', text: 'Username cannot be modified in demo access mode. Please log in using your account password.' });
+      setSavingProfile(false);
+      return;
+    }
+
     if (!/^[a-zA-Z0-9_]+$/.test(cleanUsername)) {
       setProfileMsg({ type: 'error', text: 'Username can only contain letters, numbers, and underscores.' });
       setSavingProfile(false);
@@ -1366,8 +1372,13 @@ export default function ProfilePage({
                   value={editUsername}
                   onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30))}
                   required
+                  disabled={isSaving || currentUser?.is_demo_session}
                 />
-                <span className="field-hint">3–30 characters, letters, numbers, and underscores only.</span>
+                <span className="field-hint" style={{ color: currentUser?.is_demo_session ? '#f87171' : undefined }}>
+                  {currentUser?.is_demo_session
+                    ? '🔒 Username cannot be modified in demo access mode. Log in with password to change it.'
+                    : '3–30 characters, letters, numbers, and underscores only.'}
+                </span>
               </div>
 
               <div className="edit-form-field">

@@ -171,20 +171,23 @@ const login = async (req, res, next) => {
     // 4. Create active session record in database
     const sessionId = await createSessionRecord(user.id, req);
 
-    // 5. Issue new signed JWT token with active token version and session ID
+    // 5. Issue new signed JWT token with active token version, session ID, and demo access flag
+    const isDemoAccess = req.body.isDemoAccess === true || req.body.isDemoAccess === 'true';
     const token = generateToken({
       id: user.id,
       username: user.username,
       tokenVersion: user.token_version || 1,
-      sessionId
+      sessionId,
+      isDemoAccess
     });
 
     // 6. Attach token as a secure HTTP-Only cookie
     setAuthCookie(res, token);
 
-    // 7. Exclude password_hash & token_version from response
+    // 7. Exclude password_hash & token_version from response, attach is_demo_session
     delete user.password_hash;
     delete user.token_version;
+    user.is_demo_session = isDemoAccess;
 
     res.status(200).json({
       success: true,
@@ -282,6 +285,15 @@ const forgotPassword = async (req, res, next) => {
     if (userRes.rows.length > 0) {
       const user = userRes.rows[0];
 
+      // Disallow password reset on official demo accounts
+      const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+      if (DEMO_USERNAMES.includes(user.username.toLowerCase())) {
+        return res.status(403).json({
+          success: false,
+          error: 'Password reset is disabled for official demo accounts.'
+        });
+      }
+
       // Cryptographically secure token (32 bytes = 64 hex chars)
       const resetToken = crypto.randomBytes(32).toString('hex');
       const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
@@ -374,6 +386,15 @@ const resetPassword = async (req, res, next) => {
 
     const resetRecord = resetRes.rows[0];
 
+    // Disallow password reset on official demo accounts
+    const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+    if (resetRecord.username && DEMO_USERNAMES.includes(resetRecord.username.toLowerCase())) {
+      return res.status(403).json({
+        success: false,
+        error: 'Password reset is disabled for official demo accounts.'
+      });
+    }
+
     // Hash the new password securely
     const newPasswordHash = await hashPassword(newPassword);
 
@@ -406,6 +427,13 @@ const resetPassword = async (req, res, next) => {
  */
 const changePassword = async (req, res, next) => {
   try {
+    if (req.user.is_demo_session) {
+      return res.status(403).json({
+        success: false,
+        error: 'Credentials cannot be modified in demo access mode. Please log in using your account password.'
+      });
+    }
+
     const userId = req.user.id;
     const { currentPassword, newPassword } = req.body;
 

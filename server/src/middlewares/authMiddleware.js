@@ -107,8 +107,9 @@ const protect = async (req, res, next) => {
       user.sessionId = decoded.sessionId;
     }
 
-    // 6. Exclude token_version from req.user payload
+    // 6. Exclude token_version from req.user payload and attach demo session flag
     delete user.token_version;
+    user.is_demo_session = !!decoded.isDemoAccess;
     req.user = user;
     next();
   } catch (error) {
@@ -147,6 +148,7 @@ const optionalAuth = async (req, res, next) => {
             user.sessionId = decoded.sessionId;
           }
           delete user.token_version;
+          user.is_demo_session = !!decoded.isDemoAccess;
           req.user = user;
         }
       }

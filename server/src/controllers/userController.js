@@ -109,6 +109,12 @@ const updateProfile = async (req, res, next) => {
     if (username !== undefined && username !== null) {
       const cleanUsername = username.trim().toLowerCase();
       if (cleanUsername !== req.user.username.toLowerCase()) {
+        if (req.user.is_demo_session) {
+          return res.status(403).json({
+            success: false,
+            error: 'Username cannot be modified in demo access mode. Please log in using your account password.'
+          });
+        }
         // Check uniqueness in database
         const existingCheck = await query(
           'SELECT id FROM users WHERE LOWER(username) = $1 AND id != $2 LIMIT 1',
@@ -374,6 +380,13 @@ const removeAvatar = async (req, res, next) => {
  */
 const sendEmailOtp = async (req, res, next) => {
   try {
+    if (req.user.is_demo_session) {
+      return res.status(403).json({
+        success: false,
+        error: 'Email address cannot be modified in demo access mode. Please log in using your account password.'
+      });
+    }
+
     const userId = req.user.id;
     const { newEmail, currentPassword } = req.body;
 
@@ -489,6 +502,13 @@ const sendEmailOtp = async (req, res, next) => {
  */
 const verifyEmailOtp = async (req, res, next) => {
   try {
+    if (req.user.is_demo_session && req.body.newEmail) {
+      return res.status(403).json({
+        success: false,
+        error: 'Email address cannot be modified in demo access mode. Please log in using your account password.'
+      });
+    }
+
     const userId = req.user.id;
     const { otp, newEmail } = req.body;
     const cleanOtp = String(otp).trim();
@@ -613,6 +633,13 @@ const verifyEmailOtp = async (req, res, next) => {
  */
 const sendPhoneOtp = async (req, res, next) => {
   try {
+    if (req.user.is_demo_session) {
+      return res.status(403).json({
+        success: false,
+        error: 'Phone number cannot be modified in demo access mode. Please log in using your account password.'
+      });
+    }
+
     const userId = req.user.id;
     const { phoneNumber, currentPassword } = req.body;
     const cleanPhone = String(phoneNumber).trim().replace(/[\s\-()]/g, '');
@@ -711,6 +738,13 @@ const sendPhoneOtp = async (req, res, next) => {
  */
 const verifyPhoneOtp = async (req, res, next) => {
   try {
+    if (req.user.is_demo_session) {
+      return res.status(403).json({
+        success: false,
+        error: 'Phone number cannot be modified in demo access mode. Please log in using your account password.'
+      });
+    }
+
     const userId = req.user.id;
     const { phoneNumber, otp } = req.body;
     const cleanPhone = String(phoneNumber).trim().replace(/[\s\-()]/g, '');
@@ -808,6 +842,13 @@ const verifyPhoneOtp = async (req, res, next) => {
  */
 const removePhoneNumber = async (req, res, next) => {
   try {
+    if (req.user.is_demo_session) {
+      return res.status(403).json({
+        success: false,
+        error: 'Phone number cannot be modified in demo access mode. Please log in using your account password.'
+      });
+    }
+
     const userId = req.user.id;
     const { currentPassword } = req.body;
 
@@ -859,6 +900,13 @@ const removePhoneNumber = async (req, res, next) => {
  */
 const changePassword = async (req, res, next) => {
   try {
+    if (req.user.is_demo_session) {
+      return res.status(403).json({
+        success: false,
+        error: 'Credentials cannot be modified in demo access mode. Please log in using your account password.'
+      });
+    }
+
     const userId = req.user.id;
     const { currentPassword, newPassword, logoutOtherDevices = true } = req.body;
 
@@ -1320,6 +1368,13 @@ const updateNotificationSettings = async (req, res, next) => {
  */
 const deactivateAccount = async (req, res, next) => {
   try {
+    if (req.user.is_demo_session) {
+      return res.status(403).json({
+        success: false,
+        error: 'Account deactivation is disabled in demo access mode. Please log in using your account password.'
+      });
+    }
+
     const userId = req.user.id;
     const { password, reason } = req.body;
 
@@ -1376,6 +1431,13 @@ const deactivateAccount = async (req, res, next) => {
  */
 const deleteAccount = async (req, res, next) => {
   try {
+    if (req.user.is_demo_session) {
+      return res.status(403).json({
+        success: false,
+        error: 'Account deletion is disabled in demo access mode. Please log in using your account password.'
+      });
+    }
+
     const userId = req.user.id;
     const { password, confirmation } = req.body;
 

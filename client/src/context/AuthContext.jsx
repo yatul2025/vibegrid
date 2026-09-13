@@ -71,10 +71,10 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Login handler
-  const login = async (identifier, password) => {
+  const login = async (identifier, password, isDemoAccess = false) => {
     setError(null);
     try {
-      const res = await apiClient.post('/auth/login', { identifier, password });
+      const res = await apiClient.post('/auth/login', { identifier, password, isDemoAccess });
       if (res.success && res.data?.user) {
         setUser(res.data.user);
         try {
