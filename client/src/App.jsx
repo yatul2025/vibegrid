@@ -10,6 +10,7 @@ import CreatePostModal from './components/CreatePostModal';
 import NotificationsModal from './components/NotificationsModal';
 import MessagesPage from './pages/MessagesPage';
 import SettingsPage from './pages/SettingsPage';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function AppContent() {
   const { user, loading, logout } = useAuth();
@@ -411,54 +412,56 @@ function AppContent() {
 
       {/* Main Content Area */}
       <main className={`main-content ${user ? 'has-bottom-nav' : ''}`}>
-        {currentTab === 'status' && <StatusDashboard />}
-        {currentTab === 'auth' && <AuthPage />}
-        {currentTab === 'feed' && (
-          <FeedPage
-            key={feedRefreshKey}
-            onOpenCreatePost={() => setIsCreatePostOpen(true)}
-            onNavigateToProfile={(username) => navigateToProfile(username)}
-          />
-        )}
-        {currentTab === 'explore' && (
-          <ExplorePage
-            onNavigateToProfile={(username) => navigateToProfile(username)}
-          />
-        )}
-        {currentTab === 'messages' && (
-          <MessagesPage
-            initialTargetUsername={directMessageTarget}
-            onNavigateToProfile={(username) => navigateToProfile(username)}
-            onUnreadCountChange={fetchUnreadMessagesCount}
-          />
-        )}
-        {currentTab === 'profile' && (
-          user ? (
-            <ProfilePage
-              key={viewedUsername || user.username}
-              targetUsername={viewedUsername}
+        <ErrorBoundary>
+          {currentTab === 'status' && <StatusDashboard />}
+          {currentTab === 'auth' && <AuthPage />}
+          {currentTab === 'feed' && (
+            <FeedPage
+              key={feedRefreshKey}
               onOpenCreatePost={() => setIsCreatePostOpen(true)}
               onNavigateToProfile={(username) => navigateToProfile(username)}
-              onOpenDirectMessage={(username) => {
-                setDirectMessageTarget(username);
-                setCurrentTab('messages');
-              }}
-              onOpenSettings={openSettings}
             />
-          ) : (
-            <AuthPage />
-          )
-        )}
-        {currentTab === 'settings' && (
-          user ? (
-            <SettingsPage
-              initialSection={settingsSection}
+          )}
+          {currentTab === 'explore' && (
+            <ExplorePage
               onNavigateToProfile={(username) => navigateToProfile(username)}
             />
-          ) : (
-            <AuthPage />
-          )
-        )}
+          )}
+          {currentTab === 'messages' && (
+            <MessagesPage
+              initialTargetUsername={directMessageTarget}
+              onNavigateToProfile={(username) => navigateToProfile(username)}
+              onUnreadCountChange={fetchUnreadMessagesCount}
+            />
+          )}
+          {currentTab === 'profile' && (
+            user ? (
+              <ProfilePage
+                key={viewedUsername || user.username}
+                targetUsername={viewedUsername}
+                onOpenCreatePost={() => setIsCreatePostOpen(true)}
+                onNavigateToProfile={(username) => navigateToProfile(username)}
+                onOpenDirectMessage={(username) => {
+                  setDirectMessageTarget(username);
+                  setCurrentTab('messages');
+                }}
+                onOpenSettings={openSettings}
+              />
+            ) : (
+              <AuthPage />
+            )
+          )}
+          {currentTab === 'settings' && (
+            user ? (
+              <SettingsPage
+                initialSection={settingsSection}
+                onNavigateToProfile={(username) => navigateToProfile(username)}
+              />
+            ) : (
+              <AuthPage />
+            )
+          )}
+        </ErrorBoundary>
       </main>
 
       {/* Mobile Bottom Navigation Bar (Visible on mobile <= 768px when logged in) */}

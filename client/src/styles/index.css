@@ -2715,15 +2715,22 @@ body {
   transform: translateX(20px);
 }
 
+.switch-toggle:has(input:disabled) {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .switch-toggle input:disabled + .switch-slider {
   opacity: 0.35;
   cursor: not-allowed;
   filter: grayscale(1);
+  pointer-events: none;
 }
 
 .privacy-select-input:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  pointer-events: none;
   background-color: rgba(255, 255, 255, 0.04);
 }
 

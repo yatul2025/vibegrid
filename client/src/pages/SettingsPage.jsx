@@ -25,11 +25,6 @@ const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_
 export default function SettingsPage({ initialSection = 'profile', onNavigateToProfile }) {
   const { user: currentUser, updateUser, logout } = useAuth();
 
-  const isDemoUser = Boolean(
-    currentUser?.is_demo_session ||
-    DEMO_USERNAMES.includes((currentUser?.username || '').toLowerCase())
-  );
-
   // Active section: 'profile' | 'contact' | 'security' | 'privacy' | 'notifications' | 'danger'
   const [activeSection, setActiveSection] = useState(initialSection || 'profile');
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -41,12 +36,21 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   // Profile data & form states (initialized with currentUser to prevent flash of empty/undefined data)
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profile, setProfile] = useState(currentUser || null);
+
+  const isDemoUser = Boolean(
+    currentUser?.is_demo_session ||
+    DEMO_USERNAMES.includes((currentUser?.username || '').toLowerCase()) ||
+    DEMO_USERNAMES.includes((profile?.username || '').toLowerCase())
+  );
+
   const [editUsername, setEditUsername] = useState(currentUser?.username || '');
   const [editFullName, setEditFullName] = useState(currentUser?.full_name || '');
   const [editBio, setEditBio] = useState(currentUser?.bio || '');
   const [editWebsite, setEditWebsite] = useState(currentUser?.website || '');
   const [editLocation, setEditLocation] = useState(currentUser?.location || '');
-  const [editDateOfBirth, setEditDateOfBirth] = useState(currentUser?.date_of_birth ? currentUser.date_of_birth.substring(0, 10) : '');
+  const [editDateOfBirth, setEditDateOfBirth] = useState(
+    currentUser?.date_of_birth ? String(currentUser.date_of_birth).substring(0, 10) : ''
+  );
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Avatar Upload States
@@ -192,7 +196,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
           setEditBio(u.bio || currentUser.bio || '');
           setEditWebsite(u.website || currentUser.website || '');
           setEditLocation(u.location || currentUser.location || '');
-          setEditDateOfBirth(u.date_of_birth ? u.date_of_birth.substring(0, 10) : '');
+          setEditDateOfBirth(u.date_of_birth ? String(u.date_of_birth).substring(0, 10) : '');
           setAvatarPreview(u.avatar_url || currentUser.avatar_url || '/uploads/avatars/default-avatar.png');
         }
       } catch (err) {
@@ -842,7 +846,12 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                   >
                     <span className="settings-nav-icon">{cat.icon}</span>
                     <div className="settings-nav-info">
-                      <span className="settings-nav-label">{cat.label}</span>
+                      <span className="settings-nav-label">
+                        {cat.label}
+                        {isDemoUser && (
+                          <span style={{ fontSize: '11px', color: '#f87171', marginLeft: '6px' }}>🔒</span>
+                        )}
+                      </span>
                       <span className="settings-nav-desc">{cat.description}</span>
                     </div>
                     {isMobile && <span className="settings-nav-chevron">›</span>}
@@ -980,14 +989,14 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     <div className="form-group">
                       <div className="form-label-with-counter">
                         <label htmlFor="settingsBio">Bio</label>
-                        <span className={`char-counter ${150 - editBio.length < 20 ? 'counter-warning' : ''}`}>
-                          {150 - editBio.length} left
+                        <span className={`char-counter ${150 - (editBio || '').length < 20 ? 'counter-warning' : ''}`}>
+                          {150 - (editBio || '').length} left
                         </span>
                       </div>
                       <textarea
                         id="settingsBio"
                         className="form-input form-textarea"
-                        value={editBio}
+                        value={editBio || ''}
                         onChange={(e) => setEditBio(e.target.value.slice(0, 150))}
                         placeholder="Tell the community about yourself..."
                         rows={3}
@@ -1001,7 +1010,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         id="settingsWebsite"
                         type="url"
                         className="form-input"
-                        value={editWebsite}
+                        value={editWebsite || ''}
                         onChange={(e) => setEditWebsite(e.target.value)}
                         placeholder="https://yourwebsite.com"
                         disabled={savingProfile || isDemoUser}
@@ -1015,7 +1024,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           id="settingsLocation"
                           type="text"
                           className="form-input"
-                          value={editLocation}
+                          value={editLocation || ''}
                           onChange={(e) => setEditLocation(e.target.value)}
                           placeholder="e.g. San Francisco, CA"
                           disabled={savingProfile || isDemoUser}
@@ -1027,7 +1036,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           id="settingsDob"
                           type="date"
                           className="form-input"
-                          value={editDateOfBirth}
+                          value={editDateOfBirth || ''}
                           onChange={(e) => setEditDateOfBirth(e.target.value)}
                           disabled={savingProfile || isDemoUser}
                         />
@@ -1038,7 +1047,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <button
                         type="submit"
                         className="btn-primary"
-                        disabled={savingProfile || editBio.length > 150 || !editUsername.trim() || isDemoUser}
+                        disabled={savingProfile || (editBio || '').length > 150 || !(editUsername || '').trim() || isDemoUser}
                       >
                         {isDemoUser ? '🔒 Profile Locked (Demo)' : (savingProfile ? 'Saving...' : 'Save Profile Changes')}
                       </button>

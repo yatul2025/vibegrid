@@ -217,7 +217,7 @@ export default function ProfilePage({
         setEditBio(res.data.profile.bio || '');
         setEditWebsite(res.data.profile.website || '');
         setEditLocation(res.data.profile.location || '');
-        setEditDob(res.data.profile.date_of_birth ? res.data.profile.date_of_birth.split('T')[0] : '');
+        setEditDob(res.data.profile.date_of_birth ? String(res.data.profile.date_of_birth).split('T')[0] : '');
       } else {
         setError(res.error || 'Failed to load profile.');
       }
@@ -491,7 +491,7 @@ export default function ProfilePage({
         setEditBio(updated.bio || '');
         setEditWebsite(updated.website || '');
         setEditLocation(updated.location || '');
-        setEditDob(updated.date_of_birth ? updated.date_of_birth.split('T')[0] : '');
+        setEditDob(updated.date_of_birth ? String(updated.date_of_birth).split('T')[0] : '');
 
         // Sync with global AuthContext
         updateUser(updated);
@@ -1410,14 +1410,14 @@ export default function ProfilePage({
               <div className="edit-form-field">
                 <div className="field-header-row">
                   <label htmlFor="editUsername">Username</label>
-                  <span className="char-counter">@{editUsername}</span>
+                  <span className="char-counter">@{editUsername || ''}</span>
                 </div>
                 <input
                   type="text"
                   id="editUsername"
                   maxLength={30}
                   placeholder="username"
-                  value={editUsername}
+                  value={editUsername || ''}
                   onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30))}
                   required
                   disabled={savingProfile || isDemoUser}
@@ -1432,14 +1432,14 @@ export default function ProfilePage({
               <div className="edit-form-field">
                 <div className="field-header-row">
                   <label htmlFor="editFullName">Full Name</label>
-                  <span className="char-counter">{editFullName.length}/100</span>
+                  <span className="char-counter">{(editFullName || '').length}/100</span>
                 </div>
                 <input
                   type="text"
                   id="editFullName"
                   maxLength={100}
                   placeholder="Your full name"
-                  value={editFullName}
+                  value={editFullName || ''}
                   onChange={(e) => setEditFullName(e.target.value.slice(0, 100))}
                   disabled={savingProfile || isDemoUser}
                 />
@@ -1448,8 +1448,8 @@ export default function ProfilePage({
               <div className="edit-form-field">
                 <div className="field-header-row">
                   <label htmlFor="editBio">Bio</label>
-                  <span className={`char-counter ${150 - editBio.length <= 15 ? 'warning' : ''}`}>
-                    {editBio.length}/150 ({Math.max(0, 150 - editBio.length)} left)
+                  <span className={`char-counter ${150 - (editBio || '').length <= 15 ? 'warning' : ''}`}>
+                    {(editBio || '').length}/150 ({Math.max(0, 150 - (editBio || '').length)} left)
                   </span>
                 </div>
                 <textarea
@@ -1457,7 +1457,7 @@ export default function ProfilePage({
                   maxLength={150}
                   rows={3}
                   placeholder="Share a short bio (max 150 characters)..."
-                  value={editBio}
+                  value={editBio || ''}
                   disabled={savingProfile || isDemoUser}
                   onChange={(e) => {
                     const text = e.target.value;
@@ -1499,7 +1499,7 @@ export default function ProfilePage({
                     id="editWebsite"
                     maxLength={255}
                     placeholder="https://example.com"
-                    value={editWebsite}
+                    value={editWebsite || ''}
                     onChange={(e) => setEditWebsite(e.target.value)}
                     disabled={savingProfile || isDemoUser}
                   />
@@ -1508,14 +1508,14 @@ export default function ProfilePage({
                 <div className="edit-form-field" style={{ flex: 1 }}>
                   <div className="field-header-row">
                     <label htmlFor="editLocation">Location</label>
-                    <span className="char-counter">{editLocation.length}/100</span>
+                    <span className="char-counter">{(editLocation || '').length}/100</span>
                   </div>
                   <input
                     type="text"
                     id="editLocation"
                     maxLength={100}
                     placeholder="City, Country"
-                    value={editLocation}
+                    value={editLocation || ''}
                     onChange={(e) => setEditLocation(e.target.value.slice(0, 100))}
                     disabled={savingProfile || isDemoUser}
                   />
@@ -1529,7 +1529,7 @@ export default function ProfilePage({
                 <input
                   type="date"
                   id="editDob"
-                  value={editDob}
+                  value={editDob || ''}
                   max={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setEditDob(e.target.value)}
                   disabled={savingProfile || isDemoUser}
@@ -1555,7 +1555,7 @@ export default function ProfilePage({
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={savingProfile || editBio.length > 150 || editFullName.length > 100 || !editUsername.trim() || isDemoUser}
+                  disabled={savingProfile || (editBio || '').length > 150 || (editFullName || '').length > 100 || !(editUsername || '').trim() || isDemoUser}
                 >
                   {isDemoUser ? '🔒 Profile Locked (Demo)' : (savingProfile ? 'Saving...' : 'Save Changes')}
                 </button>
@@ -1563,12 +1563,12 @@ export default function ProfilePage({
                   type="button"
                   className="btn-secondary"
                   onClick={() => {
-                    setEditUsername(profile.username || '');
-                    setEditFullName(profile.full_name || '');
-                    setEditBio(profile.bio || '');
-                    setEditWebsite(profile.website || '');
-                    setEditLocation(profile.location || '');
-                    setEditDob(profile.date_of_birth ? profile.date_of_birth.split('T')[0] : '');
+                    setEditUsername(profile?.username || '');
+                    setEditFullName(profile?.full_name || '');
+                    setEditBio(profile?.bio || '');
+                    setEditWebsite(profile?.website || '');
+                    setEditLocation(profile?.location || '');
+                    setEditDob(profile?.date_of_birth ? String(profile.date_of_birth).split('T')[0] : '');
                     setIsEditing(false);
                   }}
                 >

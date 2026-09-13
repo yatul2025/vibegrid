@@ -13,6 +13,8 @@ const { hashPassword, comparePassword } = require('../utils/password');
 const { generateToken, setAuthCookie } = require('../utils/jwt');
 const { parseUserAgent, getClientIp, getApproxLocation } = require('../utils/deviceParser');
 
+const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+
 /**
  * Helper to record an active device session in user_sessions table
  */
@@ -187,7 +189,7 @@ const login = async (req, res, next) => {
     // 7. Exclude password_hash & token_version from response, attach is_demo_session
     delete user.password_hash;
     delete user.token_version;
-    user.is_demo_session = isDemoAccess;
+    user.is_demo_session = Boolean(isDemoAccess || DEMO_USERNAMES.includes((user.username || '').toLowerCase()));
 
     res.status(200).json({
       success: true,
