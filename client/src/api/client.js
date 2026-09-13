@@ -50,6 +50,19 @@ export const apiClient = {
     return handleResponse(res, endpoint);
   },
 
+  async patch(endpoint, body) {
+    const isFormData = body instanceof FormData;
+    const headers = isFormData ? {} : { 'Content-Type': 'application/json' };
+
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers,
+      body: isFormData ? body : JSON.stringify(body)
+    });
+    return handleResponse(res, endpoint);
+  },
+
   async delete(endpoint, body) {
     const isFormData = body instanceof FormData;
     const headers = body ? (isFormData ? {} : { 'Content-Type': 'application/json' }) : {};
