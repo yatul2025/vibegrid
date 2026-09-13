@@ -20,8 +20,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 
+const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+
 export default function SettingsPage({ initialSection = 'profile', onNavigateToProfile }) {
   const { user: currentUser, updateUser, logout } = useAuth();
+
+  const isDemoUser = Boolean(
+    currentUser?.is_demo_session ||
+    DEMO_USERNAMES.includes((currentUser?.username || '').toLowerCase())
+  );
 
   // Active section: 'profile' | 'contact' | 'security' | 'privacy' | 'notifications' | 'danger'
   const [activeSection, setActiveSection] = useState(initialSection || 'profile');
@@ -216,6 +223,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   const handleAvatarFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Profile photo cannot be changed on official demo accounts.' });
+      return;
+    }
     if (!file.type.startsWith('image/')) {
       setFeedbackMsg({ type: 'error', text: 'Please choose an image file (JPG, PNG, GIF, WebP).' });
       return;
@@ -232,6 +243,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   const handleUploadAvatar = async () => {
     if (!avatarFile) return;
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Profile photo cannot be changed on official demo accounts.' });
+      return;
+    }
     try {
       setAvatarUploading(true);
       const formData = new FormData();
@@ -253,6 +268,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   };
 
   const handleRemoveAvatar = async () => {
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Profile photo cannot be removed on official demo accounts.' });
+      return;
+    }
     try {
       setAvatarUploading(true);
       const res = await apiClient.delete('/users/avatar');
@@ -274,6 +293,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Profile details cannot be modified on official demo accounts.' });
+      return;
+    }
     try {
       setSavingProfile(true);
       const res = await apiClient.put('/users/profile', {
@@ -551,6 +574,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   };
 
   const handleUpdatePrivacy = async (updatedFields) => {
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Privacy settings are locked for official demo accounts.' });
+      return;
+    }
     const newSettings = { ...privacySettings, ...updatedFields };
     setPrivacySettings(newSettings);
     try {
@@ -589,6 +616,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   };
 
   const handleUpdateNotification = async (updatedFields) => {
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Notification preferences are locked for official demo accounts.' });
+      return;
+    }
     const newSettings = { ...notificationSettings, ...updatedFields };
     setNotificationSettings(newSettings);
     try {
@@ -744,7 +775,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
         )}
 
         {/* Demo Mode Security Notice */}
-        {currentUser?.is_demo_session && (
+        {isDemoUser && (
           <div className="settings-alert-banner warning" style={{
             display: 'flex',
             alignItems: 'center',
@@ -759,10 +790,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
             <span style={{ fontSize: '20px' }}>🔒</span>
             <div style={{ flex: 1 }}>
               <strong style={{ color: '#fff', display: 'block', fontSize: '14px', marginBottom: '2px' }}>
-                Demo Access Mode Active
+                Official Demo Account (Read-Only)
               </strong>
               <span>
-                You are currently browsing via 1-click Demo Access. Modifying credentials (username, email, phone, password, or deleting account) is locked. To edit credentials, log in directly using your account password.
+                You are currently browsing an official showcase demo account. Profile details, avatar photo, contact info, privacy controls, notification preferences, and credentials are locked in read-only mode.
               </span>
             </div>
           </div>
@@ -877,7 +908,8 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           type="button"
                           className="btn-primary btn-sm"
                           onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                          disabled={avatarUploading}
+                          disabled={avatarUploading || isDemoUser}
+                          title={isDemoUser ? 'Locked on official demo accounts' : undefined}
                         >
                           Change Photo
                         </button>
@@ -886,7 +918,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="button"
                             className="btn-secondary btn-sm"
                             onClick={handleUploadAvatar}
-                            disabled={avatarUploading}
+                            disabled={avatarUploading || isDemoUser}
                           >
                             Save Photo
                           </button>
@@ -897,7 +929,8 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             className="btn-secondary btn-sm"
                             style={{ color: 'var(--danger)' }}
                             onClick={handleRemoveAvatar}
-                            disabled={avatarUploading}
+                            disabled={avatarUploading || isDemoUser}
+                            title={isDemoUser ? 'Locked on official demo accounts' : undefined}
                           >
                             Remove
                           </button>
@@ -911,7 +944,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                   <form onSubmit={handleSaveProfile} className="settings-form">
                     <div className="form-group">
                       <label htmlFor="settingsUsername">
-                        Username {currentUser?.is_demo_session && <span style={{ fontSize: '11px', color: '#f87171' }}>🔒 (Locked in Demo Mode)</span>}
+                        Username {isDemoUser && <span style={{ fontSize: '11px', color: '#f87171' }}>🔒 (Locked in Demo Mode)</span>}
                       </label>
                       <input
                         id="settingsUsername"
@@ -921,11 +954,11 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                         maxLength={30}
                         required
-                        disabled={savingProfile || currentUser?.is_demo_session}
+                        disabled={savingProfile || isDemoUser}
                       />
-                      <span className="form-input-hint" style={{ color: currentUser?.is_demo_session ? '#f87171' : undefined }}>
-                        {currentUser?.is_demo_session
-                          ? '🔒 Username cannot be modified in demo access mode. Log in with password to change it.'
+                      <span className="form-input-hint" style={{ color: isDemoUser ? '#f87171' : undefined }}>
+                        {isDemoUser
+                          ? '🔒 Username cannot be modified on official demo accounts.'
                           : 'Your unique @handle on VibeGrid (letters, numbers, underscore).'}
                       </span>
                     </div>
@@ -940,6 +973,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         onChange={(e) => setEditFullName(e.target.value)}
                         maxLength={100}
                         placeholder="Your full name"
+                        disabled={savingProfile || isDemoUser}
                       />
                     </div>
 
@@ -957,6 +991,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         onChange={(e) => setEditBio(e.target.value.slice(0, 150))}
                         placeholder="Tell the community about yourself..."
                         rows={3}
+                        disabled={savingProfile || isDemoUser}
                       />
                     </div>
 
@@ -969,6 +1004,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         value={editWebsite}
                         onChange={(e) => setEditWebsite(e.target.value)}
                         placeholder="https://yourwebsite.com"
+                        disabled={savingProfile || isDemoUser}
                       />
                     </div>
 
@@ -982,6 +1018,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           value={editLocation}
                           onChange={(e) => setEditLocation(e.target.value)}
                           placeholder="e.g. San Francisco, CA"
+                          disabled={savingProfile || isDemoUser}
                         />
                       </div>
                       <div className="form-group form-col">
@@ -992,6 +1029,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           className="form-input"
                           value={editDateOfBirth}
                           onChange={(e) => setEditDateOfBirth(e.target.value)}
+                          disabled={savingProfile || isDemoUser}
                         />
                       </div>
                     </div>
@@ -1000,9 +1038,9 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <button
                         type="submit"
                         className="btn-primary"
-                        disabled={savingProfile || editBio.length > 150 || !editUsername.trim()}
+                        disabled={savingProfile || editBio.length > 150 || !editUsername.trim() || isDemoUser}
                       >
-                        {savingProfile ? 'Saving...' : 'Save Profile Changes'}
+                        {isDemoUser ? '🔒 Profile Locked (Demo)' : (savingProfile ? 'Saving...' : 'Save Profile Changes')}
                       </button>
                     </div>
                   </form>
@@ -1035,9 +1073,9 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <span className="account-mgmt-val-text">{profile?.email || 'No email registered'}</span>
                     </div>
 
-                    {currentUser?.is_demo_session && (
+                    {isDemoUser && (
                       <span className="settings-subtext" style={{ color: '#f87171', display: 'block', marginBottom: '8px' }}>
-                        🔒 Email modification is locked in demo access mode.
+                        🔒 Email modification is locked on official demo accounts.
                       </span>
                     )}
 
@@ -1048,13 +1086,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         placeholder="Enter new email address (e.g. user@example.com)"
                         value={newEmail}
                         onChange={(e) => setNewEmail(e.target.value)}
-                        disabled={sendingEmailOtp || verifyingEmailOtp || currentUser?.is_demo_session}
+                        disabled={sendingEmailOtp || verifyingEmailOtp || isDemoUser}
                       />
                       <button
                         type="button"
                         className="btn-primary"
                         onClick={handleSendEmailOtp}
-                        disabled={sendingEmailOtp || verifyingEmailOtp || otpCountdown > 0 || currentUser?.is_demo_session}
+                        disabled={sendingEmailOtp || verifyingEmailOtp || otpCountdown > 0 || isDemoUser}
                       >
                         {sendingEmailOtp
                           ? 'Sending...'
@@ -1079,13 +1117,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             maxLength={6}
                             value={emailOtp}
                             onChange={(e) => setEmailOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                            disabled={verifyingEmailOtp || currentUser?.is_demo_session}
+                            disabled={verifyingEmailOtp || isDemoUser}
                           />
                           <button
                             type="button"
                             className="btn-primary"
                             onClick={handleVerifyEmailOtp}
-                            disabled={verifyingEmailOtp || emailOtp.length !== 6 || currentUser?.is_demo_session}
+                            disabled={verifyingEmailOtp || emailOtp.length !== 6 || isDemoUser}
                           >
                             {verifyingEmailOtp ? 'Verifying...' : 'Verify & Save'}
                           </button>
@@ -1106,9 +1144,9 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <span className="account-mgmt-subtitle">Used for multi-factor security and account recovery</span>
                     </div>
 
-                    {currentUser?.is_demo_session && (
+                    {isDemoUser && (
                       <span className="settings-subtext" style={{ color: '#f87171', display: 'block', marginBottom: '8px' }}>
-                        🔒 Phone number modification is locked in demo access mode.
+                        🔒 Phone number modification is locked on official demo accounts.
                       </span>
                     )}
 
@@ -1121,7 +1159,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           type="button"
                           className="btn-text-danger"
                           onClick={handleRemovePhone}
-                          disabled={removingPhone || currentUser?.is_demo_session}
+                          disabled={removingPhone || isDemoUser}
                         >
                           {removingPhone ? 'Removing...' : 'Unlink Phone'}
                         </button>
@@ -1135,13 +1173,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         placeholder="Enter phone with country code (e.g. +14155552671)"
                         value={newPhone}
                         onChange={(e) => setNewPhone(e.target.value)}
-                        disabled={sendingPhoneOtp || verifyingPhoneOtp || currentUser?.is_demo_session}
+                        disabled={sendingPhoneOtp || verifyingPhoneOtp || isDemoUser}
                       />
                       <button
                         type="button"
                         className="btn-primary"
                         onClick={handleSendPhoneOtp}
-                        disabled={sendingPhoneOtp || verifyingPhoneOtp || phoneOtpCountdown > 0 || !newPhone.trim() || currentUser?.is_demo_session}
+                        disabled={sendingPhoneOtp || verifyingPhoneOtp || phoneOtpCountdown > 0 || !newPhone.trim() || isDemoUser}
                       >
                         {sendingPhoneOtp
                           ? 'Sending...'
@@ -1166,13 +1204,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             maxLength={6}
                             value={phoneOtp}
                             onChange={(e) => setPhoneOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                            disabled={verifyingPhoneOtp}
+                            disabled={verifyingPhoneOtp || isDemoUser}
                           />
                           <button
                             type="button"
                             className="btn-primary"
                             onClick={handleVerifyPhoneOtp}
-                            disabled={verifyingPhoneOtp || phoneOtp.length !== 6}
+                            disabled={verifyingPhoneOtp || phoneOtp.length !== 6 || isDemoUser}
                           >
                             {verifyingPhoneOtp ? 'Verifying...' : 'Verify Phone'}
                           </button>
@@ -1202,7 +1240,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <span className="account-mgmt-subtitle">Choose a strong password with at least 8 characters</span>
                     </div>
 
-                    {currentUser?.is_demo_session && (
+                    {isDemoUser && (
                       <div style={{
                         background: 'rgba(239, 68, 68, 0.1)',
                         border: '1px solid rgba(239, 68, 68, 0.3)',
@@ -1212,7 +1250,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         color: '#f87171',
                         fontSize: '13px'
                       }}>
-                        🔒 Password modification is locked in demo access mode. Please log in using your account password to update it.
+                        🔒 Password modification is locked on official demo accounts.
                       </div>
                     )}
 
@@ -1227,7 +1265,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             placeholder="Enter current password"
                             value={currentPassword}
                             onChange={(e) => setCurrentPassword(e.target.value)}
-                            disabled={changingPassword || currentUser?.is_demo_session}
+                            disabled={changingPassword || isDemoUser}
                             required
                           />
                           <button
@@ -1251,7 +1289,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             placeholder="Enter new password (8+ chars)"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            disabled={changingPassword || currentUser?.is_demo_session}
+                            disabled={changingPassword || isDemoUser}
                             required
                           />
                           <button
@@ -1294,7 +1332,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             placeholder="Confirm new password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            disabled={changingPassword || currentUser?.is_demo_session}
+                            disabled={changingPassword || isDemoUser}
                             required
                           />
                           <button
@@ -1317,7 +1355,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         <button
                           type="submit"
                           className="btn-primary"
-                          disabled={changingPassword || !currentPassword || !newPassword || newPassword !== confirmPassword || currentUser?.is_demo_session}
+                          disabled={changingPassword || !currentPassword || !newPassword || newPassword !== confirmPassword || isDemoUser}
                         >
                           {changingPassword ? 'Updating Password...' : 'Update Password'}
                         </button>
@@ -1408,6 +1446,20 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     <p>Control who can see your media, send you messages, comment, and see your activity.</p>
                   </div>
 
+                  {isDemoUser && (
+                    <div style={{
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      marginBottom: '16px',
+                      color: '#f87171',
+                      fontSize: '13px'
+                    }}>
+                      🔒 Privacy and permissions settings are locked on official demo accounts.
+                    </div>
+                  )}
+
                   <div className="account-mgmt-card">
                     {/* Private Account Toggle */}
                     <div className="privacy-toggle-row">
@@ -1420,7 +1472,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           type="checkbox"
                           checked={Boolean(privacySettings.is_private)}
                           onChange={(e) => handleUpdatePrivacy({ is_private: e.target.checked })}
-                          disabled={savingPrivacy}
+                          disabled={savingPrivacy || isDemoUser}
                         />
                         <span className="switch-slider" />
                       </label>
@@ -1443,7 +1495,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           className="privacy-select-input"
                           value={privacySettings.allow_messages_from || 'everyone'}
                           onChange={(e) => handleUpdatePrivacy({ allow_messages_from: e.target.value })}
-                          disabled={savingPrivacy}
+                          disabled={savingPrivacy || isDemoUser}
                         >
                           <option value="everyone">Everyone</option>
                           <option value="following">People You Follow</option>
@@ -1462,7 +1514,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           className="privacy-select-input"
                           value={privacySettings.allow_comments_from || 'everyone'}
                           onChange={(e) => handleUpdatePrivacy({ allow_comments_from: e.target.value })}
-                          disabled={savingPrivacy}
+                          disabled={savingPrivacy || isDemoUser}
                         >
                           <option value="everyone">Everyone</option>
                           <option value="following">People You Follow</option>
@@ -1481,7 +1533,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           className="privacy-select-input"
                           value={privacySettings.allow_mentions_from || 'everyone'}
                           onChange={(e) => handleUpdatePrivacy({ allow_mentions_from: e.target.value })}
-                          disabled={savingPrivacy}
+                          disabled={savingPrivacy || isDemoUser}
                         >
                           <option value="everyone">Everyone</option>
                           <option value="following">People You Follow</option>
@@ -1500,7 +1552,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           className="privacy-select-input"
                           value={privacySettings.story_visibility || 'everyone'}
                           onChange={(e) => handleUpdatePrivacy({ story_visibility: e.target.value })}
-                          disabled={savingPrivacy}
+                          disabled={savingPrivacy || isDemoUser}
                         >
                           <option value="everyone">Everyone</option>
                           <option value="following">People You Follow</option>
@@ -1525,7 +1577,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(privacySettings.show_online_status)}
                             onChange={(e) => handleUpdatePrivacy({ show_online_status: e.target.checked })}
-                            disabled={savingPrivacy}
+                            disabled={savingPrivacy || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1542,7 +1594,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(privacySettings.show_read_receipts)}
                             onChange={(e) => handleUpdatePrivacy({ show_read_receipts: e.target.checked })}
-                            disabled={savingPrivacy}
+                            disabled={savingPrivacy || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1562,6 +1614,20 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     <p>Customize the push alerts and activity notices you receive.</p>
                   </div>
 
+                  {isDemoUser && (
+                    <div style={{
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      marginBottom: '16px',
+                      color: '#f87171',
+                      fontSize: '13px'
+                    }}>
+                      🔒 Notification preferences are locked on official demo accounts.
+                    </div>
+                  )}
+
                   <div className="account-mgmt-card">
                     {/* Activity Group */}
                     <div className="privacy-group">
@@ -1578,7 +1644,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_likes)}
                             onChange={(e) => handleUpdateNotification({ notif_likes: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1595,7 +1661,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_comments)}
                             onChange={(e) => handleUpdateNotification({ notif_comments: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1612,7 +1678,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_follows)}
                             onChange={(e) => handleUpdateNotification({ notif_follows: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1629,7 +1695,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_messages)}
                             onChange={(e) => handleUpdateNotification({ notif_messages: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1646,7 +1712,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_mentions)}
                             onChange={(e) => handleUpdateNotification({ notif_mentions: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1663,7 +1729,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_tags)}
                             onChange={(e) => handleUpdateNotification({ notif_tags: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1680,7 +1746,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_stories)}
                             onChange={(e) => handleUpdateNotification({ notif_stories: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1704,7 +1770,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_security)}
                             onChange={(e) => handleUpdateNotification({ notif_security: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1721,7 +1787,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_email)}
                             onChange={(e) => handleUpdateNotification({ notif_email: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1742,7 +1808,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                   </div>
 
                   <div className="account-mgmt-card danger-zone-card">
-                    {currentUser?.is_demo_session && (
+                    {isDemoUser && (
                       <div style={{
                         background: 'rgba(239, 68, 68, 0.1)',
                         border: '1px solid rgba(239, 68, 68, 0.3)',
@@ -1752,7 +1818,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         color: '#f87171',
                         fontSize: '13px'
                       }}>
-                        🔒 Account deactivation and deletion are disabled in demo access mode.
+                        🔒 Account deactivation and deletion are locked on official demo accounts.
                       </div>
                     )}
 
@@ -1768,7 +1834,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <button
                         type="button"
                         className="btn-danger-outline"
-                        disabled={currentUser?.is_demo_session}
+                        disabled={isDemoUser}
                         onClick={() => {
                           setDeactivatePassword('');
                           setDeactivateError('');
@@ -1794,7 +1860,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <button
                         type="button"
                         className="btn-danger-solid"
-                        disabled={currentUser?.is_demo_session}
+                        disabled={isDemoUser}
                         style={{ fontSize: '0.82rem', padding: '8px 16px', whiteSpace: 'nowrap' }}
                         onClick={() => {
                           setDeletePassword('');

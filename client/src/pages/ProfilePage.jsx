@@ -19,6 +19,8 @@ import FollowListModal from '../components/FollowListModal';
 import HashtagFeedModal from '../components/HashtagFeedModal';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 
+const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+
 export default function ProfilePage({
   targetUsername,
   onOpenCreatePost,
@@ -27,6 +29,12 @@ export default function ProfilePage({
   onOpenSettings
 }) {
   const { user: currentUser, updateUser, logout } = useAuth();
+
+  const isDemoUser = Boolean(
+    currentUser?.is_demo_session ||
+    DEMO_USERNAMES.includes((currentUser?.username || '').toLowerCase()) ||
+    DEMO_USERNAMES.includes((targetUsername || '').toLowerCase())
+  );
 
   // Determine which username to display (defaults to logged-in user)
   const usernameToFetch = targetUsername || currentUser?.username;
@@ -403,6 +411,10 @@ export default function ProfilePage({
   // Handle Profile Update (Username, Full Name, Bio, Website, Location, DOB)
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    if (isDemoUser) {
+      setProfileMsg({ type: 'error', text: '🔒 Profile details cannot be modified on official demo accounts.' });
+      return;
+    }
     setSavingProfile(true);
     setProfileMsg(null);
 
@@ -503,6 +515,10 @@ export default function ProfilePage({
 
   // Handle Avatar Removal (Revert to default)
   const handleRemoveAvatar = async () => {
+    if (isDemoUser) {
+      setAvatarError('🔒 Profile photo cannot be removed on official demo accounts.');
+      return;
+    }
     if (!window.confirm('Are you sure you want to remove your profile picture?')) return;
     try {
       setRemovingAvatar(true);
@@ -748,6 +764,11 @@ export default function ProfilePage({
   const handleAvatarSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (isDemoUser) {
+      setAvatarError('🔒 Profile photo cannot be changed on official demo accounts.');
+      return;
+    }
 
     // Validate size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
@@ -1172,14 +1193,20 @@ export default function ProfilePage({
             <button
               type="button"
               className="profile-avatar-camera-badge"
-              title="Change or remove profile picture"
-              onClick={() => setShowAvatarModal(true)}
-              disabled={uploadingAvatar || removingAvatar}
+              title={isDemoUser ? 'Profile photo is locked on demo accounts' : 'Change or remove profile picture'}
+              onClick={() => {
+                if (isDemoUser) {
+                  setAvatarError('🔒 Profile photo cannot be changed on official demo accounts.');
+                  return;
+                }
+                setShowAvatarModal(true);
+              }}
+              disabled={uploadingAvatar || removingAvatar || isDemoUser}
             >
               {uploadingAvatar || removingAvatar ? (
                 <span className="badge-spinner" />
               ) : (
-                <span className="badge-camera-icon">📷</span>
+                <span className="badge-camera-icon">{isDemoUser ? '🔒' : '📷'}</span>
               )}
             </button>
           )}
@@ -1209,9 +1236,17 @@ export default function ProfilePage({
                   <button
                     type="button"
                     className="btn-profile-primary"
-                    onClick={() => setIsEditing(!isEditing)}
+                    onClick={() => {
+                      if (isDemoUser) {
+                        setAvatarError('🔒 Profile editing is locked on official demo accounts.');
+                        return;
+                      }
+                      setIsEditing(!isEditing);
+                    }}
+                    disabled={isDemoUser}
+                    title={isDemoUser ? 'Official demo accounts are read-only' : undefined}
                   >
-                    ✏️ {isEditing ? 'Cancel' : 'Edit Profile'}
+                    {isDemoUser ? '🔒 Profile Locked' : (isEditing ? 'Cancel' : '✏️ Edit Profile')}
                   </button>
                   <button
                     type="button"
@@ -1359,6 +1394,19 @@ export default function ProfilePage({
           ) : (
             /* Inline Edit Profile Form */
             <form onSubmit={handleSaveProfile} className="profile-edit-form">
+              {isDemoUser && (
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  marginBottom: '16px',
+                  color: '#f87171',
+                  fontSize: '13px'
+                }}>
+                  🔒 Profile details are locked on official demo accounts.
+                </div>
+              )}
               <div className="edit-form-field">
                 <div className="field-header-row">
                   <label htmlFor="editUsername">Username</label>
@@ -1372,11 +1420,11 @@ export default function ProfilePage({
                   value={editUsername}
                   onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30))}
                   required
-                  disabled={isSaving || currentUser?.is_demo_session}
+                  disabled={savingProfile || isDemoUser}
                 />
-                <span className="field-hint" style={{ color: currentUser?.is_demo_session ? '#f87171' : undefined }}>
-                  {currentUser?.is_demo_session
-                    ? '🔒 Username cannot be modified in demo access mode. Log in with password to change it.'
+                <span className="field-hint" style={{ color: isDemoUser ? '#f87171' : undefined }}>
+                  {isDemoUser
+                    ? '🔒 Username cannot be modified on official demo accounts.'
                     : '3–30 characters, letters, numbers, and underscores only.'}
                 </span>
               </div>
@@ -1393,6 +1441,7 @@ export default function ProfilePage({
                   placeholder="Your full name"
                   value={editFullName}
                   onChange={(e) => setEditFullName(e.target.value.slice(0, 100))}
+                  disabled={savingProfile || isDemoUser}
                 />
               </div>
 
@@ -1409,6 +1458,7 @@ export default function ProfilePage({
                   rows={3}
                   placeholder="Share a short bio (max 150 characters)..."
                   value={editBio}
+                  disabled={savingProfile || isDemoUser}
                   onChange={(e) => {
                     const text = e.target.value;
                     // Strict clamp to 150 characters
@@ -1451,6 +1501,7 @@ export default function ProfilePage({
                     placeholder="https://example.com"
                     value={editWebsite}
                     onChange={(e) => setEditWebsite(e.target.value)}
+                    disabled={savingProfile || isDemoUser}
                   />
                 </div>
 
@@ -1466,6 +1517,7 @@ export default function ProfilePage({
                     placeholder="City, Country"
                     value={editLocation}
                     onChange={(e) => setEditLocation(e.target.value.slice(0, 100))}
+                    disabled={savingProfile || isDemoUser}
                   />
                 </div>
               </div>
@@ -1480,6 +1532,7 @@ export default function ProfilePage({
                   value={editDob}
                   max={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setEditDob(e.target.value)}
+                  disabled={savingProfile || isDemoUser}
                 />
               </div>
 
@@ -1502,9 +1555,9 @@ export default function ProfilePage({
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={savingProfile || editBio.length > 150 || editFullName.length > 100 || !editUsername.trim()}
+                  disabled={savingProfile || editBio.length > 150 || editFullName.length > 100 || !editUsername.trim() || isDemoUser}
                 >
-                  {savingProfile ? 'Saving...' : 'Save Changes'}
+                  {isDemoUser ? '🔒 Profile Locked (Demo)' : (savingProfile ? 'Saving...' : 'Save Changes')}
                 </button>
                 <button
                   type="button"
@@ -1972,9 +2025,15 @@ export default function ProfilePage({
                 type="button"
                 className="avatar-modal-btn btn-photo-upload"
                 onClick={() => {
+                  if (isDemoUser) {
+                    setAvatarError('🔒 Profile photo cannot be changed on official demo accounts.');
+                    setShowAvatarModal(false);
+                    return;
+                  }
                   setShowAvatarModal(false);
                   fileInputRef.current?.click();
                 }}
+                disabled={isDemoUser}
               >
                 <span>📸</span> Upload New Photo
               </button>
@@ -1984,10 +2043,15 @@ export default function ProfilePage({
                   type="button"
                   className="avatar-modal-btn btn-photo-remove"
                   onClick={() => {
+                    if (isDemoUser) {
+                      setAvatarError('🔒 Profile photo cannot be removed on official demo accounts.');
+                      setShowAvatarModal(false);
+                      return;
+                    }
                     setShowAvatarModal(false);
                     handleRemoveAvatar();
                   }}
-                  disabled={removingAvatar}
+                  disabled={removingAvatar || isDemoUser}
                 >
                   <span>🗑️</span> Remove Current Photo
                 </button>

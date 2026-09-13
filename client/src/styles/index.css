@@ -2615,6 +2615,13 @@ body {
   border-color: var(--danger);
 }
 
+.btn-danger-outline:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--text-muted);
+}
+
 .sessions-loading,
 .sessions-empty {
   padding: 16px;
@@ -2706,6 +2713,18 @@ body {
 
 .switch-toggle input:checked + .switch-slider:before {
   transform: translateX(20px);
+}
+
+.switch-toggle input:disabled + .switch-slider {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+.privacy-select-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background-color: rgba(255, 255, 255, 0.04);
 }
 
 .privacy-divider {

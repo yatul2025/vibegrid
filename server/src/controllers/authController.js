@@ -427,10 +427,12 @@ const resetPassword = async (req, res, next) => {
  */
 const changePassword = async (req, res, next) => {
   try {
-    if (req.user.is_demo_session) {
+    const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+    const isDemo = req.user.is_demo_session || DEMO_USERNAMES.includes((req.user.username || '').toLowerCase());
+    if (isDemo) {
       return res.status(403).json({
         success: false,
-        error: 'Credentials cannot be modified in demo access mode. Please log in using your account password.'
+        error: 'Password cannot be modified on demo accounts.'
       });
     }
 

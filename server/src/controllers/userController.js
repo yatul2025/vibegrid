@@ -12,6 +12,14 @@ const bcrypt = require('bcrypt');
 const { query } = require('../config/db');
 const { generateToken, setAuthCookie } = require('../utils/jwt');
 
+const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+
+const isDemoUser = (user) => {
+  if (!user) return false;
+  if (user.is_demo_session) return true;
+  return DEMO_USERNAMES.includes((user.username || '').toLowerCase());
+};
+
 /**
  * Fetch a user's public profile and social statistics
  * Route: GET /api/users/:username
@@ -101,6 +109,13 @@ const getProfile = async (req, res, next) => {
  */
 const updateProfile = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Profile updates are disabled for demo accounts. Please create a personal account to customize your profile.'
+      });
+    }
+
     const userId = req.user.id;
     const { fullName, bio, website, location, dateOfBirth, username } = req.body;
 
@@ -109,12 +124,6 @@ const updateProfile = async (req, res, next) => {
     if (username !== undefined && username !== null) {
       const cleanUsername = username.trim().toLowerCase();
       if (cleanUsername !== req.user.username.toLowerCase()) {
-        if (req.user.is_demo_session) {
-          return res.status(403).json({
-            success: false,
-            error: 'Username cannot be modified in demo access mode. Please log in using your account password.'
-          });
-        }
         // Check uniqueness in database
         const existingCheck = await query(
           'SELECT id FROM users WHERE LOWER(username) = $1 AND id != $2 LIMIT 1',
@@ -196,6 +205,13 @@ const updateProfile = async (req, res, next) => {
  */
 const uploadAvatar = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Profile photo cannot be changed on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
 
     if (!req.file) {
@@ -334,6 +350,13 @@ const getSuggestedUsers = async (req, res, next) => {
  */
 const removeAvatar = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Profile photo cannot be removed on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const defaultAvatar = '/uploads/avatars/default-avatar.png';
 
@@ -380,10 +403,10 @@ const removeAvatar = async (req, res, next) => {
  */
 const sendEmailOtp = async (req, res, next) => {
   try {
-    if (req.user.is_demo_session) {
+    if (isDemoUser(req.user)) {
       return res.status(403).json({
         success: false,
-        error: 'Email address cannot be modified in demo access mode. Please log in using your account password.'
+        error: 'Email address cannot be modified on demo accounts.'
       });
     }
 
@@ -502,10 +525,10 @@ const sendEmailOtp = async (req, res, next) => {
  */
 const verifyEmailOtp = async (req, res, next) => {
   try {
-    if (req.user.is_demo_session && req.body.newEmail) {
+    if (isDemoUser(req.user) && req.body.newEmail) {
       return res.status(403).json({
         success: false,
-        error: 'Email address cannot be modified in demo access mode. Please log in using your account password.'
+        error: 'Email address cannot be modified on demo accounts.'
       });
     }
 
@@ -633,10 +656,10 @@ const verifyEmailOtp = async (req, res, next) => {
  */
 const sendPhoneOtp = async (req, res, next) => {
   try {
-    if (req.user.is_demo_session) {
+    if (isDemoUser(req.user)) {
       return res.status(403).json({
         success: false,
-        error: 'Phone number cannot be modified in demo access mode. Please log in using your account password.'
+        error: 'Phone number cannot be modified on demo accounts.'
       });
     }
 
@@ -738,10 +761,10 @@ const sendPhoneOtp = async (req, res, next) => {
  */
 const verifyPhoneOtp = async (req, res, next) => {
   try {
-    if (req.user.is_demo_session) {
+    if (isDemoUser(req.user)) {
       return res.status(403).json({
         success: false,
-        error: 'Phone number cannot be modified in demo access mode. Please log in using your account password.'
+        error: 'Phone number cannot be modified on demo accounts.'
       });
     }
 
@@ -842,10 +865,10 @@ const verifyPhoneOtp = async (req, res, next) => {
  */
 const removePhoneNumber = async (req, res, next) => {
   try {
-    if (req.user.is_demo_session) {
+    if (isDemoUser(req.user)) {
       return res.status(403).json({
         success: false,
-        error: 'Phone number cannot be modified in demo access mode. Please log in using your account password.'
+        error: 'Phone number cannot be modified on demo accounts.'
       });
     }
 
@@ -900,10 +923,10 @@ const removePhoneNumber = async (req, res, next) => {
  */
 const changePassword = async (req, res, next) => {
   try {
-    if (req.user.is_demo_session) {
+    if (isDemoUser(req.user)) {
       return res.status(403).json({
         success: false,
-        error: 'Credentials cannot be modified in demo access mode. Please log in using your account password.'
+        error: 'Password cannot be modified on demo accounts.'
       });
     }
 
@@ -1166,6 +1189,13 @@ const getPrivacySettings = async (req, res, next) => {
  */
 const updatePrivacySettings = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Privacy settings cannot be modified on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const {
       is_private,
@@ -1281,6 +1311,13 @@ const getNotificationSettings = async (req, res, next) => {
  */
 const updateNotificationSettings = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Notification preferences cannot be modified on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const {
       notif_likes,
@@ -1368,10 +1405,10 @@ const updateNotificationSettings = async (req, res, next) => {
  */
 const deactivateAccount = async (req, res, next) => {
   try {
-    if (req.user.is_demo_session) {
+    if (isDemoUser(req.user)) {
       return res.status(403).json({
         success: false,
-        error: 'Account deactivation is disabled in demo access mode. Please log in using your account password.'
+        error: 'Demo accounts cannot be deactivated.'
       });
     }
 
@@ -1431,10 +1468,10 @@ const deactivateAccount = async (req, res, next) => {
  */
 const deleteAccount = async (req, res, next) => {
   try {
-    if (req.user.is_demo_session) {
+    if (isDemoUser(req.user)) {
       return res.status(403).json({
         success: false,
-        error: 'Account deletion is disabled in demo access mode. Please log in using your account password.'
+        error: 'Demo accounts cannot be deleted.'
       });
     }
 

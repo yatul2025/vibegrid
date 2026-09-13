@@ -13,6 +13,8 @@ const config = require('../config/env');
 const { query } = require('../config/db');
 const { COOKIE_NAME } = require('../utils/jwt');
 
+const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+
 const protect = async (req, res, next) => {
   try {
     // 1. Extract token from HTTP-Only cookie
@@ -109,7 +111,7 @@ const protect = async (req, res, next) => {
 
     // 6. Exclude token_version from req.user payload and attach demo session flag
     delete user.token_version;
-    user.is_demo_session = !!decoded.isDemoAccess;
+    user.is_demo_session = !!decoded.isDemoAccess || DEMO_USERNAMES.includes((user.username || '').toLowerCase());
     req.user = user;
     next();
   } catch (error) {
@@ -148,7 +150,7 @@ const optionalAuth = async (req, res, next) => {
             user.sessionId = decoded.sessionId;
           }
           delete user.token_version;
-          user.is_demo_session = !!decoded.isDemoAccess;
+          user.is_demo_session = !!decoded.isDemoAccess || DEMO_USERNAMES.includes((user.username || '').toLowerCase());
           req.user = user;
         }
       }
