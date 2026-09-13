@@ -538,9 +538,76 @@ const updateEphemeralTimer = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Create a multi-party group conversation
+ * @route   POST /api/conversations/group
+ * @access  Private (Authenticated)
+ */
+const createGroupConversation = async (req, res, next) => {
+  try {
+    const creatorId = req.user.id;
+    const { title, memberIds } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ success: false, error: 'Group title is required.' });
+    }
+
+    if (!Array.isArray(memberIds) || memberIds.length < 1) {
+      return res.status(400).json({ success: false, error: 'Please select at least 1 member.' });
+    }
+
+    const allMemberIds = Array.from(new Set([creatorId, ...memberIds.map(Number)]));
+
+    const convRes = await query(`
+      INSERT INTO conversations (type, title, created_by)
+      VALUES ('group', $1, $2)
+      RETURNING id, type, title, created_at, updated_at
+    `, [title.trim(), creatorId]);
+
+    const newConv = convRes.rows[0];
+
+    for (const memberId of allMemberIds) {
+      const role = memberId === creatorId ? 'admin' : 'member';
+      await query(`
+        INSERT INTO conversation_members (conversation_id, user_id, role)
+        VALUES ($1, $2, $3)
+        ON CONFLICT DO NOTHING
+      `, [newConv.id, memberId, role]);
+    }
+
+    const membersRes = await query(`
+      SELECT u.id, u.username, u.full_name, u.avatar_url, cm.role
+      FROM conversation_members cm
+      JOIN users u ON cm.user_id = u.id
+      WHERE cm.conversation_id = $1
+    `, [newConv.id]);
+
+    const io = req.app.get('io');
+    if (io) {
+      allMemberIds.forEach((uid) => {
+        io.to(`user:${uid}`).emit('conversation:created', {
+          conversation: newConv,
+          members: membersRes.rows
+        });
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        conversation: newConv,
+        members: membersRes.rows
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getConversations,
   getOrCreateConversation,
+  createGroupConversation,
   getMessages,
   sendMessage,
   deleteMessage,

@@ -15,6 +15,7 @@ router.use(protect);
 
 router.get('/', conversationController.getConversations);
 router.post('/', conversationController.getOrCreateConversation);
+router.post('/group', conversationController.createGroupConversation);
 router.get('/:id/messages', conversationController.getMessages);
 router.post('/:id/messages', conversationController.sendMessage);
 router.delete('/:id/messages/:messageId', conversationController.deleteMessage);

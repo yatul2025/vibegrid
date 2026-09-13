@@ -34,6 +34,9 @@ import { encryptMedia } from '../services/crypto/mediaCrypto';
 import SafetyNumberModal from '../components/SafetyNumberModal';
 import VoiceRecorder from '../components/VoiceRecorder';
 import EncryptedMediaRenderer from '../components/EncryptedMediaRenderer';
+import CreateGroupModal from '../components/CreateGroupModal';
+import CallHistoryModal from '../components/CallHistoryModal';
+import senderKeysService from '../services/crypto/senderKeys';
 
 function formatMessageTime(dateString) {
   if (!dateString) return '';
@@ -93,6 +96,8 @@ export default function MessagesPage({
   const [isPeerVerified, setIsPeerVerified] = useState(false);
   const [ephemeralTimer, setEphemeralTimer] = useState(null);
   const [isEphemeralMenuOpen, setIsEphemeralMenuOpen] = useState(false);
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [isCallHistoryOpen, setIsCallHistoryOpen] = useState(false);
 
   // Ephemeral Real-Time States
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
@@ -629,14 +634,32 @@ export default function MessagesPage({
               <h3>Direct</h3>
               <span className="messages-header-sub">@{user?.username}</span>
             </div>
-            <button
-              type="button"
-              className="btn-new-chat-icon"
-              onClick={() => setIsNewChatModalOpen(true)}
-              title="Start a new message"
-            >
-              ✏️
-            </button>
+            <div className="messages-sidebar-actions">
+              <button
+                type="button"
+                className="btn-sidebar-icon"
+                onClick={() => setIsCallHistoryOpen(true)}
+                title="Call History & Logs"
+              >
+                📞
+              </button>
+              <button
+                type="button"
+                className="btn-sidebar-icon"
+                onClick={() => setIsCreateGroupOpen(true)}
+                title="Create Encrypted Group"
+              >
+                👥
+              </button>
+              <button
+                type="button"
+                className="btn-new-chat-icon"
+                onClick={() => setIsNewChatModalOpen(true)}
+                title="Start a new message"
+              >
+                ✏️
+              </button>
+            </div>
           </div>
 
           <div className="messages-inbox-list">
@@ -1044,8 +1067,46 @@ export default function MessagesPage({
         </div>
       )}
 
+      {/* Create Group Modal */}
+      <CreateGroupModal
+        isOpen={isCreateGroupOpen}
+        onClose={() => setIsCreateGroupOpen(false)}
+        onGroupCreated={() => fetchConversations()}
+      />
+
+      {/* Call History Modal */}
+      <CallHistoryModal
+        isOpen={isCallHistoryOpen}
+        onClose={() => setIsCallHistoryOpen(false)}
+      />
+
       {/* Embedded CSS Enhancements */}
       <style>{`
+        .messages-sidebar-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .btn-sidebar-icon {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          border: 1px solid var(--border-color, #e2e8f0);
+          background: var(--bg-card, #ffffff);
+          color: var(--text-primary, #0f172a);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 14px;
+          cursor: pointer;
+          transition: transform 0.15s ease, background 0.15s ease;
+        }
+
+        .btn-sidebar-icon:hover {
+          transform: scale(1.08);
+          background: var(--bg-hover, #f1f5f9);
+        }
         .chat-header-avatar-wrap {
           position: relative;
           display: inline-block;
