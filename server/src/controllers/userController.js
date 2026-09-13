@@ -446,7 +446,7 @@ const sendEmailOtp = async (req, res, next) => {
       }
       const isPasswordValid = await bcrypt.compare(currentPassword, userRes.rows[0].password_hash);
       if (!isPasswordValid) {
-        return res.status(401).json({
+        return res.status(400).json({
           success: false,
           error: 'Incorrect current password. Password is required to authorize an email change.'
         });
@@ -741,7 +741,7 @@ const sendPhoneOtp = async (req, res, next) => {
     }
     const isPasswordValid = await bcrypt.compare(currentPassword, userRes.rows[0].password_hash);
     if (!isPasswordValid) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         error: 'Incorrect current password. Password is required to authorize phone verification.'
       });
@@ -950,7 +950,7 @@ const removePhoneNumber = async (req, res, next) => {
     }
     const isPasswordValid = await bcrypt.compare(currentPassword, userRes.rows[0].password_hash);
     if (!isPasswordValid) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         error: 'Incorrect password. Password is required to authorize phone number removal.'
       });
@@ -1517,7 +1517,7 @@ const deactivateAccount = async (req, res, next) => {
     const { comparePassword } = require('../utils/password');
     const isValid = await comparePassword(password, userRes.rows[0].password_hash);
     if (!isValid) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         error: 'Incorrect password. Account was not deactivated.'
       });
@@ -1591,7 +1591,7 @@ const deleteAccount = async (req, res, next) => {
     const { comparePassword } = require('../utils/password');
     const isValid = await comparePassword(password, user.password_hash);
     if (!isValid) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         error: 'Incorrect password. Account was not deleted.'
       });

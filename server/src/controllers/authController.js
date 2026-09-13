@@ -879,7 +879,7 @@ const changePassword = async (req, res, next) => {
     // Verify current password
     const isMatch = await comparePassword(currentPassword, user.password_hash);
     if (!isMatch) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         error: 'Current password is incorrect.'
       });
