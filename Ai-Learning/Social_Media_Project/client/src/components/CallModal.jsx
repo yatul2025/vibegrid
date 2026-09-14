@@ -165,6 +165,14 @@ function PhoneAnswerIcon() {
   );
 }
 
+function VoiceWaveIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2v20M17 5v14M7 5v14M2 9v6M22 9v6" />
+    </svg>
+  );
+}
+
 export default function CallModal() {
   const { user } = useAuth();
 
@@ -790,13 +798,14 @@ export default function CallModal() {
 
   if (!callState || !callData) return null;
 
-  const isExpanded = isFullscreen || isMaximized;
+  const isVideoMode = callData?.callType === 'video' || isScreenSharing;
+  const isExpanded = (isFullscreen || isMaximized) && isVideoMode;
 
   return (
     <div className={`webrtc-call-overlay ${isExpanded ? 'fullscreen-overlay' : ''}`}>
       <div 
         ref={callCardRef} 
-        className={`webrtc-call-card ${isExpanded ? 'is-fullscreen' : ''}`}
+        className={`webrtc-call-card ${isVideoMode ? 'video-mode' : 'audio-mode'} ${isExpanded ? 'is-fullscreen' : ''}`}
       >
         {/* ================================================================ */}
         {/* State 1: Incoming Call                                           */}
@@ -880,7 +889,7 @@ export default function CallModal() {
         {/* State 3: Active Connected Call                                   */}
         {/* ================================================================ */}
         {callState === 'connected' && (
-          <div className="call-connected-view">
+          <div className={`call-connected-view ${isVideoMode ? 'video-connected-view' : 'audio-connected-view'}`}>
             {/* Top Header Bar with Live Badge, User Info, Quality, and Fullscreen Controls */}
             <div className="call-header-bar">
               <div className="call-header-info">
@@ -909,91 +918,132 @@ export default function CallModal() {
                   <span>HD</span>
                 </div>
 
-                {/* Picture in Picture Button */}
-                <button
-                  type="button"
-                  className="call-header-icon-btn"
-                  onClick={togglePictureInPicture}
-                  title="Picture in Picture"
-                  aria-label="Picture in Picture"
-                >
-                  <PiPIcon />
-                </button>
+                {/* Picture in Picture Button (Video Call Only) */}
+                {isVideoMode && (
+                  <button
+                    type="button"
+                    className="call-header-icon-btn"
+                    onClick={togglePictureInPicture}
+                    title="Picture in Picture"
+                    aria-label="Picture in Picture"
+                  >
+                    <PiPIcon />
+                  </button>
+                )}
 
-                {/* Fullscreen Button */}
-                <button
-                  type="button"
-                  className={`call-header-icon-btn ${isFullscreen ? 'active' : ''}`}
-                  onClick={toggleFullscreen}
-                  title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
-                  aria-label="Toggle Fullscreen"
-                >
-                  <FullscreenIcon isFullscreen={isFullscreen} />
-                </button>
+                {/* Fullscreen Button (Video Call Only) */}
+                {isVideoMode && (
+                  <button
+                    type="button"
+                    className={`call-header-icon-btn ${isFullscreen ? 'active' : ''}`}
+                    onClick={toggleFullscreen}
+                    title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+                    aria-label="Toggle Fullscreen"
+                  >
+                    <FullscreenIcon isFullscreen={isFullscreen} />
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Video Stage: Dedicated Audio Tag for Remote Voice */}
+            {/* Dedicated Audio Tag for Remote Voice */}
             <audio ref={remoteAudioRef} autoPlay playsInline />
 
-            {/* Main Stage Video Screen (Displays Remote by default, or Local when swapped) */}
-            <div className="call-remote-screen">
-              {/* Primary Video Element */}
-              {!isSwappedView ? (
-                <video
-                  ref={remoteVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={`remote-video-elem ${hasRemoteVideo || isScreenSharing ? 'visible' : 'hidden'}`}
-                />
-              ) : (
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={`remote-video-elem mirrored ${isVideoMuted ? 'muted-video' : ''}`}
-                />
-              )}
-
-              {/* Audio-only or Camera Off Placeholder on Main Screen */}
-              {((!isSwappedView && !hasRemoteVideo && !isScreenSharing) || 
-                (isSwappedView && isVideoMuted)) && (
-                <div className="audio-call-placeholder">
-                  <div className="audio-avatar-wrapper">
-                    <img
-                      src={(!isSwappedView ? callData.peer?.avatar_url : user?.avatar_url) || '/uploads/avatars/default-avatar.png'}
-                      alt=""
-                      className="audio-call-avatar"
-                    />
-                    <div className="audio-voice-wave" />
+            {/* STAGE: Dedicated Audio Call Stage vs Video Call Stage */}
+            {!isVideoMode ? (
+              /* DEDICATED AUDIO CALL STAGE */
+              <div className="audio-call-stage">
+                <div className="audio-call-hero-container">
+                  <div className="audio-hero-pulse-ring ring-1" />
+                  <div className="audio-hero-pulse-ring ring-2" />
+                  <div className="audio-hero-pulse-ring ring-3" />
+                  <img
+                    src={callData.peer?.avatar_url || '/uploads/avatars/default-avatar.png'}
+                    alt={callData.peer?.username}
+                    className="audio-hero-avatar"
+                  />
+                  <div className="audio-hero-badge-icon">
+                    <VoiceWaveIcon />
                   </div>
-                  <h4>{isSwappedView ? `@${user?.username} (You)` : `@${callData.peer?.username}`}</h4>
-                  <p className="audio-call-status-hint">
-                    {isSwappedView 
-                      ? 'Your camera is turned off' 
-                      : callData.callType === 'video' && !hasRemoteVideo 
-                        ? (isLive ? 'Camera turned off' : 'Connecting video...')
-                        : 'Audio connected'}
+                </div>
+
+                <div className="audio-call-meta">
+                  <h3 className="audio-hero-name">{callData.peer?.full_name || `@${callData.peer?.username}`}</h3>
+                  <span className="audio-hero-handle">@{callData.peer?.username}</span>
+                  <p className="audio-hero-status">
+                    {isSpeakerMuted ? '🔇 Audio Muted' : 'Voice connected · Encrypted'}
                   </p>
                 </div>
-              )}
 
-              {/* In-Call Floating Animated Emoji Reactions */}
-              {floatingReactions.map((r) => (
-                <div
-                  key={r.id}
-                  className="floating-reaction-item"
-                  style={{ left: `${r.xPos}%` }}
-                >
-                  {r.emoji}
-                </div>
-              ))}
-            </div>
+                {/* In-Call Floating Animated Emoji Reactions */}
+                {floatingReactions.map((r) => (
+                  <div
+                    key={r.id}
+                    className="floating-reaction-item"
+                    style={{ left: `${r.xPos}%` }}
+                  >
+                    {r.emoji}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* DEDICATED VIDEO CALL STAGE */
+              <div className="call-remote-screen">
+                {/* Primary Video Element */}
+                {!isSwappedView ? (
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`remote-video-elem ${hasRemoteVideo || isScreenSharing ? 'visible' : 'hidden'}`}
+                  />
+                ) : (
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`remote-video-elem mirrored ${isVideoMuted ? 'muted-video' : ''}`}
+                  />
+                )}
 
-            {/* Secondary Floating Corner PIP (Click to Swap Feeds) */}
-            {(callData.callType === 'video' || isScreenSharing || !isVideoMuted || hasRemoteVideo) && (
+                {/* Camera Off Placeholder on Main Screen */}
+                {((!isSwappedView && !hasRemoteVideo && !isScreenSharing) || 
+                  (isSwappedView && isVideoMuted)) && (
+                  <div className="audio-call-placeholder">
+                    <div className="audio-avatar-wrapper">
+                      <img
+                        src={(!isSwappedView ? callData.peer?.avatar_url : user?.avatar_url) || '/uploads/avatars/default-avatar.png'}
+                        alt=""
+                        className="audio-call-avatar"
+                      />
+                      <div className="audio-voice-wave" />
+                    </div>
+                    <h4>{isSwappedView ? `@${user?.username} (You)` : `@${callData.peer?.username}`}</h4>
+                    <p className="audio-call-status-hint">
+                      {isSwappedView 
+                        ? 'Your camera is turned off' 
+                        : (isLive ? 'Camera turned off' : 'Connecting video...')}
+                    </p>
+                  </div>
+                )}
+
+                {/* In-Call Floating Animated Emoji Reactions */}
+                {floatingReactions.map((r) => (
+                  <div
+                    key={r.id}
+                    className="floating-reaction-item"
+                    style={{ left: `${r.xPos}%` }}
+                  >
+                    {r.emoji}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Secondary Floating Corner PIP (ONLY IN VIDEO CALLS) */}
+            {isVideoMode && (
               <div 
                 className="call-local-pip"
                 onClick={handleSwapFeeds}
@@ -1001,7 +1051,6 @@ export default function CallModal() {
                 role="button"
                 tabIndex={0}
               >
-                {/* Secondary Video Feed */}
                 {!isSwappedView ? (
                   <video
                     ref={localVideoRef}
@@ -1020,13 +1069,11 @@ export default function CallModal() {
                   />
                 )}
 
-                {/* Swap Overlay on Hover */}
                 <div className="call-pip-swap-indicator">
                   <SwapIcon />
                   <span>Swap</span>
                 </div>
 
-                {/* PIP Off Label */}
                 {((!isSwappedView && isVideoMuted) || (isSwappedView && !hasRemoteVideo)) && (
                   <div className="pip-video-off-label">
                     <span>Camera Off</span>
@@ -1053,7 +1100,7 @@ export default function CallModal() {
             )}
 
             {/* Professional Glassmorphic Floating Control Dock */}
-            <div className="call-controls-toolbar">
+            <div className={`call-controls-toolbar ${!isVideoMode ? 'audio-toolbar' : ''}`}>
               {/* 1. Mute Microphone */}
               <button
                 type="button"
@@ -1065,16 +1112,18 @@ export default function CallModal() {
                 <MicIcon muted={isAudioMuted} />
               </button>
 
-              {/* 2. Turn Camera On / Off */}
-              <button
-                type="button"
-                className={`control-btn ${isVideoMuted ? 'active-danger' : ''}`}
-                onClick={handleToggleVideo}
-                title={isVideoMuted ? 'Turn Camera On (V)' : 'Turn Camera Off (V)'}
-                aria-label="Camera"
-              >
-                <VideoCamIcon off={isVideoMuted} />
-              </button>
+              {/* 2. Turn Camera On / Off (VIDEO ONLY) */}
+              {isVideoMode && (
+                <button
+                  type="button"
+                  className={`control-btn ${isVideoMuted ? 'active-danger' : ''}`}
+                  onClick={handleToggleVideo}
+                  title={isVideoMuted ? 'Turn Camera On (V)' : 'Turn Camera Off (V)'}
+                  aria-label="Camera"
+                >
+                  <VideoCamIcon off={isVideoMuted} />
+                </button>
+              )}
 
               {/* 3. Speaker Output Mute / Deafen */}
               <button
@@ -1087,27 +1136,31 @@ export default function CallModal() {
                 <SpeakerIcon muted={isSpeakerMuted} />
               </button>
 
-              {/* 4. Screen Sharing */}
-              <button
-                type="button"
-                className={`control-btn ${isScreenSharing ? 'active-primary' : ''}`}
-                onClick={handleToggleScreenShare}
-                title={isScreenSharing ? 'Stop Sharing Screen' : 'Share Screen'}
-                aria-label="Screen Share"
-              >
-                <ScreenShareIcon active={isScreenSharing} />
-              </button>
+              {/* 4. Screen Sharing (VIDEO ONLY) */}
+              {isVideoMode && (
+                <button
+                  type="button"
+                  className={`control-btn ${isScreenSharing ? 'active-primary' : ''}`}
+                  onClick={handleToggleScreenShare}
+                  title={isScreenSharing ? 'Stop Sharing Screen' : 'Share Screen'}
+                  aria-label="Screen Share"
+                >
+                  <ScreenShareIcon active={isScreenSharing} />
+                </button>
+              )}
 
-              {/* 5. Swap Main & Corner Video Feeds */}
-              <button
-                type="button"
-                className={`control-btn ${isSwappedView ? 'active-primary' : ''}`}
-                onClick={handleSwapFeeds}
-                title="Swap Main & PIP Feeds"
-                aria-label="Swap Feeds"
-              >
-                <SwapIcon />
-              </button>
+              {/* 5. Swap Main & Corner Video Feeds (VIDEO ONLY) */}
+              {isVideoMode && (
+                <button
+                  type="button"
+                  className={`control-btn ${isSwappedView ? 'active-primary' : ''}`}
+                  onClick={handleSwapFeeds}
+                  title="Swap Main & PIP Feeds"
+                  aria-label="Swap Feeds"
+                >
+                  <SwapIcon />
+                </button>
+              )}
 
               {/* 6. In-Call Emoji Reactions Popover Trigger */}
               <button
@@ -1120,16 +1173,18 @@ export default function CallModal() {
                 <ReactionsIcon />
               </button>
 
-              {/* 7. Fullscreen Toggle */}
-              <button
-                type="button"
-                className={`control-btn ${isFullscreen ? 'active-primary' : ''}`}
-                onClick={toggleFullscreen}
-                title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
-                aria-label="Fullscreen"
-              >
-                <FullscreenIcon isFullscreen={isFullscreen} />
-              </button>
+              {/* 7. Fullscreen Toggle (VIDEO ONLY) */}
+              {isVideoMode && (
+                <button
+                  type="button"
+                  className={`control-btn ${isFullscreen ? 'active-primary' : ''}`}
+                  onClick={toggleFullscreen}
+                  title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+                  aria-label="Fullscreen"
+                >
+                  <FullscreenIcon isFullscreen={isFullscreen} />
+                </button>
+              )}
 
               {/* 8. End Call Hangup Pill */}
               <button
@@ -1181,6 +1236,18 @@ export default function CallModal() {
           color: #ffffff;
           position: relative;
           transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .webrtc-call-card.audio-mode {
+          max-width: 440px;
+          border-radius: 28px;
+          background: #0f1117;
+          border-color: rgba(99, 102, 241, 0.25);
+          box-shadow: 0 24px 64px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(99, 102, 241, 0.2);
+        }
+
+        .webrtc-call-card.video-mode {
+          max-width: 900px;
         }
 
         .webrtc-call-card.is-fullscreen {
@@ -1310,6 +1377,16 @@ export default function CallModal() {
           flex-direction: column;
           background: #000000;
           overflow: hidden;
+        }
+
+        .call-connected-view.audio-connected-view {
+          height: 480px;
+          background: radial-gradient(circle at top, #1e1b4b 0%, #0d0f17 65%, #07080c 100%);
+        }
+
+        .call-connected-view.video-connected-view {
+          height: 560px;
+          background: #000000;
         }
 
         .webrtc-call-card.is-fullscreen .call-connected-view {
@@ -1452,6 +1529,133 @@ export default function CallModal() {
         .call-header-icon-btn.active {
           background: #6366f1;
           border-color: #6366f1;
+        }
+
+        /* ================================================================ */
+        /* Dedicated Audio Call Stage                                       */
+        /* ================================================================ */
+        .audio-call-stage {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 60px 24px 90px 24px;
+          text-align: center;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .audio-call-hero-container {
+          position: relative;
+          width: 140px;
+          height: 140px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 22px;
+        }
+
+        .audio-hero-avatar {
+          width: 104px;
+          height: 104px;
+          border-radius: 50%;
+          object-fit: cover;
+          border: 3.5px solid #6366f1;
+          box-shadow: 0 12px 36px rgba(99, 102, 241, 0.45);
+          position: relative;
+          z-index: 3;
+        }
+
+        .audio-hero-pulse-ring {
+          position: absolute;
+          inset: 0;
+          border-radius: 50%;
+          border: 2px solid rgba(99, 102, 241, 0.5);
+          animation: audioPulseWave 3s infinite cubic-bezier(0.25, 1, 0.5, 1);
+          pointer-events: none;
+          z-index: 1;
+        }
+
+        .audio-hero-pulse-ring.ring-1 {
+          animation-delay: 0s;
+        }
+
+        .audio-hero-pulse-ring.ring-2 {
+          animation-delay: 1s;
+        }
+
+        .audio-hero-pulse-ring.ring-3 {
+          animation-delay: 2s;
+        }
+
+        @keyframes audioPulseWave {
+          0% {
+            transform: scale(0.75);
+            opacity: 0.9;
+          }
+          100% {
+            transform: scale(2.0);
+            opacity: 0;
+          }
+        }
+
+        .audio-hero-badge-icon {
+          position: absolute;
+          bottom: 12px;
+          right: 12px;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: #6366f1;
+          border: 2.5px solid #0f1117;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #ffffff;
+          z-index: 4;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .audio-call-meta {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 4px;
+          z-index: 2;
+        }
+
+        .audio-hero-name {
+          font-size: 22px;
+          font-weight: 800;
+          color: #ffffff;
+          margin: 0;
+          letter-spacing: -0.3px;
+        }
+
+        .audio-hero-handle {
+          font-size: 14px;
+          color: #818cf8;
+          font-weight: 600;
+        }
+
+        .audio-hero-status {
+          margin-top: 10px;
+          font-size: 13px;
+          color: #94a3b8;
+          font-weight: 500;
+          background: rgba(255, 255, 255, 0.06);
+          padding: 5px 14px;
+          border-radius: 9999px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .call-controls-toolbar.audio-toolbar {
+          background: rgba(24, 27, 36, 0.94);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+          gap: 16px;
+          padding: 10px 24px;
         }
 
         /* Remote / Main Video Screen */

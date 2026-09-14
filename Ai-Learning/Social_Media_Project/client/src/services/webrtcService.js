@@ -193,8 +193,8 @@ class WebRTCService {
       });
     }
 
-    // If audio-only call, prepare video transceiver so screen share / video can be added without renegotiation
-    if (!hasLocalVideo) {
+    // Only prepare video transceiver if this is a video call
+    if (!hasLocalVideo && this.callType === 'video') {
       try {
         pc.addTransceiver('video', { direction: 'sendrecv' });
       } catch (e) {
@@ -307,9 +307,10 @@ class WebRTCService {
     const iceConfig = await this.getIceServers();
     const pc = this.createPeerConnection(targetUserId, callId, iceConfig);
 
+    const isVideo = callType === 'video';
     const offer = await pc.createOffer({
       offerToReceiveAudio: true,
-      offerToReceiveVideo: true // Always receive video so screen share or camera upgrade works seamlessly
+      offerToReceiveVideo: isVideo
     });
 
     await pc.setLocalDescription(offer);
