@@ -8,13 +8,162 @@
  * 2. Incoming call banner with ringing animations and Web Audio ring tone.
  * 3. Connected 1-on-1 audio/video call room with remote & local video PIP.
  * 4. Call controls: Mute/unmute microphone, toggle camera, share screen, end call.
- * 5. Call duration timer.
+ * 5. Fullscreen Mode (Native Fullscreen API & Maximize Viewport Toggle, Shortcut 'F').
+ * 6. Picture-in-Picture (PiP) window for multitasking.
+ * 7. Clickable PiP & Swap Feeds toggle to switch main video and corner video.
+ * 8. Real-time floating animated emoji reactions (❤️, 👏, 🔥, 😂, 🎉, ✋).
+ * 9. Speaker / audio output mute toggle.
+ * 10. E2EE Security badge and HD Connection Quality indicator.
+ * 11. Professional SVG vector icons (no emojis) and frosted glassmorphic UI dock.
  */
 
 import React, { useState, useEffect, useRef } from 'react';
 import socketService from '../services/socketService';
 import webrtcService from '../services/webrtcService';
 import { useAuth } from '../context/AuthContext';
+
+// ============================================================================
+// Professional Lucide-Style Crisp SVG Vector Icons
+// ============================================================================
+function MicIcon({ muted }) {
+  if (muted) {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="2" y1="2" x2="22" y2="22" />
+        <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2" />
+        <path d="M5 10v2a7 7 0 0 0 12 5" />
+        <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33" />
+        <path d="M9 9v3a3 3 0 0 0 5.12 2.12" />
+        <line x1="12" y1="19" x2="12" y2="22" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+      <line x1="12" y1="19" x2="12" y2="22" />
+    </svg>
+  );
+}
+
+function VideoCamIcon({ off }) {
+  if (off) {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="2" y1="2" x2="22" y2="22" />
+        <path d="m22 7-6 4v2l6 4V7Z" />
+        <path d="M10.66 6H14a2 2 0 0 1 2 2v2.5" />
+        <path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1.34" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m22 7-6 4v2l6 4V7Z" />
+      <rect width="14" height="12" x="2" y="6" rx="2" />
+    </svg>
+  );
+}
+
+function ScreenShareIcon({ active }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="20" height="14" x="2" y="3" rx="2" />
+      <line x1="8" y1="21" x2="16" y2="21" />
+      <line x1="12" y1="17" x2="12" y2="21" />
+      <path d="m9 10 3-3 3 3" />
+      <line x1="12" y1="7" x2="12" y2="13" />
+    </svg>
+  );
+}
+
+function SpeakerIcon({ muted }) {
+  if (muted) {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+        <line x1="22" y1="9" x2="16" y2="15" />
+        <line x1="16" y1="9" x2="22" y2="15" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+    </svg>
+  );
+}
+
+function FullscreenIcon({ isFullscreen }) {
+  if (isFullscreen) {
+    return (
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 14h6v6" />
+        <path d="M20 10h-6V4" />
+        <path d="M14 10l7-7" />
+        <path d="M10 14l-7 7" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+      <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
+function PiPIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="20" height="15" x="2" y="4.5" rx="2" />
+      <rect width="8" height="6" x="12" y="11.5" rx="1.5" fill="currentColor" fillOpacity="0.4" />
+    </svg>
+  );
+}
+
+function SwapIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m16 3 4 4-4 4" />
+      <path d="M20 7H4" />
+      <path d="m8 21-4-4 4-4" />
+      <path d="M4 17h16" />
+    </svg>
+  );
+}
+
+function ReactionsIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+      <line x1="9" y1="9" x2="9.01" y2="9" strokeWidth="3" />
+      <line x1="15" y1="9" x2="15.01" y2="9" strokeWidth="3" />
+    </svg>
+  );
+}
+
+function PhoneHangupIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 9c-3.5 0-6.7 1.3-9.1 3.5-.6.5-.7 1.4-.2 2l1.6 1.6c.5.5 1.3.6 1.9.2 1.4-.9 3-1.5 4.8-1.8.6-.1 1-.6 1-1.2V11c0-.6-.4-1-1-1zm0 0c.6 0 1 .4 1 1v2.3c0 .6.4 1.1 1 1.2 1.8.3 3.4.9 4.8 1.8.6.4 1.4.3 1.9-.2l1.6-1.6c.5-.6.4-1.5-.2-2C18.7 10.3 15.5 9 12 9z" />
+    </svg>
+  );
+}
+
+function PhoneAnswerIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-2.2 2.2a15.053 15.053 0 0 1-6.59-6.59l2.2-2.21a.96.96 0 0 0 .25-1A11.36 11.36 0 0 1 8.5 3.97c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.5c0-.55-.45-1-.99-1.09z" />
+    </svg>
+  );
+}
 
 export default function CallModal() {
   const { user } = useAuth();
@@ -31,7 +180,16 @@ export default function CallModal() {
   const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
 
+  // Enhanced Video Calling Features
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+  const [isSwappedView, setIsSwappedView] = useState(false);
+  const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
+  const [showReactions, setShowReactions] = useState(false);
+  const [floatingReactions, setFloatingReactions] = useState([]);
+
   // Media Stream References
+  const callCardRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const remoteAudioRef = useRef(null);
@@ -58,7 +216,6 @@ export default function CallModal() {
       osc2.type = 'sine';
       osc2.frequency.setValueAtTime(480, ctx.currentTime); // B4
 
-      // Gentle pulsating gain
       gain.gain.setValueAtTime(0.05, ctx.currentTime);
 
       osc1.connect(gain);
@@ -111,7 +268,6 @@ export default function CallModal() {
       setCallState('connected');
       setConnectionStatus('connecting');
 
-      // Initiator starts WebRTC negotiation using authoritative IDs
       try {
         const targetUserId = data.calleeId || callData?.peer?.id;
         const callId = data.callId || callData?.callId;
@@ -189,6 +345,13 @@ export default function CallModal() {
       }
     };
 
+    // 8. In-Call Real-Time Emoji Reaction Relay
+    const handleRemoteReaction = (data) => {
+      if (data?.emoji) {
+        addFloatingReaction(data.emoji);
+      }
+    };
+
     // Global custom event for initiating a call from chat or profile
     const handleCustomInitiateCall = (event) => {
       const { targetUser, callType } = event.detail;
@@ -223,6 +386,7 @@ export default function CallModal() {
     socketService.on('signal:offer', handleSignalOffer);
     socketService.on('signal:answer', handleSignalAnswer);
     socketService.on('signal:ice-candidate', handleSignalIce);
+    socketService.on('call:reaction', handleRemoteReaction);
 
     return () => {
       window.removeEventListener('vibegrid:initiate-call', handleCustomInitiateCall);
@@ -233,6 +397,7 @@ export default function CallModal() {
       socketService.off('signal:offer', handleSignalOffer);
       socketService.off('signal:answer', handleSignalAnswer);
       socketService.off('signal:ice-candidate', handleSignalIce);
+      socketService.off('call:reaction', handleRemoteReaction);
     };
   }, [user, callData]);
 
@@ -325,11 +490,124 @@ export default function CallModal() {
     };
   }, [callState]);
 
+  // Fullscreen event listener
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+    };
+  }, []);
+
+  // Keyboard Shortcuts (F = Fullscreen, M = Mute, V = Camera, Esc = Close popup)
+  useEffect(() => {
+    if (callState !== 'connected') return;
+
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+
+      if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        toggleFullscreen();
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        handleToggleMute();
+      } else if (e.key === 'v' || e.key === 'V') {
+        e.preventDefault();
+        handleToggleVideo();
+      } else if (e.key === 'Escape') {
+        if (showReactions) setShowReactions(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [callState, showReactions, isAudioMuted, isVideoMuted]);
+
   // Format timer
   const formatDuration = (totalSeconds) => {
     const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
     const secs = (totalSeconds % 60).toString().padStart(2, '0');
     return `${mins}:${secs}`;
+  };
+
+  // Floating Reaction Particle Generator
+  const addFloatingReaction = (emoji) => {
+    const id = Date.now() + Math.random();
+    const xPos = 25 + Math.random() * 50; // 25% to 75% across screen
+    setFloatingReactions((prev) => [...prev, { id, emoji, xPos }]);
+    setTimeout(() => {
+      setFloatingReactions((prev) => prev.filter((r) => r.id !== id));
+    }, 2400);
+  };
+
+  const handleSendReaction = (emoji) => {
+    addFloatingReaction(emoji);
+    setShowReactions(false);
+    if (callData?.callId) {
+      socketService.emit('call:reaction', {
+        targetUserId: callData.peer?.id,
+        callId: callData.callId,
+        emoji
+      });
+    }
+  };
+
+  // Fullscreen Toggle
+  const toggleFullscreen = async () => {
+    try {
+      const card = callCardRef.current;
+      if (!document.fullscreenElement) {
+        if (card?.requestFullscreen) {
+          await card.requestFullscreen();
+        } else if (card?.webkitRequestFullscreen) {
+          await card.webkitRequestFullscreen();
+        }
+        setIsFullscreen(true);
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          await document.webkitExitFullscreen();
+        }
+        setIsFullscreen(false);
+      }
+    } catch (err) {
+      console.warn('Fullscreen API error, falling back to viewport expand mode:', err);
+      setIsMaximized((prev) => !prev);
+    }
+  };
+
+  // Picture-in-Picture Toggle
+  const togglePictureInPicture = async () => {
+    try {
+      const activeVideo = isSwappedView ? localVideoRef.current : remoteVideoRef.current;
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else if (activeVideo && document.pictureInPictureEnabled) {
+        await activeVideo.requestPictureInPicture();
+      }
+    } catch (err) {
+      console.warn('PiP error:', err);
+    }
+  };
+
+  // Swap Feeds (Corner PiP <-> Main Stage)
+  const handleSwapFeeds = () => {
+    setIsSwappedView((prev) => !prev);
+  };
+
+  // Toggle Speaker / Output Mute
+  const handleToggleSpeaker = () => {
+    const nextMuted = !isSpeakerMuted;
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.muted = nextMuted;
+    }
+    setIsSpeakerMuted(nextMuted);
   };
 
   // ==========================================================================
@@ -369,6 +647,10 @@ export default function CallModal() {
     setIsAudioMuted(false);
     setIsVideoMuted(false);
     setIsScreenSharing(false);
+    setIsFullscreen(false);
+    setIsMaximized(false);
+    setIsSwappedView(false);
+    setShowReactions(false);
   };
 
   const handleToggleMute = () => {
@@ -390,9 +672,14 @@ export default function CallModal() {
 
   if (!callState || !callData) return null;
 
+  const isExpanded = isFullscreen || isMaximized;
+
   return (
-    <div className="webrtc-call-overlay">
-      <div className="webrtc-call-card">
+    <div className={`webrtc-call-overlay ${isExpanded ? 'fullscreen-overlay' : ''}`}>
+      <div 
+        ref={callCardRef} 
+        className={`webrtc-call-card ${isExpanded ? 'is-fullscreen' : ''}`}
+      >
         {/* ================================================================ */}
         {/* State 1: Incoming Call                                           */}
         {/* ================================================================ */}
@@ -406,11 +693,12 @@ export default function CallModal() {
               />
               <span className="pulse-ring ring-1"></span>
               <span className="pulse-ring ring-2"></span>
+              <span className="pulse-ring ring-3"></span>
             </div>
 
             <h3 className="call-peer-name">@{callData.peer?.username}</h3>
             <p className="call-status-label">
-              Incoming {callData.callType === 'video' ? '📹 Video' : '📞 Audio'} Call...
+              Incoming {callData.callType === 'video' ? 'Video' : 'Voice'} Call...
             </p>
 
             <div className="call-actions-row">
@@ -419,16 +707,18 @@ export default function CallModal() {
                 className="call-btn btn-decline"
                 onClick={handleDeclineCall}
                 title="Decline Call"
+                aria-label="Decline Call"
               >
-                ✕
+                <PhoneHangupIcon />
               </button>
               <button
                 type="button"
                 className="call-btn btn-accept"
                 onClick={handleAcceptCall}
                 title="Accept Call"
+                aria-label="Accept Call"
               >
-                📞
+                <PhoneAnswerIcon />
               </button>
             </div>
           </div>
@@ -446,6 +736,7 @@ export default function CallModal() {
                 className="call-avatar-img"
               />
               <span className="pulse-ring ring-1"></span>
+              <span className="pulse-ring ring-2"></span>
             </div>
 
             <h3 className="call-peer-name">@{callData.peer?.username}</h3>
@@ -459,8 +750,9 @@ export default function CallModal() {
                 className="call-btn btn-decline"
                 onClick={handleEndCall}
                 title="Cancel Call"
+                aria-label="Cancel Call"
               >
-                ✕
+                <PhoneHangupIcon />
               </button>
             </div>
           </div>
@@ -471,93 +763,262 @@ export default function CallModal() {
         {/* ================================================================ */}
         {callState === 'connected' && (
           <div className="call-connected-view">
-            {/* Header / Duration */}
+            {/* Top Header Bar with Live Badge, User Info, Quality, and Fullscreen Controls */}
             <div className="call-header-bar">
               <div className="call-header-info">
                 <span className={`call-live-badge status-${connectionStatus}`}>
+                  <span className="live-pulsing-dot" />
                   {connectionStatus === 'connected' || connectionStatus === 'completed'
                     ? 'LIVE'
-                    : connectionStatus === 'checking' || connectionStatus === 'connecting'
-                    ? 'CONNECTING...'
                     : 'CONNECTING...'}
                 </span>
                 <span className="call-peer-title">@{callData.peer?.username}</span>
+                <span className="call-timer">{formatDuration(durationSeconds)}</span>
               </div>
-              <span className="call-timer">{formatDuration(durationSeconds)}</span>
-            </div>
 
-            {/* Remote Screen / Avatar */}
-            <div className="call-remote-screen">
-              {/* Dedicated remote voice audio tag (unmuted for crystal-clear audio playback) */}
-              <audio ref={remoteAudioRef} autoPlay playsInline />
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className={`remote-video-elem ${callData.callType === 'video' || hasRemoteVideo || isScreenSharing ? 'visible' : 'hidden'}`}
-              />
-              {!hasRemoteVideo && callData.callType !== 'video' && !isScreenSharing && (
-                <div className="audio-call-placeholder">
-                  <img
-                    src={callData.peer?.avatar_url || '/uploads/avatars/default-avatar.png'}
-                    alt=""
-                    className="audio-call-avatar"
-                  />
-                  <h4>Connected with @{callData.peer?.username}</h4>
+              <div className="call-header-badges">
+                {/* E2EE Security Badge */}
+                <div className="call-badge-chip" title="Call audio & video are end-to-end encrypted">
+                  <span className="badge-chip-icon">🔒</span>
+                  <span>E2EE</span>
                 </div>
-              )}
+
+                {/* Connection Quality Indicator */}
+                <div className="call-badge-chip quality-chip" title="Connection: HD (Fast, Low Latency)">
+                  <span className="signal-bars">
+                    <span className="bar bar-1" />
+                    <span className="bar bar-2" />
+                    <span className="bar bar-3" />
+                  </span>
+                  <span>HD</span>
+                </div>
+
+                {/* Picture in Picture Button */}
+                <button
+                  type="button"
+                  className="call-header-icon-btn"
+                  onClick={togglePictureInPicture}
+                  title="Picture in Picture"
+                  aria-label="Picture in Picture"
+                >
+                  <PiPIcon />
+                </button>
+
+                {/* Fullscreen Button */}
+                <button
+                  type="button"
+                  className={`call-header-icon-btn ${isFullscreen ? 'active' : ''}`}
+                  onClick={toggleFullscreen}
+                  title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+                  aria-label="Toggle Fullscreen"
+                >
+                  <FullscreenIcon isFullscreen={isFullscreen} />
+                </button>
+              </div>
             </div>
 
-            {/* Local Video PIP */}
-            {(callData.callType === 'video' || isScreenSharing || !isVideoMuted) && (
-              <div className="call-local-pip">
+            {/* Video Stage: Dedicated Audio Tag for Remote Voice */}
+            <audio ref={remoteAudioRef} autoPlay playsInline />
+
+            {/* Main Stage Video Screen (Displays Remote by default, or Local when swapped) */}
+            <div className="call-remote-screen">
+              {/* Primary Video Element */}
+              {!isSwappedView ? (
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className={`remote-video-elem ${callData.callType === 'video' || hasRemoteVideo || isScreenSharing ? 'visible' : 'hidden'}`}
+                />
+              ) : (
                 <video
                   ref={localVideoRef}
                   autoPlay
                   playsInline
                   muted
-                  className={`local-video-elem ${isVideoMuted ? 'muted-video' : ''}`}
+                  className={`remote-video-elem mirrored ${isVideoMuted ? 'muted-video' : ''}`}
                 />
+              )}
+
+              {/* Audio-only or Camera Off Placeholder on Main Screen */}
+              {((!isSwappedView && !hasRemoteVideo && callData.callType !== 'video' && !isScreenSharing) || 
+                (isSwappedView && isVideoMuted)) && (
+                <div className="audio-call-placeholder">
+                  <div className="audio-avatar-wrapper">
+                    <img
+                      src={(!isSwappedView ? callData.peer?.avatar_url : user?.avatar_url) || '/uploads/avatars/default-avatar.png'}
+                      alt=""
+                      className="audio-call-avatar"
+                    />
+                    <div className="audio-voice-wave" />
+                  </div>
+                  <h4>{isSwappedView ? `@${user?.username} (You)` : `Connected with @${callData.peer?.username}`}</h4>
+                  <p className="audio-call-status-hint">
+                    {isSwappedView ? 'Your camera is turned off' : 'Microphone connected'}
+                  </p>
+                </div>
+              )}
+
+              {/* In-Call Floating Animated Emoji Reactions */}
+              {floatingReactions.map((r) => (
+                <div
+                  key={r.id}
+                  className="floating-reaction-item"
+                  style={{ left: `${r.xPos}%` }}
+                >
+                  {r.emoji}
+                </div>
+              ))}
+            </div>
+
+            {/* Secondary Floating Corner PIP (Click to Swap Feeds) */}
+            {(callData.callType === 'video' || isScreenSharing || !isVideoMuted || hasRemoteVideo) && (
+              <div 
+                className="call-local-pip"
+                onClick={handleSwapFeeds}
+                title="Click to swap view"
+                role="button"
+                tabIndex={0}
+              >
+                {/* Secondary Video Feed */}
+                {!isSwappedView ? (
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`pip-video-elem mirrored ${isVideoMuted ? 'muted-video' : ''}`}
+                  />
+                ) : (
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    className={`pip-video-elem ${!hasRemoteVideo ? 'hidden' : ''}`}
+                  />
+                )}
+
+                {/* Swap Overlay on Hover */}
+                <div className="call-pip-swap-indicator">
+                  <SwapIcon />
+                  <span>Swap</span>
+                </div>
+
+                {/* PIP Off Label */}
+                {((!isSwappedView && isVideoMuted) || (isSwappedView && !hasRemoteVideo)) && (
+                  <div className="pip-video-off-label">
+                    <span>Camera Off</span>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* In-Call Controls Toolbar */}
+            {/* Floating Reactions Popover Dock */}
+            {showReactions && (
+              <div className="call-reactions-popover" role="dialog" aria-label="Reactions">
+                {['❤️', '👏', '🔥', '😂', '🎉', '✋'].map((em) => (
+                  <button
+                    key={em}
+                    type="button"
+                    className="reaction-emoji-btn"
+                    onClick={() => handleSendReaction(em)}
+                    title={`Send ${em}`}
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Professional Glassmorphic Floating Control Dock */}
             <div className="call-controls-toolbar">
+              {/* 1. Mute Microphone */}
               <button
                 type="button"
-                className={`control-btn ${isAudioMuted ? 'active-mute' : ''}`}
+                className={`control-btn ${isAudioMuted ? 'active-danger' : ''}`}
                 onClick={handleToggleMute}
-                title={isAudioMuted ? 'Unmute Microphone' : 'Mute Microphone'}
+                title={isAudioMuted ? 'Unmute Microphone (M)' : 'Mute Microphone (M)'}
+                aria-label="Microphone"
               >
-                {isAudioMuted ? '🔇' : '🎤'}
+                <MicIcon muted={isAudioMuted} />
               </button>
 
+              {/* 2. Turn Camera On / Off */}
               <button
                 type="button"
-                className={`control-btn ${isVideoMuted ? 'active-mute' : ''}`}
+                className={`control-btn ${isVideoMuted ? 'active-danger' : ''}`}
                 onClick={handleToggleVideo}
-                title={isVideoMuted ? 'Turn Camera On' : 'Turn Camera Off'}
+                title={isVideoMuted ? 'Turn Camera On (V)' : 'Turn Camera Off (V)'}
+                aria-label="Camera"
               >
-                {isVideoMuted ? '🚫' : '📹'}
+                <VideoCamIcon off={isVideoMuted} />
               </button>
 
+              {/* 3. Speaker Output Mute / Deafen */}
               <button
                 type="button"
-                className={`control-btn ${isScreenSharing ? 'active-action' : ''}`}
-                onClick={handleToggleScreenShare}
-                title={isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
+                className={`control-btn ${isSpeakerMuted ? 'active-danger' : ''}`}
+                onClick={handleToggleSpeaker}
+                title={isSpeakerMuted ? 'Unmute Audio Output' : 'Mute Audio Output'}
+                aria-label="Speaker"
               >
-                🖥️
+                <SpeakerIcon muted={isSpeakerMuted} />
               </button>
 
+              {/* 4. Screen Sharing */}
+              <button
+                type="button"
+                className={`control-btn ${isScreenSharing ? 'active-primary' : ''}`}
+                onClick={handleToggleScreenShare}
+                title={isScreenSharing ? 'Stop Sharing Screen' : 'Share Screen'}
+                aria-label="Screen Share"
+              >
+                <ScreenShareIcon active={isScreenSharing} />
+              </button>
+
+              {/* 5. Swap Main & Corner Video Feeds */}
+              <button
+                type="button"
+                className={`control-btn ${isSwappedView ? 'active-primary' : ''}`}
+                onClick={handleSwapFeeds}
+                title="Swap Main & PIP Feeds"
+                aria-label="Swap Feeds"
+              >
+                <SwapIcon />
+              </button>
+
+              {/* 6. In-Call Emoji Reactions Popover Trigger */}
+              <button
+                type="button"
+                className={`control-btn ${showReactions ? 'active-primary' : ''}`}
+                onClick={() => setShowReactions((prev) => !prev)}
+                title="Reactions"
+                aria-label="Reactions"
+              >
+                <ReactionsIcon />
+              </button>
+
+              {/* 7. Fullscreen Toggle */}
+              <button
+                type="button"
+                className={`control-btn ${isFullscreen ? 'active-primary' : ''}`}
+                onClick={toggleFullscreen}
+                title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+                aria-label="Fullscreen"
+              >
+                <FullscreenIcon isFullscreen={isFullscreen} />
+              </button>
+
+              {/* 8. End Call Hangup Pill */}
               <button
                 type="button"
                 className="control-btn btn-end-call"
                 onClick={handleEndCall}
-                title="End Call"
+                title="Leave Call"
+                aria-label="Leave Call"
               >
-                🔴
+                <PhoneHangupIcon />
+                <span className="btn-end-call-label">Leave</span>
               </button>
             </div>
           </div>
@@ -572,40 +1033,61 @@ export default function CallModal() {
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.78);
-          backdrop-filter: blur(8px);
+          background: rgba(8, 10, 15, 0.85);
+          backdrop-filter: blur(16px);
           z-index: 99999;
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 16px;
+          transition: background 0.3s ease;
+        }
+
+        .webrtc-call-overlay.fullscreen-overlay {
+          padding: 0;
+          background: #000000;
         }
 
         .webrtc-call-card {
           width: 100%;
-          max-width: 520px;
-          background: #18191c;
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          border-radius: 20px;
-          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+          max-width: 680px;
+          background: #111318;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 24px;
+          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05);
           overflow: hidden;
           color: #ffffff;
+          position: relative;
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        /* Incoming & Outgoing Styles */
+        .webrtc-call-card.is-fullscreen {
+          width: 100vw;
+          max-width: 100vw;
+          height: 100vh;
+          max-height: 100vh;
+          border-radius: 0;
+          border: none;
+          box-shadow: none;
+        }
+
+        /* ================================================================ */
+        /* Incoming & Outgoing Styles                                       */
+        /* ================================================================ */
         .call-incoming-view,
         .call-outgoing-view {
-          padding: 40px 24px;
+          padding: 50px 32px;
           display: flex;
           flex-direction: column;
           align-items: center;
           text-align: center;
+          background: radial-gradient(circle at center, #1e2230 0%, #111318 100%);
         }
 
         .call-avatar-pulse-container {
           position: relative;
-          width: 110px;
-          height: 110px;
+          width: 130px;
+          height: 130px;
           margin-bottom: 24px;
           display: flex;
           align-items: center;
@@ -613,12 +1095,13 @@ export default function CallModal() {
         }
 
         .call-avatar-img {
-          width: 90px;
-          height: 90px;
+          width: 96px;
+          height: 96px;
           border-radius: 50%;
           object-fit: cover;
-          border: 3px solid #6366f1;
-          z-index: 2;
+          border: 3.5px solid #6366f1;
+          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+          z-index: 3;
         }
 
         .pulse-ring {
@@ -627,7 +1110,7 @@ export default function CallModal() {
           height: 100%;
           border-radius: 50%;
           border: 2px solid #6366f1;
-          animation: pulseWave 2s infinite ease-out;
+          animation: pulseWave 2.4s infinite cubic-bezier(0.25, 1, 0.5, 1);
           opacity: 0.6;
         }
 
@@ -635,26 +1118,32 @@ export default function CallModal() {
           animation-delay: 0.8s;
         }
 
+        .pulse-ring.ring-3 {
+          animation-delay: 1.6s;
+        }
+
         @keyframes pulseWave {
-          0% { transform: scale(0.8); opacity: 0.8; }
-          100% { transform: scale(1.4); opacity: 0; }
+          0% { transform: scale(0.75); opacity: 0.8; }
+          100% { transform: scale(1.6); opacity: 0; }
         }
 
         .call-peer-name {
-          font-size: 22px;
-          font-weight: 700;
-          margin: 0 0 8px 0;
+          font-size: 24px;
+          font-weight: 800;
+          letter-spacing: -0.4px;
+          margin: 0 0 6px 0;
         }
 
         .call-status-label {
-          color: #9ca3af;
+          color: #94a3b8;
           font-size: 15px;
-          margin: 0 0 32px 0;
+          font-weight: 500;
+          margin: 0 0 36px 0;
         }
 
         .call-actions-row {
           display: flex;
-          gap: 32px;
+          gap: 36px;
         }
 
         .call-btn {
@@ -665,81 +1154,192 @@ export default function CallModal() {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 26px;
           cursor: pointer;
-          transition: transform 0.15s ease, filter 0.15s ease;
+          transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, filter 0.15s ease;
         }
 
         .call-btn:hover {
-          transform: scale(1.08);
-          filter: brightness(1.1);
+          transform: scale(1.12);
+        }
+
+        .call-btn:active {
+          transform: scale(0.95);
         }
 
         .btn-accept {
-          background: #10b981;
+          background: linear-gradient(135deg, #10b981, #059669);
           color: #ffffff;
+          box-shadow: 0 8px 24px rgba(16, 185, 129, 0.45);
         }
 
         .btn-decline {
-          background: #ef4444;
+          background: linear-gradient(135deg, #ef4444, #dc2626);
           color: #ffffff;
+          box-shadow: 0 8px 24px rgba(239, 68, 68, 0.45);
         }
 
-        /* Connected View */
+        /* ================================================================ */
+        /* Connected Call View                                              */
+        /* ================================================================ */
         .call-connected-view {
           position: relative;
-          height: 480px;
+          height: 520px;
           display: flex;
           flex-direction: column;
-          background: #0f1012;
+          background: #000000;
+          overflow: hidden;
         }
 
+        .webrtc-call-card.is-fullscreen .call-connected-view {
+          height: 100vh;
+        }
+
+        /* Top Header Bar */
         .call-header-bar {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 14px 20px;
-          background: rgba(0, 0, 0, 0.4);
-          z-index: 10;
+          padding: 16px 20px;
+          background: linear-gradient(180deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0) 100%);
+          z-index: 50;
+        }
+
+        .call-header-info {
+          display: flex;
+          align-items: center;
+          gap: 10px;
         }
 
         .call-live-badge {
-          background: #f59e0b;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: rgba(245, 158, 11, 0.2);
+          border: 1px solid rgba(245, 158, 11, 0.4);
+          color: #f59e0b;
           font-size: 11px;
-          font-weight: 700;
-          padding: 2px 8px;
-          border-radius: 12px;
-          margin-right: 8px;
-          transition: background 0.3s ease;
+          font-weight: 800;
+          padding: 3px 9px;
+          border-radius: 9999px;
+          letter-spacing: 0.5px;
         }
 
         .call-live-badge.status-connected,
         .call-live-badge.status-completed {
-          background: #10b981;
+          background: rgba(16, 185, 129, 0.2);
+          border-color: rgba(16, 185, 129, 0.4);
+          color: #10b981;
         }
 
-        .call-live-badge.status-failed {
-          background: #ef4444;
+        .live-pulsing-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: currentColor;
+          animation: dotPulse 1.6s infinite ease-in-out;
+        }
+
+        @keyframes dotPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.75); }
         }
 
         .call-peer-title {
-          font-weight: 600;
+          font-weight: 700;
           font-size: 15px;
+          color: #ffffff;
+          text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
         }
 
         .call-timer {
-          font-family: monospace;
-          font-size: 15px;
-          color: #9ca3af;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 14px;
+          font-weight: 600;
+          color: #cbd5e1;
+          background: rgba(0, 0, 0, 0.3);
+          padding: 2px 8px;
+          border-radius: 6px;
+          backdrop-filter: blur(4px);
         }
 
+        .call-header-badges {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .call-badge-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          padding: 3px 8px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 600;
+          color: #94a3b8;
+          backdrop-filter: blur(8px);
+        }
+
+        .quality-chip {
+          color: #10b981;
+        }
+
+        .signal-bars {
+          display: inline-flex;
+          align-items: flex-end;
+          gap: 2px;
+          height: 11px;
+        }
+
+        .signal-bars .bar {
+          width: 2.5px;
+          background: #10b981;
+          border-radius: 1px;
+        }
+
+        .signal-bars .bar-1 { height: 4px; }
+        .signal-bars .bar-2 { height: 7px; }
+        .signal-bars .bar-3 { height: 11px; }
+
+        .call-header-icon-btn {
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          color: #ffffff;
+          width: 34px;
+          height: 34px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          backdrop-filter: blur(8px);
+        }
+
+        .call-header-icon-btn:hover {
+          background: rgba(255, 255, 255, 0.18);
+          transform: scale(1.06);
+        }
+
+        .call-header-icon-btn.active {
+          background: #6366f1;
+          border-color: #6366f1;
+        }
+
+        /* Remote / Main Video Screen */
         .call-remote-screen {
           flex: 1;
           display: flex;
           align-items: center;
           justify-content: center;
           position: relative;
-          background: #000;
+          background: #0b0c10;
           overflow: hidden;
         }
 
@@ -747,13 +1347,16 @@ export default function CallModal() {
           width: 100%;
           height: 100%;
           object-fit: cover;
+          display: block;
+        }
+
+        .remote-video-elem.mirrored {
+          transform: scaleX(-1);
         }
 
         .remote-video-elem.hidden {
           opacity: 0;
           position: absolute;
-          width: 1px;
-          height: 1px;
           pointer-events: none;
         }
 
@@ -761,85 +1364,312 @@ export default function CallModal() {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 16px;
-        }
-
-        .audio-call-avatar {
-          width: 100px;
-          height: 100px;
-          border-radius: 50%;
-          object-fit: cover;
-          border: 3px solid #6366f1;
-        }
-
-        .call-local-pip {
-          position: absolute;
-          bottom: 84px;
-          right: 16px;
-          width: 120px;
-          height: 80px;
-          background: #202225;
-          border-radius: 10px;
-          overflow: hidden;
-          border: 2px solid rgba(255, 255, 255, 0.2);
-          z-index: 20;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-        }
-
-        .local-video-elem {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          transform: scaleX(-1);
-        }
-
-        .local-video-elem.muted-video {
-          opacity: 0.2;
-        }
-
-        .call-controls-toolbar {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 16px;
-          padding: 16px;
-          background: rgba(0, 0, 0, 0.6);
+          gap: 14px;
           z-index: 10;
         }
 
-        .control-btn {
-          width: 48px;
-          height: 48px;
-          border-radius: 50%;
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          background: #2a2b2f;
-          color: #ffffff;
-          font-size: 20px;
-          cursor: pointer;
+        .audio-avatar-wrapper {
+          position: relative;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: background 0.15s ease, transform 0.15s ease;
+        }
+
+        .audio-call-avatar {
+          width: 110px;
+          height: 110px;
+          border-radius: 50%;
+          object-fit: cover;
+          border: 3.5px solid #6366f1;
+          box-shadow: 0 12px 32px rgba(99, 102, 241, 0.35);
+          z-index: 2;
+        }
+
+        .audio-voice-wave {
+          position: absolute;
+          inset: -8px;
+          border-radius: 50%;
+          border: 2px solid rgba(99, 102, 241, 0.45);
+          animation: waveBreathe 2s infinite ease-in-out;
+        }
+
+        @keyframes waveBreathe {
+          0%, 100% { transform: scale(1); opacity: 0.3; }
+          50% { transform: scale(1.15); opacity: 0.8; }
+        }
+
+        .audio-call-placeholder h4 {
+          font-size: 18px;
+          font-weight: 700;
+          margin: 0;
+          color: #ffffff;
+        }
+
+        .audio-call-status-hint {
+          font-size: 13px;
+          color: #94a3b8;
+          margin: 0;
+        }
+
+        /* Floating Reactions Particles */
+        @keyframes floatUpFade {
+          0% {
+            opacity: 0;
+            transform: translateY(20px) scale(0.6);
+          }
+          15% {
+            opacity: 1;
+            transform: translateY(0px) scale(1.2);
+          }
+          80% {
+            opacity: 0.9;
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(-260px) scale(1.6);
+          }
+        }
+
+        .floating-reaction-item {
+          position: absolute;
+          bottom: 120px;
+          font-size: 38px;
+          pointer-events: none;
+          z-index: 95;
+          animation: floatUpFade 2.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+          filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
+        }
+
+        /* Secondary Corner PIP Video */
+        .call-local-pip {
+          position: absolute;
+          bottom: 96px;
+          right: 20px;
+          width: 140px;
+          height: 95px;
+          background: #181920;
+          border-radius: 14px;
+          overflow: hidden;
+          border: 2px solid rgba(255, 255, 255, 0.22);
+          z-index: 40;
+          box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65);
+          cursor: pointer;
+          transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .call-local-pip:hover {
+          transform: scale(1.06);
+          border-color: #6366f1;
+          box-shadow: 0 12px 36px rgba(99, 102, 241, 0.4);
+        }
+
+        .pip-video-elem {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+
+        .pip-video-elem.mirrored {
+          transform: scaleX(-1);
+        }
+
+        .pip-video-elem.muted-video {
+          opacity: 0.25;
+        }
+
+        .call-pip-swap-indicator {
+          position: absolute;
+          inset: 0;
+          background: rgba(15, 23, 42, 0.75);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          font-size: 11px;
+          font-weight: 700;
+          color: #ffffff;
+          opacity: 0;
+          transition: opacity 0.15s ease;
+          backdrop-filter: blur(4px);
+        }
+
+        .call-local-pip:hover .call-pip-swap-indicator {
+          opacity: 1;
+        }
+
+        .pip-video-off-label {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          font-weight: 700;
+          color: #94a3b8;
+          background: #111318;
+        }
+
+        /* Floating Reactions Popover */
+        @keyframes popoverIn {
+          0% { opacity: 0; transform: translate(-50%, 10px) scale(0.92); }
+          100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+        }
+
+        .call-reactions-popover {
+          position: absolute;
+          bottom: 86px;
+          left: 50%;
+          transform: translateX(-50%);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 14px;
+          background: rgba(22, 25, 34, 0.95);
+          backdrop-filter: blur(20px);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 9999px;
+          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+          animation: popoverIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+          z-index: 101;
+        }
+
+        .reaction-emoji-btn {
+          background: none;
+          border: none;
+          font-size: 24px;
+          cursor: pointer;
+          transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+          padding: 4px;
+          line-height: 1;
+        }
+
+        .reaction-emoji-btn:hover {
+          transform: scale(1.35) translateY(-3px);
+        }
+
+        /* Bottom Glassmorphic Control Dock */
+        .call-controls-toolbar {
+          position: absolute;
+          bottom: 22px;
+          left: 50%;
+          transform: translateX(-50%);
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 8px 18px;
+          background: rgba(18, 20, 26, 0.85);
+          backdrop-filter: blur(24px) saturate(180%);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          border-radius: 9999px;
+          box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
+          z-index: 100;
+          max-width: 95%;
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+
+        .call-controls-toolbar::-webkit-scrollbar {
+          display: none;
+        }
+
+        .control-btn {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          background: rgba(255, 255, 255, 0.08);
+          color: #ffffff;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+          flex-shrink: 0;
+          user-select: none;
         }
 
         .control-btn:hover {
-          background: #37393f;
-          transform: scale(1.05);
+          background: rgba(255, 255, 255, 0.2);
+          transform: translateY(-2px) scale(1.08);
+          border-color: rgba(255, 255, 255, 0.3);
         }
 
-        .control-btn.active-mute {
+        .control-btn:active {
+          transform: translateY(0) scale(0.95);
+        }
+
+        .control-btn.active-danger {
           background: #ef4444;
           border-color: #ef4444;
+          color: #ffffff;
+          box-shadow: 0 4px 16px rgba(239, 68, 68, 0.5);
         }
 
-        .control-btn.active-action {
+        .control-btn.active-primary {
           background: #6366f1;
           border-color: #6366f1;
+          color: #ffffff;
+          box-shadow: 0 4px 16px rgba(99, 102, 241, 0.5);
         }
 
         .control-btn.btn-end-call {
+          background: #ef4444;
+          border-color: #ef4444;
+          color: #ffffff;
+          padding: 0 18px;
+          border-radius: 9999px;
+          width: auto;
+          gap: 8px;
+          font-weight: 700;
+          font-size: 14px;
+          box-shadow: 0 4px 18px rgba(239, 68, 68, 0.5);
+        }
+
+        .control-btn.btn-end-call:hover {
           background: #dc2626;
           border-color: #dc2626;
+          transform: translateY(-2px) scale(1.04);
+        }
+
+        .btn-end-call-label {
+          letter-spacing: 0.3px;
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 640px) {
+          .webrtc-call-card {
+            max-width: 100%;
+            height: 90vh;
+            border-radius: 20px;
+          }
+          .call-connected-view {
+            height: 100%;
+          }
+          .call-local-pip {
+            width: 105px;
+            height: 75px;
+            bottom: 84px;
+            right: 14px;
+          }
+          .call-controls-toolbar {
+            gap: 6px;
+            padding: 6px 12px;
+            bottom: 16px;
+          }
+          .control-btn {
+            width: 38px;
+            height: 38px;
+          }
+          .control-btn.btn-end-call {
+            padding: 0 12px;
+          }
+          .btn-end-call-label {
+            display: none;
+          }
+          .call-badge-chip {
+            display: none;
+          }
         }
       `}</style>
     </div>

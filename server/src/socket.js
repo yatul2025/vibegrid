@@ -492,6 +492,15 @@ function initSocket(httpServer) {
       });
     });
 
+    // 7. In-Call Real-Time Emoji Reaction Relay
+    socket.on('call:reaction', ({ targetUserId, emoji, callId }) => {
+      socket.to(`user:${targetUserId}`).emit('call:reaction', {
+        fromUserId: userId,
+        emoji,
+        callId
+      });
+    });
+
     // ========================================================================
     // Disconnect Handler
     // ========================================================================
