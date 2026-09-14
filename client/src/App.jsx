@@ -315,145 +315,208 @@ function AppContent() {
 
           {/* Desktop Navigation Links */}
           <nav className="nav-links desktop-only" aria-label="Main navigation">
-            {user ? (
-              <>
+            <ul className="nav-links-list">
+              {user ? (
+                <>
+                  <li>
+                    <a
+                      href="#feed"
+                      className={`nav-tab-btn ${currentTab === 'feed' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setViewedUsername(null);
+                        setCurrentTab('feed');
+                      }}
+                    >
+                      🏠 Feed
+                    </a>
+                  </li>
+
+                  <li>
+                    <a
+                      href="#explore"
+                      className={`nav-tab-btn ${currentTab === 'explore' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setCurrentTab('explore');
+                      }}
+                    >
+                      🔍 Explore
+                    </a>
+                  </li>
+
+                  <li>
+                    <button
+                      type="button"
+                      className="nav-tab-btn btn-create-nav"
+                      onClick={() => {
+                        if (guardDemoAction('create_post')) return;
+                        setIsCreatePostOpen(true);
+                      }}
+                      title="Create and share a new post"
+                    >
+                      ➕ Create
+                    </button>
+                  </li>
+
+                  <li>
+                    <button
+                      type="button"
+                      className={`nav-tab-btn nav-notifications-btn ${isNotificationsOpen ? 'active' : ''}`}
+                      onClick={() => setIsNotificationsOpen((prev) => !prev)}
+                      title="Activity Notifications"
+                    >
+                      <span>🔔</span>
+                      <span className="nav-notifications-label">Notifications</span>
+                      {unreadCount > 0 && (
+                        <span className="nav-unread-badge">
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+
+                  <li>
+                    <a
+                      href="#messages"
+                      className={`nav-tab-btn nav-messages-btn ${currentTab === 'messages' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setDirectMessageTarget(null);
+                        setCurrentTab('messages');
+                      }}
+                      title="Direct Messages"
+                    >
+                      <span>💬</span>
+                      <span className="nav-messages-label">Messages</span>
+                      {unreadMessagesCount > 0 && (
+                        <span className="nav-unread-badge">
+                          {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
+                        </span>
+                      )}
+                    </a>
+                  </li>
+
+                  <li>
+                    <a
+                      href={`#profile/${user.username}`}
+                      className={`nav-tab-btn ${currentTab === 'profile' && !viewedUsername ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        navigateToProfile(null);
+                      }}
+                      style={{ display: 'flex', alignItems: 'center' }}
+                    >
+                      {user.avatar_url ? (
+                        <img src={user.avatar_url} alt="" className="nav-avatar-mini" />
+                      ) : (
+                        <span className="nav-avatar-fallback-mini">
+                          {user.username?.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                      <span>@{user.username}</span>
+                    </a>
+                  </li>
+
+                  <li>
+                    <a
+                      href="#settings"
+                      className={`nav-tab-btn ${currentTab === 'settings' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openSettings('contact');
+                      }}
+                      title="Settings & Privacy"
+                    >
+                      ⚙️ Settings
+                    </a>
+                  </li>
+                </>
+              ) : (
+                <>
+                  <li>
+                    <a
+                      href="#feed"
+                      className={`nav-tab-btn ${currentTab === 'feed' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setViewedUsername(null);
+                        setCurrentTab('feed');
+                      }}
+                    >
+                      🏠 Feed
+                    </a>
+                  </li>
+
+                  <li>
+                    <a
+                      href="#explore"
+                      className={`nav-tab-btn ${currentTab === 'explore' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setCurrentTab('explore');
+                      }}
+                    >
+                      🔍 Explore
+                    </a>
+                  </li>
+
+                  <li>
+                    <a
+                      href="#auth"
+                      className={`nav-tab-btn ${currentTab === 'auth' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setCurrentTab('auth');
+                      }}
+                    >
+                      👤 Sign In / Register
+                    </a>
+                  </li>
+                </>
+              )}
+
+              {isTestUser && (
+                <li>
+                  <a
+                    href="#status"
+                    className={`nav-tab-btn ${currentTab === 'status' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setCurrentTab('status');
+                    }}
+                    title="System Status & Health"
+                  >
+                    📊 System Status
+                  </a>
+                </li>
+              )}
+
+              {user && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="nav-tab-btn nav-logout-btn"
+                    title="Sign out of your account"
+                  >
+                    Sign Out
+                  </button>
+                </li>
+              )}
+
+              <li>
                 <button
-                  className={`nav-tab-btn ${currentTab === 'feed' ? 'active' : ''}`}
-                  onClick={() => {
-                    setViewedUsername(null);
-                    setCurrentTab('feed');
-                  }}
+                  type="button"
+                  onClick={toggleTheme}
+                  className="nav-tab-btn nav-theme-btn"
+                  title="Toggle Dark/Light Mode"
+                  aria-label="Toggle dark/light theme"
                 >
-                  🏠 Feed
+                  {theme === 'dark' ? '☀️' : '🌙'}
                 </button>
-
-                <button
-                  className={`nav-tab-btn ${currentTab === 'explore' ? 'active' : ''}`}
-                  onClick={() => setCurrentTab('explore')}
-                >
-                  🔍 Explore
-                </button>
-
-                <button
-                  className="nav-tab-btn btn-create-nav"
-                  onClick={() => {
-                    if (guardDemoAction('create_post')) return;
-                    setIsCreatePostOpen(true);
-                  }}
-                  title="Create and share a new post"
-                >
-                  ➕ Create
-                </button>
-
-                <button
-                  className={`nav-tab-btn nav-notifications-btn ${isNotificationsOpen ? 'active' : ''}`}
-                  onClick={() => setIsNotificationsOpen((prev) => !prev)}
-                  title="Activity Notifications"
-                >
-                  <span>🔔</span>
-                  <span className="nav-notifications-label">Notifications</span>
-                  {unreadCount > 0 && (
-                    <span className="nav-unread-badge">
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </span>
-                  )}
-                </button>
-
-                <button
-                  className={`nav-tab-btn nav-messages-btn ${currentTab === 'messages' ? 'active' : ''}`}
-                  onClick={() => {
-                    setDirectMessageTarget(null);
-                    setCurrentTab('messages');
-                  }}
-                  title="Direct Messages"
-                >
-                  <span>💬</span>
-                  <span className="nav-messages-label">Messages</span>
-                  {unreadMessagesCount > 0 && (
-                    <span className="nav-unread-badge">
-                      {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
-                    </span>
-                  )}
-                </button>
-
-                <button
-                  className={`nav-tab-btn ${currentTab === 'profile' && !viewedUsername ? 'active' : ''}`}
-                  onClick={() => navigateToProfile(null)}
-                  style={{ display: 'flex', alignItems: 'center' }}
-                >
-                  {user.avatar_url ? (
-                    <img src={user.avatar_url} alt="" className="nav-avatar-mini" />
-                  ) : (
-                    <span className="nav-avatar-fallback-mini">
-                      {user.username?.charAt(0).toUpperCase()}
-                    </span>
-                  )}
-                  <span>@{user.username}</span>
-                </button>
-
-                <button
-                  className={`nav-tab-btn ${currentTab === 'settings' ? 'active' : ''}`}
-                  onClick={() => openSettings('contact')}
-                  title="Settings & Privacy"
-                >
-                  ⚙️ Settings
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  className={`nav-tab-btn ${currentTab === 'feed' ? 'active' : ''}`}
-                  onClick={() => {
-                    setViewedUsername(null);
-                    setCurrentTab('feed');
-                  }}
-                >
-                  🏠 Feed
-                </button>
-
-                <button
-                  className={`nav-tab-btn ${currentTab === 'explore' ? 'active' : ''}`}
-                  onClick={() => setCurrentTab('explore')}
-                >
-                  🔍 Explore
-                </button>
-
-                <button
-                  className={`nav-tab-btn ${currentTab === 'auth' ? 'active' : ''}`}
-                  onClick={() => setCurrentTab('auth')}
-                >
-                  👤 Sign In / Register
-                </button>
-              </>
-            )}
-
-            {isTestUser && (
-              <button
-                className={`nav-tab-btn ${currentTab === 'status' ? 'active' : ''}`}
-                onClick={() => setCurrentTab('status')}
-              >
-                📊 System Status
-              </button>
-            )}
-
-            {user && (
-              <button
-                onClick={logout}
-                className="nav-tab-btn nav-logout-btn"
-                title="Sign out of your account"
-              >
-                Sign Out
-              </button>
-            )}
-
-            <button
-              onClick={toggleTheme}
-              className="nav-tab-btn nav-theme-btn"
-              title="Toggle Dark/Light Mode"
-              aria-label="Toggle dark/light theme"
-            >
-              {theme === 'dark' ? '☀️' : '🌙'}
-            </button>
+              </li>
+            </ul>
           </nav>
 
           {/* Mobile Header Actions (Visible on mobile <= 768px) */}
@@ -595,69 +658,91 @@ function AppContent() {
 
       {/* Mobile Bottom Navigation Bar (Visible on mobile <= 768px when logged in) */}
       {user && (
-        <nav className="mobile-bottom-navbar mobile-only">
-          <button
-            type="button"
-            className={`mobile-nav-item ${currentTab === 'feed' && !viewedUsername ? 'active' : ''}`}
-            onClick={() => {
-              setViewedUsername(null);
-              setCurrentTab('feed');
-            }}
-            title="Home Feed"
-          >
-            <span className="mobile-nav-icon">🏠</span>
-            <span className="mobile-nav-label">Feed</span>
-          </button>
+        <nav className="mobile-bottom-navbar mobile-only" aria-label="Mobile navigation">
+          <ul className="mobile-bottom-navbar-list">
+            <li>
+              <a
+                href="#feed"
+                className={`mobile-nav-item ${currentTab === 'feed' && !viewedUsername ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setViewedUsername(null);
+                  setCurrentTab('feed');
+                }}
+                title="Home Feed"
+              >
+                <span className="mobile-nav-icon">🏠</span>
+                <span className="mobile-nav-label">Feed</span>
+              </a>
+            </li>
 
-          <button
-            type="button"
-            className={`mobile-nav-item ${currentTab === 'explore' ? 'active' : ''}`}
-            onClick={() => setCurrentTab('explore')}
-            title="Explore"
-          >
-            <span className="mobile-nav-icon">🔍</span>
-            <span className="mobile-nav-label">Explore</span>
-          </button>
+            <li>
+              <a
+                href="#explore"
+                className={`mobile-nav-item ${currentTab === 'explore' ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setCurrentTab('explore');
+                }}
+                title="Explore"
+              >
+                <span className="mobile-nav-icon">🔍</span>
+                <span className="mobile-nav-label">Explore</span>
+              </a>
+            </li>
 
-          <button
-            type="button"
-            className="mobile-nav-item mobile-nav-create-btn"
-            onClick={() => {
-              if (guardDemoAction('create_post')) return;
-              setIsCreatePostOpen(true);
-            }}
-            title="Create Post"
-          >
-            <span className="mobile-nav-create-icon">➕</span>
-          </button>
+            <li>
+              <button
+                type="button"
+                className="mobile-nav-item mobile-nav-create-btn"
+                onClick={() => {
+                  if (guardDemoAction('create_post')) return;
+                  setIsCreatePostOpen(true);
+                }}
+                title="Create Post"
+              >
+                <span className="mobile-nav-create-icon">➕</span>
+              </button>
+            </li>
 
-          {isTestUser && (
-            <button
-              type="button"
-              className={`mobile-nav-item ${currentTab === 'status' ? 'active' : ''}`}
-              onClick={() => setCurrentTab('status')}
-              title="System Status"
-            >
-              <span className="mobile-nav-icon">📊</span>
-              <span className="mobile-nav-label">Status</span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            className={`mobile-nav-item ${currentTab === 'profile' && !viewedUsername ? 'active' : ''}`}
-            onClick={() => navigateToProfile(null)}
-            title="My Profile"
-          >
-            {user.avatar_url ? (
-              <img src={user.avatar_url} alt="" className="mobile-nav-avatar" />
-            ) : (
-              <span className="mobile-nav-avatar-fallback">
-                {user.username?.charAt(0).toUpperCase()}
-              </span>
+            {isTestUser && (
+              <li>
+                <a
+                  href="#status"
+                  className={`mobile-nav-item ${currentTab === 'status' ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setCurrentTab('status');
+                  }}
+                  title="System Status"
+                >
+                  <span className="mobile-nav-icon">📊</span>
+                  <span className="mobile-nav-label">Status</span>
+                </a>
+              </li>
             )}
-            <span className="mobile-nav-label">Profile</span>
-          </button>
+
+            <li>
+              <a
+                href={`#profile/${user.username}`}
+                className={`mobile-nav-item ${currentTab === 'profile' && !viewedUsername ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigateToProfile(null);
+                }}
+                title="My Profile"
+              >
+                {user.avatar_url ? (
+                  <img src={user.avatar_url} alt="" className="mobile-nav-avatar" />
+                ) : (
+                  <span className="mobile-nav-avatar-fallback">
+                    {user.username?.charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <span className="mobile-nav-label">Profile</span>
+              </a>
+            </li>
+          </ul>
         </nav>
       )}
 

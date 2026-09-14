@@ -947,30 +947,35 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                 </div>
               </div>
 
-              <nav className="settings-nav-list">
-                {categories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    className={`settings-nav-item ${activeSection === cat.id ? 'active' : ''}`}
-                    onClick={() => {
-                      setActiveSection(cat.id);
-                      if (isMobile) setMobileViewingSection(true);
-                    }}
-                  >
-                    <span className="settings-nav-icon">{cat.icon}</span>
-                    <div className="settings-nav-info">
-                      <span className="settings-nav-label">
-                        {cat.label}
-                        {isDemoUser && (
-                          <span style={{ fontSize: '11px', color: '#f87171', marginLeft: '6px' }}>🔒</span>
-                        )}
-                      </span>
-                      <span className="settings-nav-desc">{cat.description}</span>
-                    </div>
-                    {isMobile && <span className="settings-nav-chevron">›</span>}
-                  </button>
-                ))}
+              <nav className="settings-nav-list" aria-label="Settings navigation">
+                <ul className="settings-nav-items-list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {categories.map((cat) => (
+                    <li key={cat.id}>
+                      <a
+                        href={`#${cat.id}`}
+                        className={`settings-nav-item ${activeSection === cat.id ? 'active' : ''}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setActiveSection(cat.id);
+                          if (isMobile) setMobileViewingSection(true);
+                        }}
+                        style={{ textDecoration: 'none' }}
+                      >
+                        <span className="settings-nav-icon">{cat.icon}</span>
+                        <div className="settings-nav-info">
+                          <span className="settings-nav-label">
+                            {cat.label}
+                            {isDemoUser && (
+                              <span style={{ fontSize: '11px', color: '#f87171', marginLeft: '6px' }}>🔒</span>
+                            )}
+                          </span>
+                          <span className="settings-nav-desc">{cat.description}</span>
+                        </div>
+                        {isMobile && <span className="settings-nav-chevron">›</span>}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
               </nav>
 
               <div className="settings-sidebar-footer">

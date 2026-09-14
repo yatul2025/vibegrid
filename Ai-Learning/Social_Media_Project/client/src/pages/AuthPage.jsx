@@ -1380,22 +1380,24 @@ export default function AuthPage({ initialTab = 'login' }) {
           BOTTOM FOOTER: (VibeGrid branded links matching screenshot structure)
           ========================================================================= */}
       <footer className="ig-auth-footer">
-        <div className="ig-footer-links">
-          <button type="button" onClick={() => setInfoModal('vibegrid')}>VibeGrid</button>
-          <button type="button" onClick={() => setInfoModal('about')}>About</button>
-          <button type="button" onClick={() => setInfoModal('blog')}>Blog</button>
-          <button type="button" onClick={() => setInfoModal('jobs')}>Jobs</button>
-          <button type="button" onClick={() => setInfoModal('help')}>Help</button>
-          <button type="button" onClick={() => setInfoModal('api')}>API</button>
-          <button type="button" onClick={() => setInfoModal('privacy')}>Privacy</button>
-          <button type="button" onClick={() => setInfoModal('terms')}>Terms</button>
-          <button type="button" onClick={() => setInfoModal('locations')}>Locations</button>
-          <button type="button" onClick={() => setInfoModal('lite')}>VibeGrid Lite</button>
-          <button type="button" onClick={() => setInfoModal('ai')}>VibeGrid AI</button>
-          <button type="button" onClick={() => setInfoModal('threads')}>Threads</button>
-          <button type="button" onClick={() => setInfoModal('contact-uploading')}>Contact Uploading & Non-Users</button>
-          <button type="button" onClick={() => setInfoModal('verified')}>VibeGrid Verified</button>
-        </div>
+        <nav aria-label="Footer navigation">
+          <ul className="ig-footer-links">
+            <li><a href="#vibegrid" onClick={(e) => { e.preventDefault(); setInfoModal('vibegrid'); }}>VibeGrid</a></li>
+            <li><a href="#about" onClick={(e) => { e.preventDefault(); setInfoModal('about'); }}>About</a></li>
+            <li><a href="#blog" onClick={(e) => { e.preventDefault(); setInfoModal('blog'); }}>Blog</a></li>
+            <li><a href="#jobs" onClick={(e) => { e.preventDefault(); setInfoModal('jobs'); }}>Jobs</a></li>
+            <li><a href="#help" onClick={(e) => { e.preventDefault(); setInfoModal('help'); }}>Help</a></li>
+            <li><a href="#api" onClick={(e) => { e.preventDefault(); setInfoModal('api'); }}>API</a></li>
+            <li><a href="#privacy" onClick={(e) => { e.preventDefault(); setInfoModal('privacy'); }}>Privacy</a></li>
+            <li><a href="#terms" onClick={(e) => { e.preventDefault(); setInfoModal('terms'); }}>Terms</a></li>
+            <li><a href="#locations" onClick={(e) => { e.preventDefault(); setInfoModal('locations'); }}>Locations</a></li>
+            <li><a href="#lite" onClick={(e) => { e.preventDefault(); setInfoModal('lite'); }}>VibeGrid Lite</a></li>
+            <li><a href="#ai" onClick={(e) => { e.preventDefault(); setInfoModal('ai'); }}>VibeGrid AI</a></li>
+            <li><a href="#threads" onClick={(e) => { e.preventDefault(); setInfoModal('threads'); }}>Threads</a></li>
+            <li><a href="#contact-uploading" onClick={(e) => { e.preventDefault(); setInfoModal('contact-uploading'); }}>Contact Uploading & Non-Users</a></li>
+            <li><a href="#verified" onClick={(e) => { e.preventDefault(); setInfoModal('verified'); }}>VibeGrid Verified</a></li>
+          </ul>
+        </nav>
 
         <div className="ig-footer-copyright">
           <span className="ig-footer-lang">English ▾</span>

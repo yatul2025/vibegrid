@@ -235,8 +235,10 @@ export default function ExplorePage({ onNavigateToProfile }) {
           </label>
           <input
             id="explore-search-input"
+            name="search"
             aria-label="Search creators by username or name"
-            type="text"
+            type="search"
+            inputMode="search"
             placeholder="Search creators by username or name..."
             value={searchQuery}
             onChange={handleSearchChange}
