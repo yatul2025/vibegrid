@@ -230,7 +230,12 @@ export default function ExplorePage({ onNavigateToProfile }) {
       <div className="explore-search-bar-wrapper" ref={searchContainerRef}>
         <div className="explore-search-input-box">
           <span className="search-icon">🔍</span>
+          <label htmlFor="explore-search-input" className="sr-only">
+            Search creators by username or name
+          </label>
           <input
+            id="explore-search-input"
+            aria-label="Search creators by username or name"
             type="text"
             placeholder="Search creators by username or name..."
             value={searchQuery}

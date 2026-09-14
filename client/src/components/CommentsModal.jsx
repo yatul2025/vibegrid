@@ -287,27 +287,33 @@ export default function CommentsModal({
                   ))}
                 </div>
                 <form onSubmit={handleSubmit} className="comments-input-bar">
-                <input
-                  type="text"
-                  placeholder="Add a comment..."
-                  maxLength={500}
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value.slice(0, 500))}
-                  disabled={submitting}
-                />
-                <div className="input-bar-actions">
-                  <span className={`char-counter-mini ${500 - newComment.length < 50 ? 'warning' : ''}`}>
-                    {500 - newComment.length}
-                  </span>
-                  <button
-                    type="submit"
-                    className="comment-post-btn"
-                    disabled={submitting || !newComment.trim()}
-                  >
-                    Post
-                  </button>
-                </div>
-              </form>
+                  <label htmlFor="comments-modal-input" className="sr-only">
+                    Add a comment
+                  </label>
+                  <input
+                    id="comments-modal-input"
+                    aria-label="Add a comment"
+                    type="text"
+                    placeholder="Add a comment..."
+                    maxLength={500}
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value.slice(0, 500))}
+                    disabled={submitting}
+                  />
+                  <div className="input-bar-actions">
+                    <span className={`char-counter-mini ${500 - newComment.length < 50 ? 'warning' : ''}`}>
+                      {500 - newComment.length}
+                    </span>
+                    <button
+                      type="submit"
+                      className="comment-post-btn"
+                      disabled={submitting || !newComment.trim()}
+                      aria-busy={submitting ? 'true' : 'false'}
+                    >
+                      {submitting ? 'Posting...' : 'Post'}
+                    </button>
+                  </div>
+                </form>
               </div>
             ) : (
               <div className="comments-signin-prompt">

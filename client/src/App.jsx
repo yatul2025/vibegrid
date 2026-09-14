@@ -36,6 +36,23 @@ function AppContent() {
     return localStorage.getItem('vibegrid_theme') || 'light';
   });
   const [settingsSection, setSettingsSection] = useState('profile');
+  const [a11yStatus, setA11yStatus] = useState('');
+
+  // Announce view changes to assistive technologies
+  useEffect(() => {
+    if (currentTab) {
+      const tabNames = {
+        feed: 'Home Feed',
+        explore: 'Explore & Search',
+        messages: 'Direct Messages',
+        profile: 'User Profile',
+        settings: 'Settings & Privacy',
+        auth: 'Sign In and Registration',
+        status: 'System Status Dashboard'
+      };
+      setA11yStatus(`Viewing ${tabNames[currentTab] || currentTab}`);
+    }
+  }, [currentTab]);
 
   // "System Status" is strictly visible ONLY to user IDs 1, 2, 3, 4 (test profiles with test = 1). All other users cannot see it.
   const isTestUser = Boolean(
@@ -231,251 +248,280 @@ function AppContent() {
     );
   }
 
-  const showNavbar = user || currentTab === 'status';
-
   return (
-    <div className={`app-viewport ${!showNavbar ? 'auth-mode-viewport' : ''}`}>
-      {/* Top Navigation Bar */}
-      {showNavbar && (
-        <header className="top-navbar">
-          <div className="top-navbar-container">
-            <div 
-              className="nav-brand" 
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                if (user) {
-                  setViewedUsername(null);
-                  setCurrentTab('feed');
-                } else {
-                  setCurrentTab('auth');
-                }
-              }}
-            >
-              <div className="nav-brand-icon-wrapper">
-                <svg viewBox="0 0 52 52" width="36" height="36" className="vg-nav-logo-svg" fill="none">
-                  <defs>
-                    <linearGradient id="vgNavGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#f09433" />
-                      <stop offset="25%" stopColor="#e6683c" />
-                      <stop offset="50%" stopColor="#dc2743" />
-                      <stop offset="75%" stopColor="#cc2366" />
-                      <stop offset="100%" stopColor="#bc1888" />
-                    </linearGradient>
-                    <linearGradient id="vgNavVGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#ffffff" />
-                      <stop offset="100%" stopColor="#fff2f6" />
-                    </linearGradient>
-                  </defs>
-                  <rect width="52" height="52" rx="16" fill="url(#vgNavGrad)" />
-                  <circle cx="41" cy="11" r="2.4" fill="white" opacity="0.95" />
-                  <circle cx="41" cy="19" r="1.6" fill="white" opacity="0.6" />
-                  <circle cx="33" cy="11" r="1.6" fill="white" opacity="0.6" />
-                  <path
-                    d="M14 15 L26 38 L38 15"
-                    stroke="url(#vgNavVGrad)"
-                    strokeWidth="5.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-              <span className="nav-brand-title">VibeGrid</span>
-            </div>
-
-            {/* Demo Mode Indicator (Visible when in Demo Mode) */}
-            <DemoModeIndicator 
-              onNavigateToSignup={handleNavigateToSignup}
-              onNavigateToLogin={handleNavigateToLogin}
-            />
-
-        {/* Desktop Navigation Links */}
-        <nav className="nav-links desktop-only">
-          {user && (
-            <>
-              <button
-                className={`nav-tab-btn ${currentTab === 'feed' ? 'active' : ''}`}
-                onClick={() => {
-                  setViewedUsername(null);
-                  setCurrentTab('feed');
-                }}
-              >
-                🏠 Feed
-              </button>
-
-              <button
-                className={`nav-tab-btn ${currentTab === 'explore' ? 'active' : ''}`}
-                onClick={() => setCurrentTab('explore')}
-              >
-                🔍 Explore
-              </button>
-
-              <button
-                className="nav-tab-btn btn-create-nav"
-                onClick={() => {
-                  if (guardDemoAction('create_post')) return;
-                  setIsCreatePostOpen(true);
-                }}
-                title="Create and share a new post"
-              >
-                ➕ Create
-              </button>
-
-              <button
-                className={`nav-tab-btn nav-notifications-btn ${isNotificationsOpen ? 'active' : ''}`}
-                onClick={() => setIsNotificationsOpen((prev) => !prev)}
-                title="Activity Notifications"
-              >
-                <span>🔔</span>
-                <span className="nav-notifications-label">Notifications</span>
-                {unreadCount > 0 && (
-                  <span className="nav-unread-badge">
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                className={`nav-tab-btn nav-messages-btn ${currentTab === 'messages' ? 'active' : ''}`}
-                onClick={() => {
-                  setDirectMessageTarget(null);
-                  setCurrentTab('messages');
-                }}
-                title="Direct Messages"
-              >
-                <span>💬</span>
-                <span className="nav-messages-label">Messages</span>
-                {unreadMessagesCount > 0 && (
-                  <span className="nav-unread-badge">
-                    {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                className={`nav-tab-btn ${currentTab === 'profile' && !viewedUsername ? 'active' : ''}`}
-                onClick={() => navigateToProfile(null)}
-                style={{ display: 'flex', alignItems: 'center' }}
-              >
-                {user.avatar_url ? (
-                  <img src={user.avatar_url} alt="" className="nav-avatar-mini" />
-                ) : (
-                  <span className="nav-avatar-fallback-mini">
-                    {user.username?.charAt(0).toUpperCase()}
-                  </span>
-                )}
-                <span>@{user.username}</span>
-              </button>
-
-              <button
-                className={`nav-tab-btn ${currentTab === 'settings' ? 'active' : ''}`}
-                onClick={() => openSettings('contact')}
-                title="Settings & Privacy"
-              >
-                ⚙️ Settings
-              </button>
-            </>
-          )}
-
-          {isTestUser && (
-            <button
-              className={`nav-tab-btn ${currentTab === 'status' ? 'active' : ''}`}
-              onClick={() => setCurrentTab('status')}
-            >
-              📊 System Status
-            </button>
-          )}
-
-          {!user && (
-            <button
-              className={`nav-tab-btn ${currentTab === 'auth' ? 'active' : ''}`}
-              onClick={() => setCurrentTab('auth')}
-            >
-              👤 Sign In / Register
-            </button>
-          )}
-
-          {user && (
-            <button
-              onClick={logout}
-              className="nav-tab-btn nav-logout-btn"
-              title="Sign out of your account"
-            >
-              Sign Out
-            </button>
-          )}
-
-          <button
-            onClick={toggleTheme}
-            className="nav-tab-btn nav-theme-btn"
-            title="Toggle Dark/Light Mode"
-            aria-label="Toggle theme"
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
-        </nav>
-
-        {/* Mobile Header Actions (Visible on mobile <= 768px) */}
-        <div className="mobile-header-actions mobile-only">
-          <button
-            onClick={toggleTheme}
-            className="nav-icon-btn-mobile"
-            title="Toggle Dark/Light Mode"
-            aria-label="Toggle theme"
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
-
-          {user ? (
-            <>
-              <button
-                className={`nav-icon-btn-mobile ${isNotificationsOpen ? 'active' : ''}`}
-                onClick={() => setIsNotificationsOpen((prev) => !prev)}
-                title="Activity Notifications"
-              >
-                <span>🔔</span>
-                {unreadCount > 0 && (
-                  <span className="nav-unread-badge-mobile">
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                className={`nav-icon-btn-mobile ${currentTab === 'messages' ? 'active' : ''}`}
-                onClick={() => {
-                  setDirectMessageTarget(null);
-                  setCurrentTab('messages');
-                }}
-                title="Direct Messages"
-              >
-                <span>💬</span>
-                {unreadMessagesCount > 0 && (
-                  <span className="nav-unread-badge-mobile">
-                    {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                className={`nav-icon-btn-mobile ${currentTab === 'settings' ? 'active' : ''}`}
-                onClick={() => openSettings('contact')}
-                title="Settings & Privacy"
-              >
-                <span>⚙️</span>
-              </button>
-            </>
-          ) : (
-            <button
-              className="btn-primary btn-sm"
-              onClick={() => setCurrentTab('auth')}
-            >
-              Sign In
-            </button>
-          )}
-        </div>
+    <div className={`app-viewport ${!user ? 'guest-viewport' : ''}`}>
+      {/* Dynamic Screen Reader Live Region for Announcements (WCAG 2.2 AA) */}
+      <div 
+        id="a11y-live-region"
+        role="status" 
+        aria-live="polite" 
+        aria-atomic="true" 
+        className="sr-only"
+      >
+        {a11yStatus}
       </div>
-    </header>
-    )}
+
+      {/* Top Navigation Bar & Landmark Banner */}
+      <header role="banner" className="top-navbar">
+        <div className="top-navbar-container">
+          <div 
+            className="nav-brand" 
+            style={{ cursor: 'pointer' }}
+            onClick={() => {
+              if (user) {
+                setViewedUsername(null);
+                setCurrentTab('feed');
+              } else {
+                setCurrentTab('feed');
+              }
+            }}
+          >
+            <div className="nav-brand-icon-wrapper">
+              <svg viewBox="0 0 52 52" width="36" height="36" className="vg-nav-logo-svg" fill="none">
+                <defs>
+                  <linearGradient id="vgNavGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#f09433" />
+                    <stop offset="25%" stopColor="#e6683c" />
+                    <stop offset="50%" stopColor="#dc2743" />
+                    <stop offset="75%" stopColor="#cc2366" />
+                    <stop offset="100%" stopColor="#bc1888" />
+                  </linearGradient>
+                  <linearGradient id="vgNavVGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#ffffff" />
+                    <stop offset="100%" stopColor="#fff2f6" />
+                  </linearGradient>
+                </defs>
+                <rect width="52" height="52" rx="16" fill="url(#vgNavGrad)" />
+                <circle cx="41" cy="11" r="2.4" fill="white" opacity="0.95" />
+                <circle cx="41" cy="19" r="1.6" fill="white" opacity="0.6" />
+                <circle cx="33" cy="11" r="1.6" fill="white" opacity="0.6" />
+                <path
+                  d="M14 15 L26 38 L38 15"
+                  stroke="url(#vgNavVGrad)"
+                  strokeWidth="5.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <span className="nav-brand-title">VibeGrid</span>
+          </div>
+
+          {/* Demo Mode Indicator (Visible when in Demo Mode) */}
+          <DemoModeIndicator 
+            onNavigateToSignup={handleNavigateToSignup}
+            onNavigateToLogin={handleNavigateToLogin}
+          />
+
+          {/* Desktop Navigation Links */}
+          <nav className="nav-links desktop-only" aria-label="Main navigation">
+            {user ? (
+              <>
+                <button
+                  className={`nav-tab-btn ${currentTab === 'feed' ? 'active' : ''}`}
+                  onClick={() => {
+                    setViewedUsername(null);
+                    setCurrentTab('feed');
+                  }}
+                >
+                  🏠 Feed
+                </button>
+
+                <button
+                  className={`nav-tab-btn ${currentTab === 'explore' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('explore')}
+                >
+                  🔍 Explore
+                </button>
+
+                <button
+                  className="nav-tab-btn btn-create-nav"
+                  onClick={() => {
+                    if (guardDemoAction('create_post')) return;
+                    setIsCreatePostOpen(true);
+                  }}
+                  title="Create and share a new post"
+                >
+                  ➕ Create
+                </button>
+
+                <button
+                  className={`nav-tab-btn nav-notifications-btn ${isNotificationsOpen ? 'active' : ''}`}
+                  onClick={() => setIsNotificationsOpen((prev) => !prev)}
+                  title="Activity Notifications"
+                >
+                  <span>🔔</span>
+                  <span className="nav-notifications-label">Notifications</span>
+                  {unreadCount > 0 && (
+                    <span className="nav-unread-badge">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  className={`nav-tab-btn nav-messages-btn ${currentTab === 'messages' ? 'active' : ''}`}
+                  onClick={() => {
+                    setDirectMessageTarget(null);
+                    setCurrentTab('messages');
+                  }}
+                  title="Direct Messages"
+                >
+                  <span>💬</span>
+                  <span className="nav-messages-label">Messages</span>
+                  {unreadMessagesCount > 0 && (
+                    <span className="nav-unread-badge">
+                      {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  className={`nav-tab-btn ${currentTab === 'profile' && !viewedUsername ? 'active' : ''}`}
+                  onClick={() => navigateToProfile(null)}
+                  style={{ display: 'flex', alignItems: 'center' }}
+                >
+                  {user.avatar_url ? (
+                    <img src={user.avatar_url} alt="" className="nav-avatar-mini" />
+                  ) : (
+                    <span className="nav-avatar-fallback-mini">
+                      {user.username?.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <span>@{user.username}</span>
+                </button>
+
+                <button
+                  className={`nav-tab-btn ${currentTab === 'settings' ? 'active' : ''}`}
+                  onClick={() => openSettings('contact')}
+                  title="Settings & Privacy"
+                >
+                  ⚙️ Settings
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className={`nav-tab-btn ${currentTab === 'feed' ? 'active' : ''}`}
+                  onClick={() => {
+                    setViewedUsername(null);
+                    setCurrentTab('feed');
+                  }}
+                >
+                  🏠 Feed
+                </button>
+
+                <button
+                  className={`nav-tab-btn ${currentTab === 'explore' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('explore')}
+                >
+                  🔍 Explore
+                </button>
+
+                <button
+                  className={`nav-tab-btn ${currentTab === 'auth' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('auth')}
+                >
+                  👤 Sign In / Register
+                </button>
+              </>
+            )}
+
+            {isTestUser && (
+              <button
+                className={`nav-tab-btn ${currentTab === 'status' ? 'active' : ''}`}
+                onClick={() => setCurrentTab('status')}
+              >
+                📊 System Status
+              </button>
+            )}
+
+            {user && (
+              <button
+                onClick={logout}
+                className="nav-tab-btn nav-logout-btn"
+                title="Sign out of your account"
+              >
+                Sign Out
+              </button>
+            )}
+
+            <button
+              onClick={toggleTheme}
+              className="nav-tab-btn nav-theme-btn"
+              title="Toggle Dark/Light Mode"
+              aria-label="Toggle dark/light theme"
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+          </nav>
+
+          {/* Mobile Header Actions (Visible on mobile <= 768px) */}
+          <div className="mobile-header-actions mobile-only">
+            <button
+              onClick={toggleTheme}
+              className="nav-icon-btn-mobile"
+              title="Toggle Dark/Light Mode"
+              aria-label="Toggle dark/light theme"
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+
+            {user ? (
+              <>
+                <button
+                  className={`nav-icon-btn-mobile ${isNotificationsOpen ? 'active' : ''}`}
+                  onClick={() => setIsNotificationsOpen((prev) => !prev)}
+                  title="Activity Notifications"
+                  aria-label="Activity Notifications"
+                >
+                  <span>🔔</span>
+                  {unreadCount > 0 && (
+                    <span className="nav-unread-badge-mobile">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  className={`nav-icon-btn-mobile ${currentTab === 'messages' ? 'active' : ''}`}
+                  onClick={() => {
+                    setDirectMessageTarget(null);
+                    setCurrentTab('messages');
+                  }}
+                  title="Direct Messages"
+                  aria-label="Direct Messages"
+                >
+                  <span>💬</span>
+                  {unreadMessagesCount > 0 && (
+                    <span className="nav-unread-badge-mobile">
+                      {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  className={`nav-icon-btn-mobile ${currentTab === 'settings' ? 'active' : ''}`}
+                  onClick={() => openSettings('contact')}
+                  title="Settings & Privacy"
+                  aria-label="Settings & Privacy"
+                >
+                  <span>⚙️</span>
+                </button>
+              </>
+            ) : (
+              <button
+                className="btn-primary btn-sm"
+                onClick={() => setCurrentTab('auth')}
+                aria-label="Sign In"
+                style={{ minHeight: '44px', minWidth: '44px' }}
+              >
+                Sign In
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
 
       {/* Main Content Area */}
       <main className={`main-content ${user ? 'has-bottom-nav' : ''}`}>

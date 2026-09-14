@@ -925,7 +925,12 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     className="feed-inline-comment-form"
                     onSubmit={(e) => handleInlineCommentSubmit(post.id, e)}
                   >
+                    <label htmlFor={`feed-comment-${post.id}`} className="sr-only">
+                      Add a comment
+                    </label>
                     <input
+                      id={`feed-comment-${post.id}`}
+                      aria-label="Add a comment"
                       type="text"
                       className="feed-inline-comment-input"
                       placeholder="Add a comment..."
@@ -939,6 +944,8 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                         type="submit"
                         className="feed-inline-comment-btn"
                         disabled={submittingCommentPostId === post.id}
+                        aria-busy={submittingCommentPostId === post.id ? 'true' : 'false'}
+                        aria-label="Post comment"
                       >
                         {submittingCommentPostId === post.id ? '...' : 'Post'}
                       </button>

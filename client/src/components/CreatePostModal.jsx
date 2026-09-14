@@ -172,6 +172,7 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
                 <textarea
                   rows={6}
                   placeholder="Write a caption..."
+                  aria-label="Write a caption"
                   maxLength={2200}
                   value={caption}
                   onChange={(e) => setCaption(e.target.value.slice(0, 2200))}
