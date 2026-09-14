@@ -992,6 +992,7 @@ export default function CallModal() {
                 {/* Primary Video Element */}
                 {!isSwappedView ? (
                   <video
+                    key="main-remote-video"
                     ref={remoteVideoRef}
                     autoPlay
                     playsInline
@@ -1000,6 +1001,7 @@ export default function CallModal() {
                   />
                 ) : (
                   <video
+                    key="main-local-video"
                     ref={localVideoRef}
                     autoPlay
                     playsInline
@@ -1053,6 +1055,7 @@ export default function CallModal() {
               >
                 {!isSwappedView ? (
                   <video
+                    key="pip-local-video"
                     ref={localVideoRef}
                     autoPlay
                     playsInline
@@ -1061,6 +1064,7 @@ export default function CallModal() {
                   />
                 ) : (
                   <video
+                    key="pip-remote-video"
                     ref={remoteVideoRef}
                     autoPlay
                     playsInline
@@ -1674,6 +1678,8 @@ export default function CallModal() {
           height: 100%;
           object-fit: cover;
           display: block;
+          transform: translateZ(0);
+          backface-visibility: hidden;
         }
 
         .remote-video-elem.mirrored {
@@ -1794,6 +1800,8 @@ export default function CallModal() {
           height: 100%;
           object-fit: cover;
           display: block;
+          transform: translateZ(0);
+          backface-visibility: hidden;
         }
 
         .pip-video-elem.mirrored {

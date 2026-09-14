@@ -7,31 +7,60 @@
  * using AES-256-GCM, and renders the media as a secure local Blob URL.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { decryptMediaToObjectUrl } from '../services/crypto/mediaCrypto';
 
-export default function EncryptedMediaRenderer({ mediaPayload }) {
-  const [objectUrl, setObjectUrl] = useState(null);
-  const [loading, setLoading] = useState(true);
+// Module-level in-memory cache for decrypted Object URLs to prevent repeated decryptions,
+// unmounting, and video playback flickering across component re-renders.
+const decryptedUrlCache = new Map();
+
+function EncryptedMediaRenderer({ mediaPayload }) {
+  const payloadUrl = mediaPayload?.url;
+  const payloadKey = mediaPayload?.mediaKey;
+  const payloadIv = mediaPayload?.iv;
+  const payloadMime = mediaPayload?.mimeType;
+  const payloadType = mediaPayload?.type;
+
+  // Stable cache key based on URL and decryption key
+  const cacheKey = useMemo(() => {
+    return payloadUrl && payloadKey ? `${payloadUrl}_${payloadKey}` : null;
+  }, [payloadUrl, payloadKey]);
+
+  const [objectUrl, setObjectUrl] = useState(() => {
+    return cacheKey ? (decryptedUrlCache.get(cacheKey) || null) : null;
+  });
+  const [loading, setLoading] = useState(() => {
+    return cacheKey ? !decryptedUrlCache.has(cacheKey) : true;
+  });
   const [error, setError] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const audioRef = useRef(null);
 
   useEffect(() => {
-    if (!mediaPayload || !mediaPayload.url || !mediaPayload.mediaKey || !mediaPayload.iv) {
+    if (!payloadUrl || !payloadKey || !payloadIv) {
       setError(true);
       setLoading(false);
       return;
     }
 
+    // If already in cache, update state if needed and avoid re-fetching or re-decrypting
+    const cached = cacheKey ? decryptedUrlCache.get(cacheKey) : null;
+    if (cached) {
+      if (objectUrl !== cached) {
+        setObjectUrl(cached);
+      }
+      setLoading(false);
+      setError(false);
+      return;
+    }
+
     let isMounted = true;
-    let createdUrl = null;
 
     async function fetchAndDecrypt() {
       try {
         setLoading(true);
         // Fetch raw encrypted ciphertext buffer
-        const res = await fetch(mediaPayload.url);
+        const res = await fetch(payloadUrl);
         if (!res.ok) throw new Error('Failed to load encrypted media bytes.');
 
         const ciphertextBuffer = await res.arrayBuffer();
@@ -39,16 +68,19 @@ export default function EncryptedMediaRenderer({ mediaPayload }) {
         // Client-side AES-256-GCM decryption
         const url = await decryptMediaToObjectUrl(
           ciphertextBuffer,
-          mediaPayload.mediaKey,
-          mediaPayload.iv,
-          mediaPayload.mimeType || 'image/jpeg'
+          payloadKey,
+          payloadIv,
+          payloadMime || (payloadType === 'video' ? 'video/mp4' : 'image/jpeg')
         );
 
-        createdUrl = url;
+        if (cacheKey) {
+          decryptedUrlCache.set(cacheKey, url);
+        }
 
         if (isMounted) {
           setObjectUrl(url);
           setLoading(false);
+          setError(false);
         }
       } catch (err) {
         console.error('[EncryptedMediaRenderer] Decryption error:', err);
@@ -63,11 +95,8 @@ export default function EncryptedMediaRenderer({ mediaPayload }) {
 
     return () => {
       isMounted = false;
-      if (createdUrl) {
-        URL.revokeObjectURL(createdUrl);
-      }
     };
-  }, [mediaPayload]);
+  }, [payloadUrl, payloadKey, payloadIv, payloadMime, payloadType, cacheKey, objectUrl]);
 
   const handleToggleSpeed = () => {
     const nextSpeed = playbackSpeed === 1 ? 1.5 : playbackSpeed === 1.5 ? 2 : 1;
@@ -77,13 +106,15 @@ export default function EncryptedMediaRenderer({ mediaPayload }) {
     }
   };
 
-  if (loading) {
+  // Only show the loading indicator if we don't have an objectUrl yet.
+  // This guarantees the <video> element is NEVER unmounted during background refreshes.
+  if (loading && !objectUrl) {
     const label =
-      mediaPayload?.type === 'audio'
+      payloadType === 'audio'
         ? 'voice note'
-        : mediaPayload?.type === 'video'
+        : payloadType === 'video'
         ? 'video'
-        : mediaPayload?.type === 'document'
+        : payloadType === 'document'
         ? 'document'
         : 'photo';
     return (
@@ -102,7 +133,7 @@ export default function EncryptedMediaRenderer({ mediaPayload }) {
     );
   }
 
-  if (mediaPayload.type === 'audio') {
+  if (payloadType === 'audio') {
     return (
       <div className="encrypted-audio-wrap">
         <div className="audio-note-header">
@@ -124,16 +155,22 @@ export default function EncryptedMediaRenderer({ mediaPayload }) {
     );
   }
 
-  if (mediaPayload.type === 'video') {
+  if (payloadType === 'video') {
     return (
       <div className="encrypted-video-wrap">
-        <video controls src={objectUrl} className="encrypted-chat-video" />
+        <video
+          controls
+          src={objectUrl}
+          className="encrypted-chat-video"
+          playsInline
+          preload="metadata"
+        />
         <span className="img-lock-badge">🔒 Encrypted Video</span>
       </div>
     );
   }
 
-  if (mediaPayload.type === 'document') {
+  if (payloadType === 'document') {
     const fileName = mediaPayload.fileName || 'Document';
     const fileSizeStr = mediaPayload.fileSize ? ` · ${(mediaPayload.fileSize / 1024).toFixed(1)} KB` : '';
     return (
@@ -168,3 +205,21 @@ export default function EncryptedMediaRenderer({ mediaPayload }) {
     </div>
   );
 }
+
+// React.memo with property-level equality check to prevent unnecessary re-renders during playback
+export default React.memo(EncryptedMediaRenderer, (prevProps, nextProps) => {
+  const prev = prevProps.mediaPayload;
+  const next = nextProps.mediaPayload;
+  if (!prev && !next) return true;
+  if (!prev || !next) return false;
+  return (
+    prev.url === next.url &&
+    prev.mediaKey === next.mediaKey &&
+    prev.iv === next.iv &&
+    prev.mimeType === next.mimeType &&
+    prev.type === next.type &&
+    prev.durationSeconds === next.durationSeconds &&
+    prev.fileName === next.fileName &&
+    prev.fileSize === next.fileSize
+  );
+});

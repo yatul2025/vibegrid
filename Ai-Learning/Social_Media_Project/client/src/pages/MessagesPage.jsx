@@ -196,11 +196,25 @@ function formatLastSeen(dateString) {
   return `${dateStr} at ${timeStr}`;
 }
 
+const mediaPayloadCache = new Map();
+
 function parseMediaPayload(content) {
   if (!content || typeof content !== 'string') return null;
-  if (content.startsWith('{"type":"image"') || content.startsWith('{"type":"audio"')) {
+  if (mediaPayloadCache.has(content)) {
+    return mediaPayloadCache.get(content);
+  }
+  const trimmed = content.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
     try {
-      return JSON.parse(content);
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object' && ['image', 'audio', 'video', 'document'].includes(parsed.type)) {
+        if (mediaPayloadCache.size > 500) {
+          const firstKey = mediaPayloadCache.keys().next().value;
+          mediaPayloadCache.delete(firstKey);
+        }
+        mediaPayloadCache.set(content, parsed);
+        return parsed;
+      }
     } catch {}
   }
   return null;
@@ -5147,6 +5161,9 @@ export default function MessagesPage({
           max-width: 340px;
           border-radius: 12px;
           overflow: hidden;
+          transform: translateZ(0);
+          backface-visibility: hidden;
+          contain: content;
         }
 
         .encrypted-chat-video {
@@ -5155,6 +5172,8 @@ export default function MessagesPage({
           display: block;
           max-height: 260px;
           background: #000;
+          transform: translateZ(0);
+          backface-visibility: hidden;
         }
 
         /* Phase 4: Encrypted Document Card */
