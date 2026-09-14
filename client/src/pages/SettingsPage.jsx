@@ -25,13 +25,15 @@ import PasswordToggleButton from '../components/PasswordToggleIcon';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
-export default function SettingsPage({ initialSection = 'profile', onNavigateToProfile }) {
+export default function SettingsPage({ initialSection = 'privacy', onNavigateToProfile }) {
   const { user: currentUser, updateUser, logout } = useAuth();
 
   // Active section: 'profile' | 'contact' | 'security' | 'privacy' | 'notifications' | 'danger'
-  const [activeSection, setActiveSection] = useState(initialSection || 'profile');
+  const [activeSection, setActiveSection] = useState(initialSection || 'privacy');
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  const [mobileViewingSection, setMobileViewingSection] = useState(window.innerWidth > 768);
+  const [mobileViewingSection, setMobileViewingSection] = useState(
+    window.innerWidth > 768 || (initialSection && !['privacy', 'overview'].includes(initialSection))
+  );
 
   // Global message banner for settings
   const [feedbackMsg, setFeedbackMsg] = useState(null);
@@ -179,7 +181,9 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   useEffect(() => {
     if (initialSection) {
       setActiveSection(initialSection);
-      if (isMobile) setMobileViewingSection(true);
+      if (isMobile) {
+        setMobileViewingSection(!['privacy', 'overview'].includes(initialSection));
+      }
     }
   }, [initialSection, isMobile]);
 
@@ -894,20 +898,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
         {/* Demo Mode Security Notice */}
         {isDemoUser && (
-          <div className="settings-alert-banner warning" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            background: 'rgba(239, 68, 68, 0.12)',
-            border: '1px solid rgba(239, 68, 68, 0.35)',
-            color: '#f87171',
-            borderRadius: '10px',
-            padding: '12px 16px',
-            marginBottom: '16px'
-          }}>
+          <div className="demo-account-banner">
             <span style={{ fontSize: '20px' }}>🔒</span>
             <div style={{ flex: 1 }}>
-              <strong style={{ color: '#fff', display: 'block', fontSize: '14px', marginBottom: '2px' }}>
+              <strong>
                 Official Demo Account (Read-Only)
               </strong>
               <span>

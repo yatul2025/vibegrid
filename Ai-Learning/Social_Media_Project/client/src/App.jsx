@@ -108,7 +108,7 @@ function AppContent() {
   };
 
   // Open Settings helper
-  const openSettings = (section = 'profile') => {
+  const openSettings = (section = 'privacy') => {
     setSettingsSection(section);
     setViewedUsername(null);
     setCurrentTab('settings');
@@ -494,7 +494,7 @@ function AppContent() {
                           className="dropdown-item"
                           role="menuitem"
                           onClick={() => {
-                            openSettings('profile');
+                            openSettings('privacy');
                             setIsProfileMenuOpen(false);
                           }}
                         >
@@ -675,7 +675,7 @@ function AppContent() {
 
                 <button
                   className={`nav-icon-btn-mobile ${currentTab === 'settings' ? 'active' : ''}`}
-                  onClick={() => openSettings('profile')}
+                  onClick={() => openSettings('privacy')}
                   title="Settings & Privacy"
                   aria-label="Settings & Privacy"
                 >
