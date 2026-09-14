@@ -64,7 +64,8 @@ import {
   Trash,
   Copy,
   Ban,
-  CornerUpLeft
+  CornerUpLeft,
+  Share2
 } from 'lucide-react';
 
 function getDateSeparatorLabel(dateString) {
@@ -170,6 +171,7 @@ export default function MessagesPage({
   const [editingMessage, setEditingMessage] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [deleteModalTarget, setDeleteModalTarget] = useState(null);
+  const [forwardingMessage, setForwardingMessage] = useState(null);
 
   const messagesEndRef = useRef(null);
   const chatStreamRef = useRef(null);
@@ -872,6 +874,26 @@ export default function MessagesPage({
     }
   };
 
+  const handleStartForward = (msg) => {
+    setContextMenu(null);
+    setForwardingMessage(msg);
+  };
+
+  const handleForwardToUser = async (targetUsername) => {
+    if (!forwardingMessage) return;
+    try {
+      const res = await apiClient.post(`/messages/${targetUsername}/forward`, {
+        originalMessageId: forwardingMessage.id,
+        content: forwardingMessage.content
+      });
+      if (res.success) {
+        setForwardingMessage(null);
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to forward message.');
+    }
+  };
+
   // ==========================================================================
   // 7. Ephemeral / Disappearing Messages Timer
   // ==========================================================================
@@ -1332,6 +1354,12 @@ export default function MessagesPage({
                             onTouchEnd={handleTouchEnd}
                           >
                             <div className={`message-bubble ${mediaPayload ? 'has-media' : ''} ${m.is_deleted ? 'deleted-bubble' : ''}`}>
+                              {/* Forwarded badge */}
+                              {m.is_forwarded && !m.is_deleted && (
+                                <div className="forwarded-badge">
+                                  <Share2 size={11} /> Forwarded
+                                </div>
+                              )}
                               {/* Reply-to quote */}
                               {m.reply_to_message && !m.is_deleted && (
                                 <div
@@ -1638,6 +1666,11 @@ export default function MessagesPage({
             {!contextMenu.message.is_deleted && (
               <button className="vg-ctx-item" onClick={() => handleCopyMessage(contextMenu.message)}>
                 <Copy size={15} /> Copy
+              </button>
+            )}
+            {!contextMenu.message.is_deleted && (
+              <button className="vg-ctx-item" onClick={() => handleStartForward(contextMenu.message)}>
+                <Share2 size={15} /> Forward
               </button>
             )}
             <button className="vg-ctx-item vg-ctx-danger" onClick={() => handlePromptDelete(contextMenu.message)}>
