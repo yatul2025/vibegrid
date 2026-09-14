@@ -199,6 +199,9 @@ class WebRTCService {
       if (this.onRemoteStream) {
         this.onRemoteStream(new MediaStream(this.remoteStream.getTracks()));
       }
+      if (this.onConnectionStateChange) {
+        this.onConnectionStateChange('connected');
+      }
     };
 
     // Handle local ICE candidates to relay over Socket.IO / HTTP Serverless
@@ -219,12 +222,30 @@ class WebRTCService {
       }
     };
 
-    // Monitor connection states
-    pc.onconnectionstatechange = () => {
-      console.log('[WebRTC] Connection state changed to:', pc.connectionState);
-      if (this.onConnectionStateChange) {
-        this.onConnectionStateChange(pc.connectionState);
+    // Monitor connection states with consolidated state evaluation
+    const notifyStateChange = () => {
+      const connState = pc.connectionState;
+      const iceState = pc.iceConnectionState;
+      console.log(`[WebRTC] Connection state: ${connState}, ICE state: ${iceState}`);
+
+      let effectiveState = 'connecting';
+      if (connState === 'connected' || iceState === 'connected' || iceState === 'completed') {
+        effectiveState = 'connected';
+      } else if (connState === 'failed' || iceState === 'failed') {
+        effectiveState = 'failed';
+      } else if (connState === 'disconnected' || iceState === 'disconnected') {
+        effectiveState = 'disconnected';
+      } else if (connState === 'closed' || iceState === 'closed') {
+        effectiveState = 'closed';
       }
+
+      if (this.onConnectionStateChange) {
+        this.onConnectionStateChange(effectiveState);
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      notifyStateChange();
       if (pc.connectionState === 'failed') {
         console.warn('[WebRTC] Connection failed, attempting ICE restart...');
         try {
@@ -236,10 +257,7 @@ class WebRTCService {
     };
 
     pc.oniceconnectionstatechange = () => {
-      console.log('[WebRTC] ICE state:', pc.iceConnectionState);
-      if (this.onConnectionStateChange) {
-        this.onConnectionStateChange(pc.iceConnectionState);
-      }
+      notifyStateChange();
       if (pc.iceConnectionState === 'failed') {
         console.warn('[WebRTC] ICE failed, triggering ICE restart...');
         try {

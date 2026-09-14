@@ -443,6 +443,7 @@ export default function CallModal() {
       if (vTracks && vTracks.length > 0) {
         setHasRemoteVideo(true);
       }
+      setConnectionStatus('connected');
 
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = stream;
@@ -463,11 +464,25 @@ export default function CallModal() {
       }
     };
 
+    // Check if peer connection or remote tracks are already established
+    if (webrtcService.peerConnection) {
+      const pc = webrtcService.peerConnection;
+      if (
+        pc.connectionState === 'connected' ||
+        pc.iceConnectionState === 'connected' ||
+        pc.iceConnectionState === 'completed' ||
+        (webrtcService.remoteStream && webrtcService.remoteStream.getTracks().length > 0)
+      ) {
+        setConnectionStatus('connected');
+      }
+    }
+
     bindStreams();
 
     return () => {
       webrtcService.onLocalStream = null;
       webrtcService.onRemoteStream = null;
+      webrtcService.onConnectionStateChange = null;
     };
   }, [callState]);
 
@@ -489,6 +504,25 @@ export default function CallModal() {
       }
     };
   }, [callState]);
+
+  // Synchronize connected status once the call duration is active
+  useEffect(() => {
+    if (callState === 'connected' && durationSeconds >= 1 && connectionStatus !== 'connected') {
+      setConnectionStatus('connected');
+    }
+  }, [callState, durationSeconds, connectionStatus]);
+
+  // Consolidated live status for the active call
+  const isLive =
+    callState === 'connected' &&
+    (connectionStatus === 'connected' ||
+     connectionStatus === 'completed' ||
+     durationSeconds >= 1 ||
+     hasRemoteVideo ||
+     Boolean(webrtcService.remoteStream && webrtcService.remoteStream.getTracks().length > 0) ||
+     webrtcService.peerConnection?.connectionState === 'connected' ||
+     webrtcService.peerConnection?.iceConnectionState === 'connected' ||
+     webrtcService.peerConnection?.iceConnectionState === 'completed');
 
   // Fullscreen event listener
   useEffect(() => {
@@ -766,11 +800,9 @@ export default function CallModal() {
             {/* Top Header Bar with Live Badge, User Info, Quality, and Fullscreen Controls */}
             <div className="call-header-bar">
               <div className="call-header-info">
-                <span className={`call-live-badge status-${connectionStatus}`}>
+                <span className={`call-live-badge ${isLive ? 'status-connected' : 'status-connecting'}`}>
                   <span className="live-pulsing-dot" />
-                  {connectionStatus === 'connected' || connectionStatus === 'completed'
-                    ? 'LIVE'
-                    : 'CONNECTING...'}
+                  {isLive ? 'LIVE' : 'CONNECTING...'}
                 </span>
                 <span className="call-peer-title">@{callData.peer?.username}</span>
                 <span className="call-timer">{formatDuration(durationSeconds)}</span>
@@ -828,7 +860,7 @@ export default function CallModal() {
                   ref={remoteVideoRef}
                   autoPlay
                   playsInline
-                  className={`remote-video-elem ${callData.callType === 'video' || hasRemoteVideo || isScreenSharing ? 'visible' : 'hidden'}`}
+                  className={`remote-video-elem ${hasRemoteVideo || isScreenSharing ? 'visible' : 'hidden'}`}
                 />
               ) : (
                 <video
@@ -841,7 +873,7 @@ export default function CallModal() {
               )}
 
               {/* Audio-only or Camera Off Placeholder on Main Screen */}
-              {((!isSwappedView && !hasRemoteVideo && callData.callType !== 'video' && !isScreenSharing) || 
+              {((!isSwappedView && !hasRemoteVideo && !isScreenSharing) || 
                 (isSwappedView && isVideoMuted)) && (
                 <div className="audio-call-placeholder">
                   <div className="audio-avatar-wrapper">
@@ -852,9 +884,13 @@ export default function CallModal() {
                     />
                     <div className="audio-voice-wave" />
                   </div>
-                  <h4>{isSwappedView ? `@${user?.username} (You)` : `Connected with @${callData.peer?.username}`}</h4>
+                  <h4>{isSwappedView ? `@${user?.username} (You)` : `@${callData.peer?.username}`}</h4>
                   <p className="audio-call-status-hint">
-                    {isSwappedView ? 'Your camera is turned off' : 'Microphone connected'}
+                    {isSwappedView 
+                      ? 'Your camera is turned off' 
+                      : callData.callType === 'video' && !hasRemoteVideo 
+                        ? (isLive ? 'Camera turned off' : 'Connecting video...')
+                        : 'Audio connected'}
                   </p>
                 </div>
               )}
