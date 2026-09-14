@@ -55,7 +55,7 @@ export default function CommentsModal({
     try {
       setLoading(true);
       setError(null);
-      const res = await apiClient.get(`/posts/${post.id}/comments`);
+      const res = await apiClient.get(`/posts/${encodeURIComponent(post.id)}/comments`);
       if (res.success && res.data?.comments) {
         setComments(res.data.comments);
       }
@@ -91,7 +91,7 @@ export default function CommentsModal({
     try {
       setSubmitting(true);
       setError(null);
-      const res = await apiClient.post(`/posts/${post.id}/comments`, {
+      const res = await apiClient.post(`/posts/${encodeURIComponent(post.id)}/comments`, {
         comment_text: newComment.trim().slice(0, 500)
       });
 
@@ -270,9 +270,23 @@ export default function CommentsModal({
               <div ref={commentsEndRef} />
             </div>
 
-            {/* Bottom Add Comment Bar */}
+            {/* Bottom Add Comment Bar with Quick Emoji strip */}
             {user ? (
-              <form onSubmit={handleSubmit} className="comments-input-bar">
+              <div className="comments-composer-container">
+                <div className="comments-quick-emoji-row">
+                  {['❤️', '🔥', '👏', '😍', '😂', '🥳', '🙌', '✨'].map((em) => (
+                    <button
+                      key={em}
+                      type="button"
+                      className="comments-quick-emoji-btn"
+                      onClick={() => setNewComment((prev) => (prev + em).slice(0, 500))}
+                      title={`Add ${em}`}
+                    >
+                      {em}
+                    </button>
+                  ))}
+                </div>
+                <form onSubmit={handleSubmit} className="comments-input-bar">
                 <input
                   type="text"
                   placeholder="Add a comment..."
@@ -294,6 +308,7 @@ export default function CommentsModal({
                   </button>
                 </div>
               </form>
+              </div>
             ) : (
               <div className="comments-signin-prompt">
                 Please sign in to leave a comment.

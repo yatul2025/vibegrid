@@ -18,14 +18,15 @@ const feedAggregator = require('../services/aggregator/FeedAggregator');
 const getLiveFeed = async (req, res, next) => {
   try {
     const currentUserId = req.user ? req.user.id : null;
-    const { page, limit, category, since } = req.query;
+    const { page, limit, category, since, refresh } = req.query;
 
     const result = await feedAggregator.getFeed({
       currentUserId,
       page,
       limit,
       category,
-      since
+      since,
+      refresh: refresh === 'true' || refresh === '1' || refresh === true
     });
 
     return res.status(200).json({
@@ -47,8 +48,12 @@ const getLiveFeed = async (req, res, next) => {
 const getLiveStories = async (req, res, next) => {
   try {
     const currentUserId = req.user ? req.user.id : null;
+    const { refresh } = req.query;
 
-    const creators = await feedAggregator.getStories({ currentUserId });
+    const creators = await feedAggregator.getStories({
+      currentUserId,
+      refresh: refresh === 'true' || refresh === '1' || refresh === true
+    });
 
     const totalActiveStories = creators.reduce(
       (acc, c) => acc + (c.stories ? c.stories.length : 0),

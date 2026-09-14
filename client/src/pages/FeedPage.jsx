@@ -43,6 +43,17 @@ function formatTimeAgo(dateString) {
   return past.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+// Category definitions for live syndication
+const FEED_CATEGORIES = [
+  { id: 'all', label: 'All', icon: '🌟' },
+  { id: 'entertainment', label: 'Entertainment', icon: '🎬' },
+  { id: 'jokes', label: 'Jokes & Memes', icon: '😂' },
+  { id: 'education', label: 'Education & Science', icon: '🎓' },
+  { id: 'sports', label: 'Sports', icon: '⚽' },
+  { id: 'news', label: 'News', icon: '📰' },
+  { id: 'photography', label: 'Photography', icon: '📸' }
+];
+
 export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
   const { user, guardDemoAction } = useAuth();
   const [posts, setPosts] = useState([]);
@@ -82,12 +93,15 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
 
   // Live Aggregated Feed States
   const [newPostsAvailable, setNewPostsAvailable] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Fetch active stories (combining real VibeGrid stories + external discovery stories)
-  const fetchStories = async () => {
+  const fetchStories = async (forceRefresh = false) => {
     try {
       setStoriesLoading(true);
-      let res = await apiClient.get('/feed/stories');
+      const url = forceRefresh ? '/feed/stories?refresh=true' : '/feed/stories';
+      let res = await apiClient.get(url);
       if (!res.success && res.error) {
         res = await apiClient.get('/stories/active');
       }
@@ -109,18 +123,28 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     }
   };
 
-  // Fetch live feed posts from API (interleaving VibeGrid users + external discovery)
-  const fetchFeed = async () => {
+  // Fetch live feed posts from API (with category & force refresh support)
+  const fetchFeed = async (cat = selectedCategory, forceRefresh = false) => {
     try {
-      setLoading(true);
+      if (forceRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError(null);
-      let res = await apiClient.get('/feed');
+      const params = new URLSearchParams();
+      if (cat && cat !== 'all') params.append('category', cat);
+      if (forceRefresh) params.append('refresh', 'true');
+
+      const queryString = params.toString() ? `?${params.toString()}` : '';
+      let res = await apiClient.get(`/feed${queryString}`);
       if (!res.success && res.error) {
         res = await apiClient.get('/posts/feed');
       }
       const fetchedPosts = res.data?.posts || res.posts;
       if (res.success && fetchedPosts) {
         setPosts(fetchedPosts);
+        setNewPostsAvailable([]);
       } else {
         setError(res.error || 'Failed to load feed.');
       }
@@ -137,12 +161,13 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
       setError(err.message || 'Error connecting to feed.');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchFeed();
-    fetchStories();
+    fetchFeed(selectedCategory, false);
+    fetchStories(false);
   }, []);
 
   // Background Delta Polling for live fresh content (every 2.5 minutes)
@@ -384,35 +409,12 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     }
   };
 
-  // 1-Tap Quick Emoji Comment
-  const handleQuickEmojiComment = async (postId, emoji) => {
-    if (guardDemoAction('comment')) return;
-    if (!user) {
-      alert('Please sign in to comment.');
-      return;
-    }
-
-    // Optimistically update comment count
-    setPosts((prev) =>
-      prev.map((p) => (p.id === postId ? { ...p, comments_count: (p.comments_count || 0) + 1 } : p))
-    );
-    setReactionToast({ postId, emoji });
-    setTimeout(() => {
-      setReactionToast((current) => (current?.postId === postId ? null : current));
-    }, 2000);
-
-    try {
-      const res = await apiClient.post(`/posts/${postId}/comments`, { content: emoji });
-      if (!res.success) {
-        throw new Error(res.error || 'Failed to post emoji');
-      }
-    } catch (err) {
-      console.error('Quick emoji comment failed:', err);
-      // Rollback
-      setPosts((prev) =>
-        prev.map((p) => (p.id === postId ? { ...p, comments_count: Math.max(0, (p.comments_count || 1) - 1) } : p))
-      );
-    }
+  // Quick Emoji Insertion into comment input
+  const handleEmojiInsert = (postId, emoji) => {
+    setInlineComments((prev) => ({
+      ...prev,
+      [postId]: ((prev[postId] || '') + emoji).slice(0, 500)
+    }));
   };
 
   // Inline Quick Comment Submit
@@ -433,7 +435,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     );
 
     try {
-      const res = await apiClient.post(`/posts/${postId}/comments`, { content: text });
+      const res = await apiClient.post(`/posts/${encodeURIComponent(postId)}/comments`, { content: text });
       if (res.success) {
         setInlineComments((prev) => ({ ...prev, [postId]: '' }));
       } else {
@@ -485,9 +487,22 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     });
   };
 
-  const displayedPosts = filterCloseFriends
+  const filteredPosts = filterCloseFriends
     ? posts.filter((p) => closeFriendIds.has(p.user_id) || (user && p.user_id === user.id))
+    : selectedCategory !== 'all'
+    ? posts.filter((p) => {
+        if (!p.category) return false;
+        const cleanCat = selectedCategory.toLowerCase();
+        if (cleanCat === 'jokes' || cleanCat === 'humor') return p.category === 'jokes';
+        if (cleanCat === 'education') return p.category === 'education';
+        return p.category.toLowerCase() === cleanCat;
+      })
     : posts;
+
+  // Always ensure newest items are on top
+  const displayedPosts = [...filteredPosts].sort(
+    (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+  );
 
   return (
     <div className="feed-page-container">
@@ -543,12 +558,16 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
           <div className="feed-header-controls">
             <button
               type="button"
-              className="feed-control-btn"
-              onClick={fetchFeed}
+              className={`feed-control-btn ${isRefreshing ? 'refreshing' : ''}`}
+              onClick={() => {
+                fetchFeed(selectedCategory, true);
+                fetchStories(true);
+              }}
               title="Refresh feed"
+              disabled={isRefreshing}
             >
-              <span>🔄</span>
-              <span>Refresh</span>
+              <span className={`refresh-icon ${isRefreshing ? 'spinning' : ''}`}>🔄</span>
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
             </button>
             {user && (
               <button
@@ -564,25 +583,37 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
           </div>
         </div>
 
-        {/* Full-width Segmented Filter Tabs */}
-        <div className="feed-tabs-row">
+        {/* Multi-Category Filter Bar (Entertainment, Jokes, Education, Sports, News, All, Close Friends) */}
+        <div className="feed-category-chips-bar" role="tablist" aria-label="Feed Categories">
+          {FEED_CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              className={`category-chip ${selectedCategory === cat.id && !filterCloseFriends ? 'active' : ''}`}
+              onClick={() => {
+                setFilterCloseFriends(false);
+                setSelectedCategory(cat.id);
+                fetchFeed(cat.id, false);
+              }}
+              role="tab"
+              aria-selected={selectedCategory === cat.id && !filterCloseFriends}
+            >
+              <span>{cat.icon}</span>
+              <span>{cat.label}</span>
+            </button>
+          ))}
           <button
             type="button"
-            className={`feed-tab-pill ${!filterCloseFriends ? 'active' : ''}`}
-            onClick={() => setFilterCloseFriends(false)}
-          >
-            <span>All Posts</span>
-            <span className="feed-tab-count">{posts.length}</span>
-          </button>
-          <button
-            type="button"
-            className={`feed-tab-pill cf-tab-pill ${filterCloseFriends ? 'active' : ''}`}
+            className={`category-chip cf-chip ${filterCloseFriends ? 'active' : ''}`}
             onClick={() => setFilterCloseFriends(true)}
             title="Filter by Close Friends"
+            role="tab"
+            aria-selected={filterCloseFriends}
           >
-            <span>★ Close Friends</span>
+            <span>★</span>
+            <span>Close Friends</span>
             {closeFriendIds.size > 0 && (
-              <span className="feed-tab-count cf-count">{closeFriendIds.size}</span>
+              <span className="category-chip-count">{closeFriendIds.size}</span>
             )}
           </button>
         </div>
@@ -860,24 +891,19 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                 </div>
               )}
 
-                {/* 1-Tap Quick Emoji Reactions */}
+                {/* Quick Emoji Insertion Strip */}
                 <div className="feed-quick-emoji-row">
                   {['❤️', '🔥', '👏', '😍', '😂', '🥳'].map((em) => (
                     <button
                       key={em}
                       type="button"
                       className="feed-quick-emoji-btn"
-                      onClick={() => handleQuickEmojiComment(post.id, em)}
-                      title={`Quick comment ${em}`}
+                      onClick={() => handleEmojiInsert(post.id, em)}
+                      title={`Add ${em} to comment`}
                     >
                       {em}
                     </button>
                   ))}
-                  {reactionToast && reactionToast.postId === post.id && (
-                    <span className="feed-emoji-toast-badge">
-                      {reactionToast.emoji} Added!
-                    </span>
-                  )}
                 </div>
 
                 {/* View Comments Link (Quick Trigger) */}

@@ -10,6 +10,8 @@
  * 4. Text & HTML sanitization (strips raw markup, protects against XSS).
  */
 
+const crypto = require('crypto');
+
 class BaseFeedProvider {
   constructor(name, options = {}) {
     this.name = name;
@@ -88,6 +90,16 @@ class BaseFeedProvider {
       .trim();
   }
 
+  generateCleanId(rawId) {
+    if (!rawId) return Math.random().toString(36).slice(2, 12);
+    const str = String(rawId).trim();
+    // If it contains slashes, colons, spaces or URL-like characters, hash it to a clean 16-character hex string
+    if (/[/\\?#&%:\s]/.test(str)) {
+      return crypto.createHash('sha256').update(str).digest('hex').slice(0, 16);
+    }
+    return str.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48);
+  }
+
   /**
    * Normalizes a post into VibeGrid's universal feed post contract
    */
@@ -105,14 +117,15 @@ class BaseFeedProvider {
     likesCount = 0,
     commentsCount = 0
   }) {
-    const cleanId = String(rawId || Math.random().toString(36).slice(2, 10));
+    const cleanId = this.generateCleanId(rawId);
+    const safeProviderName = this.name.toLowerCase().replace(/[^a-z0-9_]/g, '');
     const safeUsername = (authorUsername || authorName || 'creator')
       .toLowerCase()
       .replace(/[^a-z0-9_]/g, '_')
       .slice(0, 30);
 
     return {
-      id: `ext_${this.name.toLowerCase()}_${cleanId}`,
+      id: `ext_${safeProviderName}_${cleanId}`,
       is_external: true,
       source: this.name,
       source_url: sourceUrl || null,
@@ -145,7 +158,8 @@ class BaseFeedProvider {
     expiresAt,
     category = 'general'
   }) {
-    const cleanId = String(rawId || Math.random().toString(36).slice(2, 10));
+    const cleanId = this.generateCleanId(rawId);
+    const safeProviderName = this.name.toLowerCase().replace(/[^a-z0-9_]/g, '');
     const safeUsername = (authorUsername || authorName || 'creator')
       .toLowerCase()
       .replace(/[^a-z0-9_]/g, '_')
@@ -155,7 +169,7 @@ class BaseFeedProvider {
     const expiresAtDate = expiresAt ? new Date(expiresAt) : new Date(createdAtDate.getTime() + 86400000);
 
     return {
-      id: `ext_story_${this.name.toLowerCase()}_${cleanId}`,
+      id: `ext_story_${safeProviderName}_${cleanId}`,
       is_external: true,
       isExternal: true,
       source: this.name,

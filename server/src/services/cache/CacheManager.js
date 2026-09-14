@@ -87,6 +87,12 @@ class MemoryCacheStore {
     return setEntry.set.has(String(member));
   }
 
+  srem(setKey, member) {
+    const setEntry = this.sets.get(setKey);
+    if (!setEntry) return false;
+    return setEntry.set.delete(String(member));
+  }
+
   scard(setKey) {
     const setEntry = this.sets.get(setKey);
     if (!setEntry) return 0;
@@ -234,6 +240,17 @@ class CacheManager {
       }
     }
     return this.memoryStore.sismember(setKey, member);
+  }
+
+  async srem(setKey, member) {
+    if (this.isRedisReady && this.redisClient) {
+      try {
+        return await this.redisClient.srem(setKey, String(member));
+      } catch (err) {
+        console.warn(`[CacheManager Redis Srem Error] ${setKey}:`, err.message);
+      }
+    }
+    return this.memoryStore.srem(setKey, member);
   }
 
   async scard(setKey) {

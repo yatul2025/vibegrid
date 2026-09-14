@@ -242,5 +242,43 @@ describe('Live Feed & Ephemeral Stories Components Suite', () => {
       // No POST /posts/:id/like was called for external post
       expect(apiClient.post).not.toHaveBeenCalled();
     });
+
+    it('renders category filter chips and fetches category feeds', async () => {
+      apiClient.get.mockResolvedValue({
+        success: true,
+        data: { posts: mockPosts }
+      });
+
+      render(<FeedPage onOpenCreatePost={vi.fn()} onNavigateToProfile={vi.fn()} />);
+
+      // Verify category chips exist
+      expect(screen.getByText('Entertainment')).toBeDefined();
+      expect(screen.getByText('Jokes & Memes')).toBeDefined();
+      expect(screen.getByText('Sports')).toBeDefined();
+      expect(screen.getByText('News')).toBeDefined();
+
+      // Click Entertainment category
+      fireEvent.click(screen.getByText('Entertainment'));
+
+      await waitFor(() => {
+        expect(apiClient.get).toHaveBeenCalledWith('/feed?category=entertainment');
+      });
+    });
+
+    it('refresh button triggers live feed reload with refresh=true', async () => {
+      apiClient.get.mockResolvedValue({
+        success: true,
+        data: { posts: mockPosts }
+      });
+
+      render(<FeedPage onOpenCreatePost={vi.fn()} onNavigateToProfile={vi.fn()} />);
+
+      const refreshBtn = screen.getByTitle('Refresh feed');
+      fireEvent.click(refreshBtn);
+
+      await waitFor(() => {
+        expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('refresh=true'));
+      });
+    });
   });
 });

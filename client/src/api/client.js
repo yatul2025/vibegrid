@@ -83,7 +83,10 @@ async function handleResponse(res, endpoint = '') {
   if (contentType && contentType.includes('application/json')) {
     data = await res.json();
   } else {
-    data = { message: await res.text() };
+    const rawText = await res.text();
+    const isHtml = /<[a-z][\s\S]*>/i.test(rawText);
+    const friendly = isHtml ? `Service error (${res.status})` : rawText;
+    data = { message: friendly, error: friendly };
   }
 
   if (!res.ok) {

@@ -11,6 +11,7 @@
  */
 
 const { query } = require('../config/db');
+const cacheManager = require('../services/cache/CacheManager');
 
 /**
  * Toggle like/unlike on a post
@@ -18,15 +19,34 @@ const { query } = require('../config/db');
  */
 const toggleLike = async (req, res, next) => {
   try {
-    const postId = parseInt(req.params.id, 10);
+    const rawPostId = String(req.params.id);
     const userId = req.user.id;
+    const isExternal = rawPostId.startsWith('ext_') || isNaN(parseInt(rawPostId, 10));
 
-    if (isNaN(postId)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid post ID.'
+    // Handle like toggle for external discovery posts (Cache-backed, zero DB footprint)
+    if (isExternal) {
+      const likesSetKey = `likes:${rawPostId}`;
+      const hasLiked = await cacheManager.sismember(likesSetKey, userId);
+      let liked = false;
+      if (hasLiked) {
+        await cacheManager.srem(likesSetKey, userId);
+        liked = false;
+      } else {
+        await cacheManager.sadd(likesSetKey, userId, 604800);
+        liked = true;
+      }
+      const likesCount = await cacheManager.scard(likesSetKey);
+      return res.status(200).json({
+        success: true,
+        data: {
+          postId: rawPostId,
+          liked,
+          likes_count: likesCount
+        }
       });
     }
+
+    const postId = parseInt(rawPostId, 10);
 
     // 1. Verify post exists and is active
     const postCheck = await query(
@@ -115,14 +135,22 @@ const toggleLike = async (req, res, next) => {
  */
 const getComments = async (req, res, next) => {
   try {
-    const postId = parseInt(req.params.id, 10);
+    const rawPostId = String(req.params.id);
+    const isExternal = rawPostId.startsWith('ext_') || isNaN(parseInt(rawPostId, 10));
 
-    if (isNaN(postId)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid post ID.'
+    // For external discovery posts, return cached comments (zero DB queries)
+    if (isExternal) {
+      const cachedComments = (await cacheManager.get(`comments:${rawPostId}`)) || [];
+      return res.status(200).json({
+        success: true,
+        data: {
+          comments: cachedComments,
+          total: cachedComments.length
+        }
       });
     }
+
+    const postId = parseInt(rawPostId, 10);
 
     const commentsQuery = `
       SELECT 
@@ -160,31 +188,77 @@ const getComments = async (req, res, next) => {
  */
 const addComment = async (req, res, next) => {
   try {
-    const postId = parseInt(req.params.id, 10);
+    const rawPostId = String(req.params.id);
     const userId = req.user.id;
-    const { comment_text } = req.body;
-
-    if (isNaN(postId)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid post ID.'
-      });
-    }
+    const isExternal = rawPostId.startsWith('ext_') || isNaN(parseInt(rawPostId, 10));
+    const rawText = req.body.comment_text || req.body.content;
 
     // Validate comment text
-    if (!comment_text || typeof comment_text !== 'string' || !comment_text.trim()) {
+    if (!rawText || typeof rawText !== 'string' || !rawText.trim()) {
       return res.status(400).json({
         success: false,
         error: 'Comment cannot be empty.'
       });
     }
 
-    if (comment_text.trim().length > 500) {
+    if (rawText.trim().length > 500) {
       return res.status(400).json({
         success: false,
         error: 'Comment cannot exceed 500 characters.'
       });
     }
+
+    const cleanText = rawText.trim().slice(0, 500);
+
+    // Handle comment addition for external discovery posts (zero PostgreSQL writes)
+    if (isExternal) {
+      let authorName = req.user.full_name || 'VibeGrid User';
+      let authorUsername = req.user.username || 'vibegrid_user';
+      let authorAvatar = req.user.avatar_url || null;
+
+      try {
+        const uRes = await query('SELECT username, full_name, avatar_url FROM users WHERE id = $1 LIMIT 1', [userId]);
+        if (uRes.rows.length > 0) {
+          authorUsername = uRes.rows[0].username || authorUsername;
+          authorName = uRes.rows[0].full_name || authorName;
+          authorAvatar = uRes.rows[0].avatar_url || authorAvatar;
+        }
+      } catch (uErr) {
+        // Fallback to req.user
+      }
+
+      const commentId = `ext_cmt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const newComment = {
+        id: commentId,
+        post_id: rawPostId,
+        user_id: userId,
+        comment_text: cleanText,
+        created_at: new Date().toISOString(),
+        username: authorUsername,
+        full_name: authorName,
+        avatar_url: authorAvatar
+      };
+
+      const cacheKey = `comments:${rawPostId}`;
+      const cachedComments = (await cacheManager.get(cacheKey)) || [];
+      cachedComments.push(newComment);
+      await cacheManager.set(cacheKey, cachedComments, 604800); // 7-day TTL
+
+      // Store reverse metadata for deletion
+      await cacheManager.set(`ext_cmt_meta:${commentId}`, { postId: rawPostId, userId }, 604800);
+
+      return res.status(201).json({
+        success: true,
+        message: 'Comment added successfully!',
+        data: {
+          comment: newComment,
+          comments_count: cachedComments.length
+        }
+      });
+    }
+
+    const postId = parseInt(rawPostId, 10);
+    const comment_text = cleanText;
 
     // 1. Verify post exists, is active, and fetch author's privacy permissions and notification settings
     const postCheck = await query(
@@ -226,8 +300,6 @@ const addComment = async (req, res, next) => {
         }
       }
     }
-
-    const cleanText = comment_text.trim().slice(0, 500);
 
     // 2. Insert comment into PostgreSQL
     const insertQuery = `
@@ -295,15 +367,45 @@ const addComment = async (req, res, next) => {
  */
 const deleteComment = async (req, res, next) => {
   try {
-    const commentId = parseInt(req.params.commentId, 10);
+    const rawCommentId = String(req.params.commentId);
     const userId = req.user.id;
 
-    if (isNaN(commentId)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid comment ID.'
+    // Handle deletion of external post comments
+    if (rawCommentId.startsWith('ext_cmt_') || isNaN(parseInt(rawCommentId, 10))) {
+      const metaKey = `ext_cmt_meta:${rawCommentId}`;
+      const meta = await cacheManager.get(metaKey);
+      if (!meta) {
+        return res.status(404).json({
+          success: false,
+          error: 'Comment not found.'
+        });
+      }
+
+      if (meta.userId !== userId) {
+        return res.status(403).json({
+          success: false,
+          error: 'You do not have permission to delete this comment.'
+        });
+      }
+
+      const postCommentsKey = `comments:${meta.postId}`;
+      let cachedComments = (await cacheManager.get(postCommentsKey)) || [];
+      cachedComments = cachedComments.filter((c) => String(c.id) !== rawCommentId);
+      await cacheManager.set(postCommentsKey, cachedComments, 604800);
+      await cacheManager.del(metaKey);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Comment deleted successfully.',
+        data: {
+          commentId: rawCommentId,
+          postId: meta.postId,
+          comments_count: cachedComments.length
+        }
       });
     }
+
+    const commentId = parseInt(rawCommentId, 10);
 
     // 1. Fetch comment and associated post owner
     const commentQuery = `

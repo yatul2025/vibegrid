@@ -5575,6 +5575,43 @@ body {
   cursor: not-allowed;
 }
 
+/* Comments Modal Quick Emoji Bar */
+.comments-composer-container {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.comments-quick-emoji-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.comments-quick-emoji-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  font-size: 1.25rem;
+  padding: 2px 6px;
+  cursor: pointer;
+  line-height: 1.2;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease;
+}
+
+.comments-quick-emoji-btn:hover {
+  transform: scale(1.25) translateY(-2px);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  border-color: var(--border-color, rgba(255, 255, 255, 0.1));
+}
+
+.comments-quick-emoji-btn:active {
+  transform: scale(0.95);
+}
+
 @media (max-width: 480px) {
   .story-viewer-overlay {
     padding: 0;
@@ -9143,5 +9180,89 @@ body {
   backdrop-filter: blur(8px);
   margin-left: 8px;
 }
+
+/* Category Chips Bar */
+.feed-category-chips-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 4px 12px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.feed-category-chips-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary, #64748b);
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.category-chip:hover {
+  color: var(--text-primary, #0f172a);
+  border-color: #cbd5e1;
+  background: var(--bg-hover, #f8fafc);
+  transform: translateY(-1px);
+}
+
+.category-chip.active {
+  background: linear-gradient(135deg, #6366f1 0%, #ec4899 100%);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.category-chip.cf-chip {
+  color: #10b981;
+}
+
+.category-chip.cf-chip.active {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.category-chip-count {
+  font-size: 0.72rem;
+  background: rgba(255, 255, 255, 0.25);
+  padding: 1px 6px;
+  border-radius: 9999px;
+}
+
+/* Spinning Refresh Animation */
+@keyframes spinRefresh {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.refresh-icon.spinning {
+  display: inline-block;
+  animation: spinRefresh 0.8s linear infinite;
+}
+
+.feed-control-btn.refreshing {
+  opacity: 0.75;
+  cursor: wait;
+}
+
 
 

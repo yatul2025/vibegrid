@@ -4,12 +4,12 @@
  * Master Feed & Stories Aggregator Engine
  * 
  * Responsibilities:
- * 1. Coordinates external providers (RSS, Curated Media) and VibeGrid PostgreSQL.
- * 2. Deduplicates items using SHA-256 fingerprints in CacheManager.
- * 3. Interleaves real VibeGrid user posts with fresh external content.
- * 4. Aggregates active stories (VibeGrid user stories + external discovery stories).
- * 5. Caches combined feeds in Redis / memory (TTL: 5-15 minutes).
- * 6. Supports delta polling (?since=<timestamp>) for "New posts available" banner.
+ * 1. Coordinates external providers (Curated Multi-Category, Public RSS) & VibeGrid PostgreSQL.
+ * 2. Diversifies external content via round-robin category interleaving (Entertainment, Jokes, Education, Sports, News).
+ * 3. Supports manual/pull-to-refresh (?refresh=true) with dynamic cache invalidation and rotation.
+ * 4. Deduplicates items using SHA-256 fingerprints in CacheManager.
+ * 5. Interleaves genuine VibeGrid user posts with syndicated external content.
+ * 6. Aggregates active stories (VibeGrid user stories + external discovery stories).
  * 7. ZERO PostgreSQL storage footprint for external posts and stories.
  */
 
@@ -21,11 +21,11 @@ const CuratedContentProvider = require('./CuratedContentProvider');
 
 class FeedAggregator {
   constructor(options = {}) {
-    this.cacheTtl = options.cacheTtl || 600; // 10 minutes
+    this.cacheTtl = options.cacheTtl || 300; // 5 minutes
     this.dedupTtl = options.dedupTtl || 86400; // 24 hours
     this.providers = [
-      new RssFeedProvider(),
-      new CuratedContentProvider()
+      new CuratedContentProvider(),
+      new RssFeedProvider()
     ];
   }
 
@@ -40,20 +40,61 @@ class FeedAggregator {
   }
 
   /**
-   * Fetches fresh external items from providers with deduplication
+   * Round-robin interleaves posts by category so no single source/topic dominates
    */
-  async getExternalPosts() {
-    const cacheKey = 'feed:external';
-    const cached = await cacheManager.get(cacheKey);
-    if (cached && Array.isArray(cached) && cached.length > 0) {
-      return cached;
+  diversifyExternalPosts(posts) {
+    if (!posts || posts.length <= 1) return posts || [];
+
+    const categoryBuckets = {};
+    for (const post of posts) {
+      const cat = post.category || 'general';
+      if (!categoryBuckets[cat]) categoryBuckets[cat] = [];
+      categoryBuckets[cat].push(post);
+    }
+
+    const diversified = [];
+    const categories = Object.keys(categoryBuckets);
+    let hasMore = true;
+    let round = 0;
+
+    while (hasMore) {
+      hasMore = false;
+      for (const cat of categories) {
+        const bucket = categoryBuckets[cat];
+        if (round < bucket.length) {
+          diversified.push(bucket[round]);
+          hasMore = true;
+        }
+      }
+      round++;
+    }
+
+    return diversified;
+  }
+
+  /**
+   * Fetches fresh external items from providers with deduplication and rotation
+   */
+  async getExternalPosts({ refresh = false, category = null } = {}) {
+    const cacheKey = `feed:external:${category || 'all'}`;
+
+    if (!refresh) {
+      const cached = await cacheManager.get(cacheKey);
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        return cached;
+      }
     }
 
     const fetchedPosts = [];
 
-    // Run providers concurrently with Promise.allSettled
+    // Run providers concurrently
     const results = await Promise.allSettled(
-      this.providers.map((p) => p.fetchPosts())
+      this.providers.map((p) => {
+        if (p instanceof CuratedContentProvider) {
+          return p.fetchPosts(category);
+        }
+        return p.fetchPosts();
+      })
     );
 
     for (const res of results) {
@@ -62,31 +103,50 @@ class FeedAggregator {
       }
     }
 
+    // Filter by category if requested
+    let filteredPosts = fetchedPosts;
+    if (category && category !== 'all') {
+      const cleanCat = category.toLowerCase();
+      filteredPosts = fetchedPosts.filter((p) => {
+        if (cleanCat === 'jokes' || cleanCat === 'humor' || cleanCat === 'joc') {
+          return p.category === 'jokes';
+        }
+        if (cleanCat === 'education' || cleanCat === 'eduartion' || cleanCat === 'science') {
+          return p.category === 'education';
+        }
+        return p.category === cleanCat;
+      });
+      // Fallback if empty
+      if (filteredPosts.length === 0) filteredPosts = fetchedPosts;
+    }
+
+    // Round-robin diversify so Entertainment, Jokes, Education, Sports, News are balanced
+    const diversified = this.diversifyExternalPosts(filteredPosts);
+
     // Deduplicate against cache set
     const dedupSetKey = 'dedup:fingerprints';
     const uniquePosts = [];
 
-    for (const post of fetchedPosts) {
+    for (const post of diversified) {
       const fingerprint = this.generateFingerprint(post.source, post.id);
       const isDuplicate = await cacheManager.sismember(dedupSetKey, fingerprint);
 
-      if (!isDuplicate) {
+      if (!isDuplicate || refresh) {
         await cacheManager.sadd(dedupSetKey, fingerprint, this.dedupTtl);
         uniquePosts.push(post);
-      } else if (uniquePosts.length < 10) {
-        // Allow in fallback if total posts are low
+      } else if (uniquePosts.length < 15) {
         uniquePosts.push(post);
       }
     }
 
-    // Fallback: If network is offline and deduplication filtered everything, use Curated Provider
+    // Fallback if needed
     if (uniquePosts.length === 0) {
       const fallbackProvider = new CuratedContentProvider();
-      const fallbackItems = await fallbackProvider.fetchPosts();
+      const fallbackItems = await fallbackProvider.fetchPosts(category);
       uniquePosts.push(...fallbackItems);
     }
 
-    // Cache the external posts batch for 10 minutes
+    // Cache the external posts batch (5 minutes)
     await cacheManager.set(cacheKey, uniquePosts, this.cacheTtl);
     return uniquePosts;
   }
@@ -170,24 +230,40 @@ class FeedAggregator {
   /**
    * Main aggregated feed getter
    */
-  async getFeed({ currentUserId = null, page = 1, limit = 20, category = null, since = null } = {}) {
+  async getFeed({
+    currentUserId = null,
+    page = 1,
+    limit = 20,
+    category = null,
+    since = null,
+    refresh = false
+  } = {}) {
+    const isRefresh = refresh === true || refresh === 'true' || refresh === '1';
     const cacheKey = `feed:global:${category || 'all'}`;
 
-    let allPosts = await cacheManager.get(cacheKey);
+    let allPosts = null;
 
-    if (!allPosts || !Array.isArray(allPosts) || allPosts.length === 0) {
-      // Parallel retrieval: VibeGrid user posts + External discovery posts
+    if (!isRefresh) {
+      allPosts = await cacheManager.get(cacheKey);
+    }
+
+    if (!allPosts || !Array.isArray(allPosts) || allPosts.length === 0 || isRefresh) {
+      const isSpecificCategory = Boolean(category && category !== 'all');
+
+      // Parallel retrieval: VibeGrid user posts (only for 'all' feed) + External discovery posts
       const [userPosts, externalPosts] = await Promise.all([
-        this.getVibeGridUserPosts(currentUserId),
-        this.getExternalPosts()
+        isSpecificCategory ? Promise.resolve([]) : this.getVibeGridUserPosts(currentUserId),
+        this.getExternalPosts({ refresh: isRefresh, category })
       ]);
 
-      let filteredExternal = externalPosts;
-      if (category && category !== 'all') {
-        filteredExternal = externalPosts.filter((p) => p.category === category.toLowerCase());
+      if (isSpecificCategory) {
+        allPosts = [...externalPosts];
+      } else {
+        allPosts = this.interleaveContent(userPosts, externalPosts);
       }
 
-      allPosts = this.interleaveContent(userPosts, filteredExternal);
+      // Sort strictly so the latest updated content is always on top
+      allPosts.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
       // Cache the combined mix
       await cacheManager.set(cacheKey, allPosts, this.cacheTtl);
@@ -225,11 +301,15 @@ class FeedAggregator {
   /**
    * Aggregates active stories (PostgreSQL users + External discovery stories)
    */
-  async getStories({ currentUserId = null } = {}) {
+  async getStories({ currentUserId = null, refresh = false } = {}) {
+    const isRefresh = refresh === true || refresh === 'true' || refresh === '1';
     const cacheKey = 'stories:global';
-    const cached = await cacheManager.get(cacheKey);
-    if (cached && Array.isArray(cached) && cached.length > 0) {
-      return cached;
+
+    if (!isRefresh) {
+      const cached = await cacheManager.get(cacheKey);
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        return cached;
+      }
     }
 
     // 1. Fetch real VibeGrid user stories from PostgreSQL
@@ -302,7 +382,7 @@ class FeedAggregator {
     // 3. Combine: VibeGrid user stories first, then external discovery stories
     const combinedStories = [...userCreators, ...externalStories];
 
-    // Cache combined stories for 10 minutes
+    // Cache combined stories for 5 minutes
     await cacheManager.set(cacheKey, combinedStories, this.cacheTtl);
     return combinedStories;
   }
