@@ -182,7 +182,12 @@ class FeedAggregator {
             WHEN $1::int IS NOT NULL THEN 
               EXISTS(SELECT 1 FROM saved_posts sp WHERE sp.post_id = p.id AND sp.user_id = $1::int)
             ELSE false 
-          END AS is_saved
+          END AS is_saved,
+          CASE 
+            WHEN $1::int IS NOT NULL THEN 
+              EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = $1::int AND f.following_id = p.user_id)
+            ELSE false 
+          END AS is_following
         FROM posts p
         JOIN users u ON p.user_id = u.id
         WHERE p.is_active = TRUE

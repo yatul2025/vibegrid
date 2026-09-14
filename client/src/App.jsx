@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import apiClient from './api/client';
 import StatusDashboard from './components/StatusDashboard';
@@ -16,9 +16,11 @@ import socketService from './services/socketService';
 import e2eeService from './services/crypto/e2eeService';
 import AuthPromptModal from './components/AuthPromptModal';
 import DemoModeIndicator from './components/DemoModeIndicator';
+import { usePWA } from './services/pwaManager';
 
 function AppContent() {
   const { user, loading, logout, isDemoMode, authModalState, closeAuthModal, guardDemoAction } = useAuth();
+  const { isInstallable, isInstalled, isOffline, hasUpdate, promptInstall, applyUpdate } = usePWA();
   const [authPageTab, setAuthPageTab] = useState('login');
   const [currentTab, setCurrentTab] = useState(() => {
     return sessionStorage.getItem('vibegrid_active_tab') || 'feed';
@@ -37,6 +39,25 @@ function AppContent() {
   });
   const [settingsSection, setSettingsSection] = useState('profile');
   const [a11yStatus, setA11yStatus] = useState('');
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef(null);
+
+  // Close profile dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setIsProfileMenuOpen(false);
+      }
+    }
+    if (isProfileMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isProfileMenuOpen]);
 
   // Announce view changes to assistive technologies
   useEffect(() => {
@@ -261,6 +282,25 @@ function AppContent() {
         {a11yStatus}
       </div>
 
+      {/* PWA Network & Update Notifications */}
+      {isOffline && (
+        <div className="pwa-network-status-banner offline" role="status" aria-live="polite">
+          <span className="pwa-status-icon">📡</span>
+          <span className="pwa-status-text">You are currently offline. Cached feed and assets remain accessible.</span>
+        </div>
+      )}
+      {hasUpdate && (
+        <div className="pwa-update-banner" role="alert">
+          <div className="pwa-update-info">
+            <span className="pwa-update-icon">✨</span>
+            <span className="pwa-update-text">A new version of VibeGrid is ready!</span>
+          </div>
+          <button type="button" onClick={applyUpdate} className="pwa-update-action-btn">
+            Update Now
+          </button>
+        </div>
+      )}
+
       {/* Top Navigation Bar & Landmark Banner */}
       <header role="banner" className="top-navbar">
         <div className="top-navbar-container">
@@ -321,7 +361,7 @@ function AppContent() {
                   <li>
                     <a
                       href="#feed"
-                      className={`nav-tab-btn ${currentTab === 'feed' ? 'active' : ''}`}
+                      className={`nav-tab-btn ${currentTab === 'feed' && !viewedUsername ? 'active' : ''}`}
                       onClick={(e) => {
                         e.preventDefault();
                         setViewedUsername(null);
@@ -397,15 +437,15 @@ function AppContent() {
                     </a>
                   </li>
 
-                  <li>
-                    <a
-                      href={`#profile/${user.username}`}
-                      className={`nav-tab-btn ${currentTab === 'profile' && !viewedUsername ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        navigateToProfile(null);
-                      }}
-                      style={{ display: 'flex', alignItems: 'center' }}
+                  {/* Profile Dropdown Menu */}
+                  <li ref={profileMenuRef} className="nav-profile-menu-container">
+                    <button
+                      type="button"
+                      className={`nav-tab-btn nav-profile-btn ${isProfileMenuOpen || (currentTab === 'profile' && !viewedUsername) ? 'active' : ''}`}
+                      onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+                      aria-expanded={isProfileMenuOpen}
+                      aria-haspopup="true"
+                      title="Account & Settings"
                     >
                       {user.avatar_url ? (
                         <img src={user.avatar_url} alt="" className="nav-avatar-mini" />
@@ -414,22 +454,110 @@ function AppContent() {
                           {user.username?.charAt(0).toUpperCase()}
                         </span>
                       )}
-                      <span>@{user.username}</span>
-                    </a>
-                  </li>
+                      <span className="nav-profile-name">@{user.username}</span>
+                      <span className="nav-chevron">{isProfileMenuOpen ? '▲' : '▼'}</span>
+                    </button>
 
-                  <li>
-                    <a
-                      href="#settings"
-                      className={`nav-tab-btn ${currentTab === 'settings' ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        openSettings('contact');
-                      }}
-                      title="Settings & Privacy"
-                    >
-                      ⚙️ Settings
-                    </a>
+                    {isProfileMenuOpen && (
+                      <div className="nav-profile-dropdown" role="menu">
+                        <div className="dropdown-user-header">
+                          <div className="dropdown-user-avatar">
+                            {user.avatar_url ? (
+                              <img src={user.avatar_url} alt="" />
+                            ) : (
+                              <span>{user.username?.charAt(0).toUpperCase()}</span>
+                            )}
+                          </div>
+                          <div className="dropdown-user-info">
+                            <span className="dropdown-user-name">{user.full_name || user.username}</span>
+                            <span className="dropdown-user-handle">@{user.username}</span>
+                          </div>
+                        </div>
+
+                        <div className="dropdown-divider" />
+
+                        <button
+                          type="button"
+                          className="dropdown-item"
+                          role="menuitem"
+                          onClick={() => {
+                            navigateToProfile(null);
+                            setIsProfileMenuOpen(false);
+                          }}
+                        >
+                          <span className="dropdown-icon">👤</span>
+                          <span>My Profile</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="dropdown-item"
+                          role="menuitem"
+                          onClick={() => {
+                            openSettings('profile');
+                            setIsProfileMenuOpen(false);
+                          }}
+                        >
+                          <span className="dropdown-icon">⚙️</span>
+                          <span>Settings & Privacy</span>
+                        </button>
+
+                        {isTestUser && (
+                          <button
+                            type="button"
+                            className="dropdown-item"
+                            role="menuitem"
+                            onClick={() => {
+                              setCurrentTab('status');
+                              setIsProfileMenuOpen(false);
+                            }}
+                          >
+                            <span className="dropdown-icon">📊</span>
+                            <span>System Status</span>
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          className="dropdown-item"
+                          role="menuitem"
+                          onClick={toggleTheme}
+                        >
+                          <span className="dropdown-icon">{theme === 'dark' ? '☀️' : '🌙'}</span>
+                          <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+                        </button>
+
+                        {isInstallable && !isInstalled && (
+                          <button
+                            type="button"
+                            className="dropdown-item highlight-install"
+                            role="menuitem"
+                            onClick={() => {
+                              promptInstall();
+                              setIsProfileMenuOpen(false);
+                            }}
+                          >
+                            <span className="dropdown-icon">📲</span>
+                            <span>Install VibeGrid App</span>
+                          </button>
+                        )}
+
+                        <div className="dropdown-divider" />
+
+                        <button
+                          type="button"
+                          className="dropdown-item logout-item"
+                          role="menuitem"
+                          onClick={() => {
+                            setIsProfileMenuOpen(false);
+                            logout();
+                          }}
+                        >
+                          <span className="dropdown-icon">🚪</span>
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    )}
                   </li>
                 </>
               ) : (
@@ -473,54 +601,50 @@ function AppContent() {
                       👤 Sign In / Register
                     </a>
                   </li>
+
+                  {isInstallable && !isInstalled && (
+                    <li>
+                      <button
+                        type="button"
+                        className="nav-tab-btn nav-install-btn"
+                        onClick={promptInstall}
+                        title="Install VibeGrid as Progressive Web App"
+                      >
+                        📲 Install App
+                      </button>
+                    </li>
+                  )}
+
+                  <li>
+                    <button
+                      type="button"
+                      onClick={toggleTheme}
+                      className="nav-tab-btn nav-theme-btn"
+                      title="Toggle Dark/Light Mode"
+                      aria-label="Toggle dark/light theme"
+                    >
+                      {theme === 'dark' ? '☀️' : '🌙'}
+                    </button>
+                  </li>
                 </>
               )}
-
-              {isTestUser && (
-                <li>
-                  <a
-                    href="#status"
-                    className={`nav-tab-btn ${currentTab === 'status' ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setCurrentTab('status');
-                    }}
-                    title="System Status & Health"
-                  >
-                    📊 System Status
-                  </a>
-                </li>
-              )}
-
-              {user && (
-                <li>
-                  <button
-                    type="button"
-                    onClick={logout}
-                    className="nav-tab-btn nav-logout-btn"
-                    title="Sign out of your account"
-                  >
-                    Sign Out
-                  </button>
-                </li>
-              )}
-
-              <li>
-                <button
-                  type="button"
-                  onClick={toggleTheme}
-                  className="nav-tab-btn nav-theme-btn"
-                  title="Toggle Dark/Light Mode"
-                  aria-label="Toggle dark/light theme"
-                >
-                  {theme === 'dark' ? '☀️' : '🌙'}
-                </button>
-              </li>
             </ul>
           </nav>
 
           {/* Mobile Header Actions (Visible on mobile <= 768px) */}
           <div className="mobile-header-actions mobile-only">
+            {isInstallable && !isInstalled && (
+              <button
+                type="button"
+                className="mobile-install-pill-btn"
+                onClick={promptInstall}
+                title="Install VibeGrid"
+                aria-label="Install App"
+              >
+                📲 Install
+              </button>
+            )}
+
             <button
               onClick={toggleTheme}
               className="nav-icon-btn-mobile"
@@ -532,20 +656,6 @@ function AppContent() {
 
             {user ? (
               <>
-                <button
-                  className={`nav-icon-btn-mobile ${isNotificationsOpen ? 'active' : ''}`}
-                  onClick={() => setIsNotificationsOpen((prev) => !prev)}
-                  title="Activity Notifications"
-                  aria-label="Activity Notifications"
-                >
-                  <span>🔔</span>
-                  {unreadCount > 0 && (
-                    <span className="nav-unread-badge-mobile">
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </span>
-                  )}
-                </button>
-
                 <button
                   className={`nav-icon-btn-mobile ${currentTab === 'messages' ? 'active' : ''}`}
                   onClick={() => {
@@ -565,7 +675,7 @@ function AppContent() {
 
                 <button
                   className={`nav-icon-btn-mobile ${currentTab === 'settings' ? 'active' : ''}`}
-                  onClick={() => openSettings('contact')}
+                  onClick={() => openSettings('profile')}
                   title="Settings & Privacy"
                   aria-label="Settings & Privacy"
                 >
@@ -705,22 +815,24 @@ function AppContent() {
               </button>
             </li>
 
-            {isTestUser && (
-              <li>
-                <a
-                  href="#status"
-                  className={`mobile-nav-item ${currentTab === 'status' ? 'active' : ''}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setCurrentTab('status');
-                  }}
-                  title="System Status"
-                >
-                  <span className="mobile-nav-icon">📊</span>
-                  <span className="mobile-nav-label">Status</span>
-                </a>
-              </li>
-            )}
+            <li>
+              <button
+                type="button"
+                className={`mobile-nav-item ${isNotificationsOpen ? 'active' : ''}`}
+                onClick={() => setIsNotificationsOpen(true)}
+                title="Activity Notifications"
+              >
+                <span className="mobile-nav-icon">
+                  🔔
+                  {unreadCount > 0 && (
+                    <span className="mobile-nav-badge">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </span>
+                <span className="mobile-nav-label">Activity</span>
+              </button>
+            </li>
 
             <li>
               <a

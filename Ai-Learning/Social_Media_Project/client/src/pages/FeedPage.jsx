@@ -81,7 +81,9 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
       return new Set([2, 3, 4]);
     }
   });
-  const [filterCloseFriends, setFilterCloseFriends] = useState(false);
+  const [feedMode, setFeedMode] = useState('forYou'); // 'forYou' | 'following' | 'closeFriends'
+  const filterCloseFriends = feedMode === 'closeFriends';
+  const setFilterCloseFriends = (val) => setFeedMode(val ? 'closeFriends' : 'forYou');
 
   // Stories States (Phase 9)
   const [storyCreators, setStoryCreators] = useState([]);
@@ -487,17 +489,29 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     });
   };
 
-  const filteredPosts = filterCloseFriends
-    ? posts.filter((p) => closeFriendIds.has(p.user_id) || (user && p.user_id === user.id))
-    : selectedCategory !== 'all'
-    ? posts.filter((p) => {
-        if (!p.category) return false;
-        const cleanCat = selectedCategory.toLowerCase();
-        if (cleanCat === 'jokes' || cleanCat === 'humor') return p.category === 'jokes';
-        if (cleanCat === 'education') return p.category === 'education';
-        return p.category.toLowerCase() === cleanCat;
-      })
-    : posts;
+  const filteredPosts = posts.filter((p) => {
+    // 1. Primary Feed Mode
+    if (feedMode === 'closeFriends') {
+      if (!closeFriendIds.has(p.user_id) && (!user || p.user_id !== user.id)) {
+        return false;
+      }
+    } else if (feedMode === 'following') {
+      if (!p.is_following && (!user || p.user_id !== user.id)) {
+        return false;
+      }
+    }
+
+    // 2. Secondary Category Filter
+    if (selectedCategory !== 'all') {
+      if (!p.category) return false;
+      const cleanCat = selectedCategory.toLowerCase();
+      if (cleanCat === 'jokes' || cleanCat === 'humor') return p.category === 'jokes';
+      if (cleanCat === 'education') return p.category === 'education';
+      return p.category.toLowerCase() === cleanCat;
+    }
+
+    return true;
+  });
 
   // Always ensure newest items are on top
   const displayedPosts = [...filteredPosts].sort(
@@ -518,106 +532,101 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
         <main className="feed-main-column">
           {/* Ephemeral 24-Hour Stories Bar */}
           <StoryTray
-        creators={storyCreators}
-        loading={storiesLoading}
-        viewedCreatorIds={viewedCreatorIds}
-        closeFriendIds={closeFriendIds}
-        onOpenViewer={handleOpenViewer}
-        onOpenCreateStory={() => setIsCreateStoryOpen(true)}
-      />
+            creators={storyCreators}
+            loading={storiesLoading}
+            viewedCreatorIds={viewedCreatorIds}
+            closeFriendIds={closeFriendIds}
+            onOpenViewer={handleOpenViewer}
+            onOpenCreateStory={() => setIsCreateStoryOpen(true)}
+          />
 
-      {/* Feed Header Container (Clean 2-level Instagram/Threads style) */}
-      <div className="feed-header-container">
-        <div className="feed-header-top">
-          <div className="feed-header-brand">
-            <svg viewBox="0 0 52 52" width="24" height="24" className="vg-feed-header-logo" fill="none">
-              <defs>
-                <linearGradient id="vgFeedGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#f09433" />
-                  <stop offset="25%" stopColor="#e6683c" />
-                  <stop offset="50%" stopColor="#dc2743" />
-                  <stop offset="75%" stopColor="#cc2366" />
-                  <stop offset="100%" stopColor="#bc1888" />
-                </linearGradient>
-              </defs>
-              <rect width="52" height="52" rx="16" fill="url(#vgFeedGrad)" />
-              <circle cx="41" cy="11" r="2.4" fill="white" opacity="0.95" />
-              <circle cx="41" cy="19" r="1.6" fill="white" opacity="0.6" />
-              <circle cx="33" cy="11" r="1.6" fill="white" opacity="0.6" />
-              <path
-                d="M14 15 L26 38 L38 15"
-                stroke="#ffffff"
-                strokeWidth="5.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <h2 className="feed-header-title">Latest Feed</h2>
+          {/* Feed Header Container (Clean 2-level Instagram/Threads style) */}
+          <div className="feed-header-container">
+            <div className="feed-header-top">
+              {/* Primary Feed Toggle: For You | Following | Close Friends */}
+              <div className="feed-primary-tabs" role="tablist" aria-label="Feed Mode">
+                <button
+                  type="button"
+                  className={`feed-primary-tab ${feedMode === 'forYou' ? 'active' : ''}`}
+                  onClick={() => setFeedMode('forYou')}
+                  role="tab"
+                  aria-selected={feedMode === 'forYou'}
+                >
+                  For You
+                </button>
+                <button
+                  type="button"
+                  className={`feed-primary-tab ${feedMode === 'following' ? 'active' : ''}`}
+                  onClick={() => setFeedMode('following')}
+                  role="tab"
+                  aria-selected={feedMode === 'following'}
+                >
+                  Following
+                </button>
+                <button
+                  type="button"
+                  className={`feed-primary-tab cf-primary-tab ${feedMode === 'closeFriends' ? 'active' : ''}`}
+                  onClick={() => setFeedMode('closeFriends')}
+                  role="tab"
+                  aria-selected={feedMode === 'closeFriends'}
+                >
+                  <span>★ Close Friends</span>
+                  {closeFriendIds.size > 0 && (
+                    <span className="feed-cf-pill-count">{closeFriendIds.size}</span>
+                  )}
+                </button>
+              </div>
+
+              <div className="feed-header-controls">
+                <button
+                  type="button"
+                  className={`feed-control-btn ${isRefreshing ? 'refreshing' : ''}`}
+                  onClick={() => {
+                    fetchFeed(selectedCategory, true);
+                    fetchStories(true);
+                  }}
+                  title="Refresh feed"
+                  disabled={isRefreshing}
+                >
+                  <span className={`refresh-icon ${isRefreshing ? 'spinning' : ''}`}>🔄</span>
+                  <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+                </button>
+                {user && (
+                  <button
+                    type="button"
+                    className="feed-control-btn feed-create-btn"
+                    onClick={onOpenCreatePost}
+                    title="Create a new post"
+                  >
+                    <span>➕</span>
+                    <span>Post</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Secondary Category Filter Pills with smooth horizontal scrolling */}
+            <div className="feed-category-chips-bar-wrapper">
+              <div className="feed-category-chips-bar" role="tablist" aria-label="Feed Categories">
+                {FEED_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className={`category-chip ${selectedCategory === cat.id ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedCategory(cat.id);
+                      fetchFeed(cat.id, false);
+                    }}
+                    role="tab"
+                    aria-selected={selectedCategory === cat.id}
+                  >
+                    <span>{cat.icon}</span>
+                    <span>{cat.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-
-          <div className="feed-header-controls">
-            <button
-              type="button"
-              className={`feed-control-btn ${isRefreshing ? 'refreshing' : ''}`}
-              onClick={() => {
-                fetchFeed(selectedCategory, true);
-                fetchStories(true);
-              }}
-              title="Refresh feed"
-              disabled={isRefreshing}
-            >
-              <span className={`refresh-icon ${isRefreshing ? 'spinning' : ''}`}>🔄</span>
-              <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
-            </button>
-            {user && (
-              <button
-                type="button"
-                className="feed-control-btn feed-create-btn"
-                onClick={onOpenCreatePost}
-                title="Create a new post"
-              >
-                <span>➕</span>
-                <span>Post</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Multi-Category Filter Bar (Entertainment, Jokes, Education, Sports, News, All, Close Friends) */}
-        <div className="feed-category-chips-bar" role="tablist" aria-label="Feed Categories">
-          {FEED_CATEGORIES.map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              className={`category-chip ${selectedCategory === cat.id && !filterCloseFriends ? 'active' : ''}`}
-              onClick={() => {
-                setFilterCloseFriends(false);
-                setSelectedCategory(cat.id);
-                fetchFeed(cat.id, false);
-              }}
-              role="tab"
-              aria-selected={selectedCategory === cat.id && !filterCloseFriends}
-            >
-              <span>{cat.icon}</span>
-              <span>{cat.label}</span>
-            </button>
-          ))}
-          <button
-            type="button"
-            className={`category-chip cf-chip ${filterCloseFriends ? 'active' : ''}`}
-            onClick={() => setFilterCloseFriends(true)}
-            title="Filter by Close Friends"
-            role="tab"
-            aria-selected={filterCloseFriends}
-          >
-            <span>★</span>
-            <span>Close Friends</span>
-            {closeFriendIds.size > 0 && (
-              <span className="category-chip-count">{closeFriendIds.size}</span>
-            )}
-          </button>
-        </div>
-      </div>
 
       {error && (
         <div className="feed-error-banner">
@@ -668,13 +677,22 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
         </div>
       ) : displayedPosts.length === 0 ? (
         /* Empty Feed State */
-        filterCloseFriends ? (
+        feedMode === 'closeFriends' ? (
           <div className="feed-empty-card">
             <div className="empty-feed-icon">⭐</div>
             <h3>No Close Friends posts yet</h3>
             <p>Tap the green star ★ button on any creator's post to add them to your Close Friends!</p>
-            <button type="button" className="btn-secondary" onClick={() => setFilterCloseFriends(false)}>
+            <button type="button" className="btn-secondary" onClick={() => setFeedMode('forYou')}>
               Show All Posts
+            </button>
+          </div>
+        ) : feedMode === 'following' ? (
+          <div className="feed-empty-card">
+            <div className="empty-feed-icon">👥</div>
+            <h3>No posts from accounts you follow</h3>
+            <p>Follow interesting creators from the For You feed or Explore tab to see their latest updates here.</p>
+            <button type="button" className="btn-secondary" onClick={() => setFeedMode('forYou')}>
+              Explore For You Feed
             </button>
           </div>
         ) : (

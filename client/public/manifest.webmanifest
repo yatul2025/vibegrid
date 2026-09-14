@@ -1,0 +1,78 @@
+{
+  "name": "VibeGrid — Modern Social Platform",
+  "short_name": "VibeGrid",
+  "description": "Connect, share moments, and explore live content on VibeGrid.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["social", "entertainment", "photo"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Home Feed",
+      "short_name": "Feed",
+      "description": "View the latest posts and moments",
+      "url": "/#feed",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Explore",
+      "short_name": "Explore",
+      "description": "Discover trending topics and creators",
+      "url": "/#explore",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Direct Messages",
+      "short_name": "Messages",
+      "description": "Chat with end-to-end encryption",
+      "url": "/#messages",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Create Post",
+      "short_name": "Create",
+      "description": "Share a new photo or moment",
+      "url": "/#create",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
