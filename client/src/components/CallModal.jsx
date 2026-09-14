@@ -28,6 +28,8 @@ export default function CallModal() {
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('connecting');
 
   // Media Stream References
   const localVideoRef = useRef(null);
@@ -107,13 +109,17 @@ export default function CallModal() {
       console.log('✅ [Socket] Call accepted by peer:', data);
       stopRingtone();
       setCallState('connected');
+      setConnectionStatus('connecting');
 
-      // Initiator starts WebRTC negotiation
+      // Initiator starts WebRTC negotiation using authoritative IDs
       try {
+        const targetUserId = data.calleeId || callData?.peer?.id;
+        const callId = data.callId || callData?.callId;
+        const callType = callData?.callType || 'audio';
         await webrtcService.startCallAsInitiator(
-          callData.peer.id,
-          callData.callId,
-          callData.callType
+          targetUserId,
+          callId,
+          callType
         );
       } catch (err) {
         console.error('Failed to start WebRTC call:', err);
@@ -128,6 +134,7 @@ export default function CallModal() {
       webrtcService.endCall();
       setCallState(null);
       setCallData(null);
+      setHasRemoteVideo(false);
       alert(`Call was declined (${data.reason || 'declined'}).`);
     };
 
@@ -138,6 +145,7 @@ export default function CallModal() {
       webrtcService.endCall();
       setCallState(null);
       setCallData(null);
+      setHasRemoteVideo(false);
     };
 
     // 5. WebRTC SDP Offer Relay
@@ -190,6 +198,7 @@ export default function CallModal() {
         isInitiator: true
       });
       setCallState('outgoing');
+      setConnectionStatus('connecting');
       startRingtone();
 
       socketService.emit('call:initiate', {
@@ -240,6 +249,11 @@ export default function CallModal() {
       }
 
       if (webrtcService.remoteStream) {
+        const vTracks = webrtcService.remoteStream.getVideoTracks();
+        if (vTracks && vTracks.length > 0) {
+          setHasRemoteVideo(true);
+        }
+
         if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== webrtcService.remoteStream) {
           remoteVideoRef.current.srcObject = webrtcService.remoteStream;
           remoteVideoRef.current.play().catch((e) => console.debug('Video play error:', e));
@@ -260,6 +274,11 @@ export default function CallModal() {
 
     webrtcService.onRemoteStream = (stream) => {
       console.log('📺 [CallModal] Remote stream received:', stream);
+      const vTracks = stream.getVideoTracks();
+      if (vTracks && vTracks.length > 0) {
+        setHasRemoteVideo(true);
+      }
+
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = stream;
         remoteVideoRef.current.play().catch((e) => console.debug('Remote video play error:', e));
@@ -272,11 +291,10 @@ export default function CallModal() {
 
     webrtcService.onConnectionStateChange = (state) => {
       console.log('🔄 [CallModal] WebRTC connection state:', state);
-      if (state === 'connected') {
+      setConnectionStatus(state);
+      if (state === 'connected' || state === 'completed') {
         setCallState('connected');
         setTimeout(bindStreams, 50);
-      } else if (state === 'disconnected' || state === 'failed') {
-        handleEndCall();
       }
     };
 
@@ -456,7 +474,13 @@ export default function CallModal() {
             {/* Header / Duration */}
             <div className="call-header-bar">
               <div className="call-header-info">
-                <span className="call-live-badge">LIVE</span>
+                <span className={`call-live-badge status-${connectionStatus}`}>
+                  {connectionStatus === 'connected' || connectionStatus === 'completed'
+                    ? 'LIVE'
+                    : connectionStatus === 'checking' || connectionStatus === 'connecting'
+                    ? 'CONNECTING...'
+                    : 'CONNECTING...'}
+                </span>
                 <span className="call-peer-title">@{callData.peer?.username}</span>
               </div>
               <span className="call-timer">{formatDuration(durationSeconds)}</span>
@@ -470,9 +494,10 @@ export default function CallModal() {
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
-                className={`remote-video-elem ${callData.callType === 'video' ? 'visible' : 'hidden'}`}
+                muted
+                className={`remote-video-elem ${callData.callType === 'video' || hasRemoteVideo || isScreenSharing ? 'visible' : 'hidden'}`}
               />
-              {(!callData.callType || callData.callType === 'audio') && (
+              {!hasRemoteVideo && callData.callType !== 'video' && !isScreenSharing && (
                 <div className="audio-call-placeholder">
                   <img
                     src={callData.peer?.avatar_url || '/uploads/avatars/default-avatar.png'}
@@ -485,7 +510,7 @@ export default function CallModal() {
             </div>
 
             {/* Local Video PIP */}
-            {callData.callType === 'video' && (
+            {(callData.callType === 'video' || isScreenSharing || !isVideoMuted) && (
               <div className="call-local-pip">
                 <video
                   ref={localVideoRef}
@@ -508,27 +533,23 @@ export default function CallModal() {
                 {isAudioMuted ? '🔇' : '🎤'}
               </button>
 
-              {callData.callType === 'video' && (
-                <>
-                  <button
-                    type="button"
-                    className={`control-btn ${isVideoMuted ? 'active-mute' : ''}`}
-                    onClick={handleToggleVideo}
-                    title={isVideoMuted ? 'Turn Camera On' : 'Turn Camera Off'}
-                  >
-                    {isVideoMuted ? '🚫' : '📹'}
-                  </button>
+              <button
+                type="button"
+                className={`control-btn ${isVideoMuted ? 'active-mute' : ''}`}
+                onClick={handleToggleVideo}
+                title={isVideoMuted ? 'Turn Camera On' : 'Turn Camera Off'}
+              >
+                {isVideoMuted ? '🚫' : '📹'}
+              </button>
 
-                  <button
-                    type="button"
-                    className={`control-btn ${isScreenSharing ? 'active-action' : ''}`}
-                    onClick={handleToggleScreenShare}
-                    title={isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
-                  >
-                    🖥️
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                className={`control-btn ${isScreenSharing ? 'active-action' : ''}`}
+                onClick={handleToggleScreenShare}
+                title={isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
+              >
+                🖥️
+              </button>
 
               <button
                 type="button"
@@ -683,12 +704,22 @@ export default function CallModal() {
         }
 
         .call-live-badge {
-          background: #ef4444;
+          background: #f59e0b;
           font-size: 11px;
           font-weight: 700;
           padding: 2px 8px;
           border-radius: 12px;
           margin-right: 8px;
+          transition: background 0.3s ease;
+        }
+
+        .call-live-badge.status-connected,
+        .call-live-badge.status-completed {
+          background: #10b981;
+        }
+
+        .call-live-badge.status-failed {
+          background: #ef4444;
         }
 
         .call-peer-title {

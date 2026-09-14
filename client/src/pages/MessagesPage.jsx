@@ -525,7 +525,7 @@ export default function MessagesPage({
   // ==========================================================================
   // 6. Send Encrypted Voice Note
   // ==========================================================================
-  const handleSendVoiceNote = async (audioBlob, durationSeconds) => {
+  const handleSendVoiceNote = async (audioBlob, durationSeconds, recordedMimeType) => {
     if (!audioBlob || !activePartner || sending) return;
 
     try {
@@ -550,7 +550,7 @@ export default function MessagesPage({
         url: uploadRes.data.mediaUrl,
         mediaKey: encMedia.mediaKeyBase64,
         iv: encMedia.ivNonce,
-        mimeType: 'audio/webm',
+        mimeType: recordedMimeType || audioBlob.type || 'audio/webm',
         durationSeconds
       };
 

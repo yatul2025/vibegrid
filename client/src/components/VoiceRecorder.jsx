@@ -23,20 +23,45 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
     async function startRecording() {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream);
+
+        // Safely determine supported audio container / codec for browser compatibility (iOS Safari vs Chrome)
+        let mimeType = 'audio/webm';
+        if (typeof MediaRecorder.isTypeSupported === 'function') {
+          if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+            mimeType = 'audio/webm;codecs=opus';
+          } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+            mimeType = 'audio/webm';
+          } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+            mimeType = 'audio/mp4';
+          } else if (MediaRecorder.isTypeSupported('audio/aac')) {
+            mimeType = 'audio/aac';
+          } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+            mimeType = 'audio/ogg';
+          }
+        }
+
+        const options = mimeType ? { mimeType } : undefined;
+        let mediaRecorder;
+        try {
+          mediaRecorder = options ? new MediaRecorder(stream, options) : new MediaRecorder(stream);
+        } catch (e) {
+          mediaRecorder = new MediaRecorder(stream);
+        }
+
         mediaRecorderRef.current = mediaRecorder;
         audioChunksRef.current = [];
 
         mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
+          if (event.data && event.data.size > 0) {
             audioChunksRef.current.push(event.data);
           }
         };
 
         mediaRecorder.onstop = () => {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const finalMime = mediaRecorder.mimeType || mimeType || 'audio/webm';
+          const audioBlob = new Blob(audioChunksRef.current, { type: finalMime });
           if (onAudioRecorded && audioBlob.size > 0) {
-            onAudioRecorded(audioBlob, recordSeconds);
+            onAudioRecorded(audioBlob, recordSeconds, finalMime);
           }
           // Clean up microphone stream
           stream.getTracks().forEach((track) => track.stop());

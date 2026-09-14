@@ -20,7 +20,17 @@ const DEFAULT_ICE_SERVERS = {
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
-    { urls: 'stun:openrelay.metered.ca:80' }
+    { urls: 'stun:openrelay.metered.ca:80' },
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+        'turns:openrelay.metered.ca:443?transport=tcp'
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
   ]
 };
 
@@ -126,7 +136,7 @@ class WebRTCService {
         return { iceServers: res.data.iceServers };
       }
     } catch (err) {
-      console.warn('[WebRTC] Using default STUN servers:', err.message);
+      console.warn('[WebRTC] Using default STUN/TURN servers:', err.message);
     }
     return DEFAULT_ICE_SERVERS;
   }
@@ -138,7 +148,11 @@ class WebRTCService {
   createPeerConnection(targetUserId, callId, iceConfig = DEFAULT_ICE_SERVERS) {
     this.targetUserId = Number(targetUserId);
     this.callId = callId;
-    this.candidateQueue = [];
+    // CRITICAL: Do NOT wipe this.candidateQueue here! Early ICE candidates
+    // may have already arrived over serverless HTTP before the offer/answer.
+    if (!Array.isArray(this.candidateQueue)) {
+      this.candidateQueue = [];
+    }
 
     const pc = new RTCPeerConnection(iceConfig);
     this.peerConnection = pc;
@@ -149,10 +163,21 @@ class WebRTCService {
     }
 
     // Attach local media tracks to peer connection
+    let hasLocalVideo = false;
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => {
+        if (track.kind === 'video') hasLocalVideo = true;
         pc.addTrack(track, this.localStream);
       });
+    }
+
+    // If audio-only call, prepare video transceiver so screen share / video can be added without renegotiation
+    if (!hasLocalVideo) {
+      try {
+        pc.addTransceiver('video', { direction: 'sendrecv' });
+      } catch (e) {
+        console.debug('[WebRTC] Video transceiver note:', e.message);
+      }
     }
 
     // Handle incoming remote media tracks (supports both streams array and Unified Plan direct tracks)
@@ -199,13 +224,27 @@ class WebRTCService {
       if (this.onConnectionStateChange) {
         this.onConnectionStateChange(pc.connectionState);
       }
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      if (pc.connectionState === 'failed') {
+        console.warn('[WebRTC] Connection failed, attempting ICE restart...');
+        try {
+          if (typeof pc.restartIce === 'function') pc.restartIce();
+        } catch {}
+      } else if (pc.connectionState === 'closed') {
         this.endCall();
       }
     };
 
     pc.oniceconnectionstatechange = () => {
       console.log('[WebRTC] ICE state:', pc.iceConnectionState);
+      if (this.onConnectionStateChange) {
+        this.onConnectionStateChange(pc.iceConnectionState);
+      }
+      if (pc.iceConnectionState === 'failed') {
+        console.warn('[WebRTC] ICE failed, triggering ICE restart...');
+        try {
+          if (typeof pc.restartIce === 'function') pc.restartIce();
+        } catch {}
+      }
     };
 
     return pc;
@@ -222,7 +261,7 @@ class WebRTCService {
 
     const offer = await pc.createOffer({
       offerToReceiveAudio: true,
-      offerToReceiveVideo: callType === 'video'
+      offerToReceiveVideo: true // Always receive video so screen share or camera upgrade works seamlessly
     });
 
     await pc.setLocalDescription(offer);
@@ -253,7 +292,7 @@ class WebRTCService {
       console.error('[WebRTC] Invalid SDP offer payload:', sdp);
     }
 
-    // Drain queued ICE candidates
+    // Drain queued ICE candidates that arrived before the offer
     await this._drainCandidateQueue();
 
     const answer = await pc.createAnswer();
@@ -294,18 +333,22 @@ class WebRTCService {
         console.warn('[WebRTC] Error adding ICE candidate:', err);
       }
     } else {
-      this.candidateQueue.push(iceCand);
+      // Buffer candidate until remote description is set
+      this.candidateQueue.push(candidate);
     }
   }
 
   async _drainCandidateQueue() {
-    if (!this.peerConnection) return;
-    while (this.candidateQueue.length > 0) {
-      const candidate = this.candidateQueue.shift();
-      const iceCand = toIceCandidate(candidate);
+    if (!this.peerConnection || !this.peerConnection.remoteDescription) return;
+    const queue = [...this.candidateQueue];
+    this.candidateQueue = [];
+
+    for (const raw of queue) {
+      const iceCand = toIceCandidate(raw);
       if (!iceCand) continue;
       try {
         await this.peerConnection.addIceCandidate(iceCand);
+        console.log('🧊 [WebRTC] Queued ICE candidate added successfully');
       } catch (err) {
         console.warn('[WebRTC] Error draining ICE candidate:', err);
       }
@@ -350,17 +393,18 @@ class WebRTCService {
 
   async toggleScreenShare() {
     if (this.screenStream) {
-      // Stop screen sharing, restore camera
+      // Stop screen sharing, restore camera or blank video
       this.screenStream.getTracks().forEach((t) => t.stop());
       this.screenStream = null;
 
-      if (this.localStream && this.peerConnection) {
-        const videoTrack = this.localStream.getVideoTracks()[0];
-        const sender = this.peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
+      if (this.peerConnection) {
+        const videoTrack = this.localStream ? this.localStream.getVideoTracks()[0] : null;
+        const sender = this.peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video') ||
+          this.peerConnection.getSenders().find((s) => !s.track);
         if (sender && videoTrack) {
           sender.replaceTrack(videoTrack);
         }
-        if (this.onLocalStream) {
+        if (this.onLocalStream && this.localStream) {
           this.onLocalStream(this.localStream);
         }
       }
@@ -378,8 +422,12 @@ class WebRTCService {
 
         if (this.peerConnection) {
           let sender = this.peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
+          if (!sender) {
+            // Check for sender without track (from pre-negotiated transceiver)
+            sender = this.peerConnection.getSenders().find((s) => !s.track);
+          }
           if (sender) {
-            sender.replaceTrack(screenTrack);
+            await sender.replaceTrack(screenTrack);
           } else {
             this.peerConnection.addTrack(screenTrack, stream);
           }
@@ -403,27 +451,27 @@ class WebRTCService {
   endCall() {
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => {
-        track.stop();
+        try { track.stop(); } catch {}
       });
       this.localStream = null;
     }
 
     if (this.screenStream) {
       this.screenStream.getTracks().forEach((track) => {
-        track.stop();
+        try { track.stop(); } catch {}
       });
       this.screenStream = null;
     }
 
     if (this.remoteStream) {
       this.remoteStream.getTracks().forEach((track) => {
-        track.stop();
+        try { track.stop(); } catch {}
       });
       this.remoteStream = null;
     }
 
     if (this.peerConnection) {
-      this.peerConnection.close();
+      try { this.peerConnection.close(); } catch {}
       this.peerConnection = null;
     }
 
