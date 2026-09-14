@@ -75,7 +75,25 @@ const getTurnCredentials = async (req, res, next) => {
       { urls: 'stun:stun.cloudflare.com:3478' }
     ];
 
-    // If a TURN secret is configured in environment, generate ephemeral HMAC-SHA1 credentials
+    // 2. If Metered TURN credentials are configured via environment variables
+    const meteredDomain = process.env.METERED_DOMAIN;
+    const meteredApiKey = process.env.METERED_API_KEY;
+
+    if (meteredDomain && meteredApiKey) {
+      try {
+        const meteredRes = await fetch(`https://${meteredDomain}/api/v1/turn/credentials?apiKey=${meteredApiKey}`);
+        if (meteredRes.ok) {
+          const meteredIce = await meteredRes.json();
+          if (Array.isArray(meteredIce) && meteredIce.length > 0) {
+            iceServers.push(...meteredIce);
+          }
+        }
+      } catch (e) {
+        console.warn('[CallController] Could not fetch Metered TURN credentials:', e.message);
+      }
+    }
+
+    // 3. If a coturn TURN secret is configured in environment, generate ephemeral HMAC-SHA1 credentials
     const turnSecret = process.env.TURN_SECRET;
     const turnDomain = process.env.TURN_DOMAIN || 'turn.vibegrid.com';
 
