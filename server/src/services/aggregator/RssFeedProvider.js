@@ -82,6 +82,22 @@ const APPROVED_RSS_FEEDS = [
     author: 'BBC Sports Arena',
     avatar: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=200&q=80',
     maxItemsPerFetch: 4
+  },
+  {
+    name: 'Variety Entertainment',
+    url: 'https://variety.com/feed/',
+    category: 'entertainment',
+    author: 'Variety Culture & Cinema',
+    avatar: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=200&q=80',
+    maxItemsPerFetch: 3
+  },
+  {
+    name: 'The Verge',
+    url: 'https://www.theverge.com/rss/index.xml',
+    category: 'news',
+    author: 'The Verge Tech & Media',
+    avatar: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=200&q=80',
+    maxItemsPerFetch: 3
   }
 ];
 
@@ -89,15 +105,18 @@ class RssFeedProvider extends BaseFeedProvider {
   constructor(options = {}) {
     super('RSSProvider', { timeoutMs: 3500, maxItems: 30, ...options });
     this.feeds = options.feeds || APPROVED_RSS_FEEDS;
+    this.batchOffset = 0;
   }
 
-  parseRssXml(xmlText, feedConfig) {
+  parseRssXml(xmlText, feedConfig, offset = 0) {
     const items = [];
     const itemRegex = /<(?:item|entry)[\s\S]*?<\/(?:item|entry)>/gi;
     const itemMatches = xmlText.match(itemRegex) || [];
 
     const limit = feedConfig.maxItemsPerFetch || 3;
-    const candidates = itemMatches.slice(0, limit);
+    const start = (offset * limit) % Math.max(1, itemMatches.length);
+    let candidates = itemMatches.slice(start, start + limit);
+    if (candidates.length === 0) candidates = itemMatches.slice(0, limit);
 
     for (let i = 0; i < candidates.length; i++) {
       const itemBlock = candidates[i];
@@ -171,8 +190,12 @@ class RssFeedProvider extends BaseFeedProvider {
     return items;
   }
 
-  async fetchPosts() {
+  async fetchPosts({ refresh = false } = {}) {
     if (this.isCircuitOpen()) return [];
+
+    if (refresh) {
+      this.batchOffset = (this.batchOffset + 1) % 4;
+    }
 
     const allPosts = [];
 
@@ -186,7 +209,7 @@ class RssFeedProvider extends BaseFeedProvider {
           }
         });
         const xmlText = await res.text();
-        return this.parseRssXml(xmlText, feed);
+        return this.parseRssXml(xmlText, feed, this.batchOffset);
       } catch (err) {
         return [];
       }

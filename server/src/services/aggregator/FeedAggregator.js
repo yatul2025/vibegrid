@@ -83,17 +83,19 @@ class FeedAggregator {
       if (cached && Array.isArray(cached) && cached.length > 0) {
         return cached;
       }
+    } else {
+      await cacheManager.del(cacheKey);
     }
 
     const fetchedPosts = [];
 
-    // Run providers concurrently
+    // Run providers concurrently with refresh parameter
     const results = await Promise.allSettled(
       this.providers.map((p) => {
         if (p instanceof CuratedContentProvider) {
-          return p.fetchPosts(category);
+          return p.fetchPosts(category, { refresh });
         }
-        return p.fetchPosts();
+        return p.fetchPosts({ refresh });
       })
     );
 
@@ -245,6 +247,8 @@ class FeedAggregator {
 
     if (!isRefresh) {
       allPosts = await cacheManager.get(cacheKey);
+    } else {
+      await cacheManager.del(cacheKey);
     }
 
     if (!allPosts || !Array.isArray(allPosts) || allPosts.length === 0 || isRefresh) {
@@ -310,6 +314,8 @@ class FeedAggregator {
       if (cached && Array.isArray(cached) && cached.length > 0) {
         return cached;
       }
+    } else {
+      await cacheManager.del(cacheKey);
     }
 
     // 1. Fetch real VibeGrid user stories from PostgreSQL
@@ -367,10 +373,10 @@ class FeedAggregator {
       console.warn('[FeedAggregator] VibeGrid stories fetch error:', err.message);
     }
 
-    // 2. Fetch external discovery stories from providers
+    // 2. Fetch external discovery stories from providers with refresh rotation
     const externalStories = [];
     const storyResults = await Promise.allSettled(
-      this.providers.map((p) => p.fetchStories())
+      this.providers.map((p) => p.fetchStories({ refresh: isRefresh }))
     );
 
     for (const res of storyResults) {
