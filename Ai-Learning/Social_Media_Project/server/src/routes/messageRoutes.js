@@ -22,10 +22,28 @@ router.use(protect);
 // Specific routes MUST be declared before /:username parameter
 router.get('/conversations', messageController.getConversations);
 router.get('/unread-count', messageController.getUnreadMessagesCount);
+router.get('/starred', messageController.getStarredMessages);
+router.post('/forward', messageController.forwardMessage);
 
 // Specific message actions (declared before /:username parameter)
 router.put('/msg/:id/edit', messageController.editMessage);
 router.delete('/msg/:id', messageController.deleteMessage);
+router.post('/msg/:id/reaction', messageController.toggleReaction);
+router.post('/msg/:id/star', messageController.toggleStarMessage);
+router.get('/msg/:id/info', messageController.getMessageInfo);
+router.post('/conv/:id/pin', messageController.togglePinMessage);
+
+// Bulk message actions
+router.post('/bulk/delete', messageController.bulkDeleteMessages);
+router.post('/bulk/star', messageController.bulkStarMessages);
+router.post('/bulk/forward', messageController.bulkForwardMessages);
+
+// Phase 5: Conversation Controls & Reports
+router.put('/conv/:id/mute', messageController.toggleMuteConversation);
+router.put('/conv/:id/pin-conv', messageController.togglePinConversation);
+router.put('/conv/:id/archive', messageController.toggleArchiveConversation);
+router.delete('/conv/:id/clear', messageController.clearConversationMessages);
+router.post('/report', messageController.reportEntity);
 
 // Parameterized routes
 router.get('/:username', messageController.getMessages);

@@ -2,9 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../api/client';
 
-export default function AuthPage() {
-  const { user, login, verifyLoginOtp, resendLoginOtp, register, verifyRegisterOtp, resendRegisterOtp, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('login'); // 'login' | 'register'
+export default function AuthPage({ initialTab = 'login' }) {
+  const { user, login, verifyLoginOtp, resendLoginOtp, register, verifyRegisterOtp, resendRegisterOtp, logout, startDemoSession } = useAuth();
+  const [activeTab, setActiveTab] = useState(initialTab); // 'login' | 'register'
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // 2FA Login OTP states
   const [loginStep, setLoginStep] = useState('credentials'); // 'credentials' | 'otp'
@@ -231,7 +237,7 @@ export default function AuthPage() {
     setError(null);
     setLoading(true);
     try {
-      await login(username, 'Password123!', true);
+      await startDemoSession(username);
     } catch (err) {
       setError(err.message || 'Demo login failed.');
     } finally {
@@ -492,6 +498,19 @@ export default function AuthPage() {
             <span className="ig-hero-highlight">close friends</span>.
           </h1>
 
+          {/* Value Proposition Subtitle (Audit Item: Value prop visible above fold) */}
+          <p className="ig-auth-hero-subtext" style={{ fontSize: '15px', color: 'var(--text-secondary, #94a3b8)', margin: '0 0 16px', maxWidth: '420px', lineHeight: '1.4' }}>
+            Next-gen real-time social platform. Live feeds, 24-hour stories, encrypted messaging, and creator discovery.
+          </p>
+
+          {/* Risk Reversal & Guarantees Trust Strip (Audit Item: Risk reversal / guarantees) */}
+          <div className="ig-trust-strip" role="region" aria-label="Platform Guarantees">
+            <span className="ig-trust-pill"><span>✓</span> 100% Free Forever</span>
+            <span className="ig-trust-pill"><span>✓</span> No Credit Card</span>
+            <span className="ig-trust-pill"><span>🛡️</span> End-to-End Encrypted</span>
+            <span className="ig-trust-pill"><span>🔒</span> Zero Ad Tracking</span>
+          </div>
+
           {/* Layered Floating Phone Story Cards Mockup (Matches Screenshot) */}
           <div className="ig-hero-mockup-stage">
             {/* Left Angled Story Card */}
@@ -645,8 +664,8 @@ export default function AuthPage() {
                         border: '1px solid rgba(234, 179, 8, 0.5)',
                         color: '#fff',
                         borderRadius: '6px',
-                        padding: '3px 10px',
-                        fontSize: '11px',
+                        padding: '4px 10px',
+                        fontSize: '12px',
                         cursor: 'pointer',
                         fontWeight: '600'
                       }}
@@ -674,7 +693,10 @@ export default function AuthPage() {
 
                 <form onSubmit={handleVerifyOtpSubmit} className="ig-form">
                   <div className="ig-input-group">
+                    <label htmlFor="login-otp-code" className="sr-only">6-digit security code</label>
                     <input
+                      id="login-otp-code"
+                      aria-label="6-digit security code"
                       type="text"
                       inputMode="numeric"
                       autoComplete="one-time-code"
@@ -704,8 +726,16 @@ export default function AuthPage() {
                     disabled={otpLoading || otpCode.trim().length !== 6}
                     className="ig-btn-primary"
                     style={{ marginTop: '12px' }}
+                    aria-busy={otpLoading ? 'true' : 'false'}
                   >
-                    {otpLoading ? 'Verifying Security Code...' : 'Verify & Log In'}
+                    {otpLoading ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                        <span className="spinner-mini" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+                        <span>Verifying Security Code...</span>
+                      </span>
+                    ) : (
+                      'Verify & Log In'
+                    )}
                   </button>
                 </form>
 
@@ -747,12 +777,27 @@ export default function AuthPage() {
               /* 1A. Log In Form (Standard Credentials) */
               <div className="ig-auth-box">
                 <h2 className="ig-auth-title">Log into VibeGrid</h2>
+                <p className="ig-auth-subtext" style={{ fontSize: '13px', color: '#94a3b8', margin: '0 0 14px' }}>
+                  Connect with friends, share vibes, and discover live stories.
+                </p>
+
+                {/* Risk Reversal & Guarantees Trust Strip (Visible Above Fold) */}
+                <div className="ig-trust-strip" style={{ margin: '0 0 16px', gap: '6px' }} role="region" aria-label="Guarantees">
+                  <span className="ig-trust-pill"><span>✓</span> Free Forever</span>
+                  <span className="ig-trust-pill"><span>🛡️</span> Private & Encrypted</span>
+                  <span className="ig-trust-pill"><span>🔒</span> Zero Ad Tracking</span>
+                </div>
 
                 {error && <div className="ig-auth-error">⚠️ {error}</div>}
 
                 <form onSubmit={handleLoginSubmit} className="ig-form">
                   <div className="ig-input-group">
+                    <label htmlFor="login-identifier" className="sr-only">
+                      Mobile number, username or email
+                    </label>
                     <input
+                      id="login-identifier"
+                      aria-label="Mobile number, username or email"
                       type="text"
                       name="identifier"
                       placeholder="Mobile number, username or email"
@@ -761,12 +806,18 @@ export default function AuthPage() {
                       required
                       maxLength={255}
                       autoComplete="username"
+                      inputMode="text"
                       className="ig-input"
                     />
                   </div>
 
                   <div className="ig-input-group ig-password-group">
+                    <label htmlFor="login-password" className="sr-only">
+                      Password
+                    </label>
                     <input
+                      id="login-password"
+                      aria-label="Password"
                       type={showPassword ? 'text' : 'password'}
                       name="password"
                       placeholder="Password"
@@ -782,6 +833,7 @@ export default function AuthPage() {
                         type="button"
                         className="ig-peek-btn"
                         onClick={() => setShowPassword((p) => !p)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
                       >
                         {showPassword ? 'Hide' : 'Show'}
                       </button>
@@ -792,8 +844,16 @@ export default function AuthPage() {
                     type="submit"
                     disabled={loading || !loginData.identifier.trim() || !loginData.password}
                     className="ig-btn-primary"
+                    aria-busy={loading ? 'true' : 'false'}
                   >
-                    {loading ? 'Logging in...' : 'Log in'}
+                    {loading ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                        <span className="spinner-mini" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+                        <span>Logging in...</span>
+                      </span>
+                    ) : (
+                      'Log in'
+                    )}
                   </button>
                 </form>
 
@@ -898,8 +958,8 @@ export default function AuthPage() {
                       border: '1px solid rgba(234, 179, 8, 0.5)',
                       color: '#fff',
                       borderRadius: '6px',
-                      padding: '3px 10px',
-                      fontSize: '11px',
+                      padding: '4px 10px',
+                      fontSize: '12px',
                       cursor: 'pointer',
                       fontWeight: '600'
                     }}
@@ -927,7 +987,10 @@ export default function AuthPage() {
 
               <form onSubmit={handleVerifyRegisterOtpSubmit} className="ig-form">
                 <div className="ig-input-group">
+                  <label htmlFor="reg-otp-code" className="sr-only">6-digit activation code</label>
                   <input
+                    id="reg-otp-code"
+                    aria-label="6-digit activation code"
                     type="text"
                     inputMode="numeric"
                     autoComplete="one-time-code"
@@ -957,8 +1020,16 @@ export default function AuthPage() {
                   disabled={registerOtpLoading || registerOtpCode.trim().length !== 6}
                   className="ig-btn-primary"
                   style={{ marginTop: '12px' }}
+                  aria-busy={registerOtpLoading ? 'true' : 'false'}
                 >
-                  {registerOtpLoading ? 'Verifying & Creating Account...' : 'Confirm & Activate Account'}
+                  {registerOtpLoading ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                      <span className="spinner-mini" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+                      <span>Verifying & Creating Account...</span>
+                    </span>
+                  ) : (
+                    'Confirm & Activate Account'
+                  )}
                 </button>
               </form>
 
@@ -1000,15 +1071,27 @@ export default function AuthPage() {
             /* 2A. Create Account / Register Form */
             <div className="ig-auth-box">
               <h2 className="ig-auth-title">Create your account</h2>
-              <p className="ig-auth-subtext">
+              <p className="ig-auth-subtext" style={{ fontSize: '13px', color: '#94a3b8', margin: '0 0 14px' }}>
                 Sign up to see everyday moments, stories, and discovery feeds from your friends.
               </p>
+
+              {/* Risk Reversal & Guarantees Trust Strip (Visible Above Fold) */}
+              <div className="ig-trust-strip" style={{ margin: '0 0 16px', gap: '6px' }} role="region" aria-label="Guarantees">
+                <span className="ig-trust-pill"><span>✓</span> 100% Free Forever</span>
+                <span className="ig-trust-pill"><span>✓</span> No Credit Card</span>
+                <span className="ig-trust-pill"><span>🛡️</span> Private & Encrypted</span>
+              </div>
 
               {error && <div className="ig-auth-error">⚠️ {error}</div>}
 
               <form onSubmit={handleRegisterSubmit} className="ig-form">
                 <div className="ig-input-group">
+                  <label htmlFor="reg-email" className="sr-only">
+                    Email address
+                  </label>
                   <input
+                    id="reg-email"
+                    aria-label="Email address"
                     type="email"
                     name="email"
                     placeholder="Email address"
@@ -1022,7 +1105,12 @@ export default function AuthPage() {
                 </div>
 
                 <div className="ig-input-group">
+                  <label htmlFor="reg-full-name" className="sr-only">
+                    Full Name
+                  </label>
                   <input
+                    id="reg-full-name"
+                    aria-label="Full Name"
                     type="text"
                     name="fullName"
                     placeholder="Full Name"
@@ -1034,7 +1122,12 @@ export default function AuthPage() {
                 </div>
 
                 <div className="ig-input-group">
+                  <label htmlFor="reg-username" className="sr-only">
+                    Username
+                  </label>
                   <input
+                    id="reg-username"
+                    aria-label="Username"
                     type="text"
                     name="username"
                     placeholder="Username (e.g. maya_lin)"
@@ -1051,7 +1144,12 @@ export default function AuthPage() {
                 </div>
 
                 <div className="ig-input-group ig-password-group">
+                  <label htmlFor="reg-password" className="sr-only">
+                    Password
+                  </label>
                   <input
+                    id="reg-password"
+                    aria-label="Password (minimum 8 characters)"
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     placeholder="Password (minimum 8 characters)"
@@ -1067,6 +1165,7 @@ export default function AuthPage() {
                       type="button"
                       className="ig-peek-btn"
                       onClick={() => setShowPassword((p) => !p)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
                     >
                       {showPassword ? 'Hide' : 'Show'}
                     </button>
@@ -1102,7 +1201,12 @@ export default function AuthPage() {
                 )}
 
                 <div className="ig-input-group ig-password-group">
+                  <label htmlFor="reg-confirm-password" className="sr-only">
+                    Confirm Password
+                  </label>
                   <input
+                    id="reg-confirm-password"
+                    aria-label="Confirm Password"
                     type={showConfirmPassword ? 'text' : 'password'}
                     name="confirmPassword"
                     placeholder="Confirm Password"
@@ -1118,6 +1222,7 @@ export default function AuthPage() {
                       type="button"
                       className="ig-peek-btn"
                       onClick={() => setShowConfirmPassword((p) => !p)}
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
                     >
                       {showConfirmPassword ? 'Hide' : 'Show'}
                     </button>
@@ -1135,7 +1240,7 @@ export default function AuthPage() {
                     htmlFor="reg-dob" 
                     style={{ 
                       display: 'block', 
-                      fontSize: '11px', 
+                      fontSize: '12px', 
                       fontWeight: 600, 
                       color: 'var(--text-muted, #8e8e8e)', 
                       marginBottom: '4px', 
@@ -1146,6 +1251,7 @@ export default function AuthPage() {
                   </label>
                   <input
                     id="reg-dob"
+                    aria-label="Date of Birth (Must be 18+)"
                     type="date"
                     name="dateOfBirth"
                     max={maxDobDate}
@@ -1164,7 +1270,7 @@ export default function AuthPage() {
                     htmlFor="reg-gender" 
                     style={{ 
                       display: 'block', 
-                      fontSize: '11px', 
+                      fontSize: '12px', 
                       fontWeight: 600, 
                       color: 'var(--text-muted, #8e8e8e)', 
                       marginBottom: '4px', 
@@ -1175,6 +1281,7 @@ export default function AuthPage() {
                   </label>
                   <select
                     id="reg-gender"
+                    aria-label="Gender"
                     name="gender"
                     value={registerData.gender}
                     onChange={handleRegisterChange}
@@ -1231,8 +1338,16 @@ export default function AuthPage() {
                     !passwordMatch
                   }
                   className="ig-btn-primary"
+                  aria-busy={loading ? 'true' : 'false'}
                 >
-                  {loading ? 'Creating account...' : 'Sign Up'}
+                  {loading ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                      <span className="spinner-mini" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+                      <span>Creating Account...</span>
+                    </span>
+                  ) : (
+                    'Sign Up'
+                  )}
                 </button>
               </form>
 
@@ -1386,13 +1501,19 @@ export default function AuthPage() {
                   {recoveryState.step === 'request' && (
                     <form onSubmit={handleForgotSubmit} className="ig-form">
                       <div className="ig-input-group">
+                        <label htmlFor="recovery-email" className="sr-only">
+                          Your registered email address
+                        </label>
                         <input
+                          id="recovery-email"
+                          aria-label="Your registered email address"
                           type="email"
                           placeholder="Your registered email address"
                           value={recoveryState.email}
                           onChange={(e) => setRecoveryState((prev) => ({ ...prev, email: e.target.value, error: null }))}
                           required
                           maxLength={255}
+                          autoComplete="email"
                           className="ig-input"
                         />
                       </div>
@@ -1401,8 +1522,16 @@ export default function AuthPage() {
                         disabled={recoveryState.loading || !recoveryState.email.trim()}
                         className="ig-btn-primary"
                         style={{ marginTop: '8px' }}
+                        aria-busy={recoveryState.loading ? 'true' : 'false'}
                       >
-                        {recoveryState.loading ? 'Sending Code...' : 'Send Reset Code'}
+                        {recoveryState.loading ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                            <span className="spinner-mini" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+                            <span>Sending Code...</span>
+                          </span>
+                        ) : (
+                          'Send Reset Code'
+                        )}
                       </button>
                     </form>
                   )}
@@ -1415,8 +1544,14 @@ export default function AuthPage() {
                         </div>
                       )}
                       <div className="ig-input-group">
+                        <label htmlFor="recovery-otp" className="sr-only">
+                          6-digit OTP Code
+                        </label>
                         <input
+                          id="recovery-otp"
+                          aria-label="6-digit OTP Code"
                           type="text"
+                          inputMode="numeric"
                           placeholder="6-digit OTP Code"
                           value={recoveryState.otp}
                           onChange={(e) => setRecoveryState((prev) => ({ ...prev, otp: e.target.value, error: null }))}
@@ -1427,24 +1562,36 @@ export default function AuthPage() {
                         />
                       </div>
                       <div className="ig-input-group">
+                        <label htmlFor="recovery-new-password" className="sr-only">
+                          New Password
+                        </label>
                         <input
+                          id="recovery-new-password"
+                          aria-label="New Password (min 8 chars, letter + number)"
                           type="password"
                           placeholder="New Password (min 8 chars, letter + number)"
                           value={recoveryState.newPassword}
                           onChange={(e) => setRecoveryState((prev) => ({ ...prev, newPassword: e.target.value, error: null }))}
                           required
                           maxLength={128}
+                          autoComplete="new-password"
                           className="ig-input"
                         />
                       </div>
                       <div className="ig-input-group">
+                        <label htmlFor="recovery-confirm-password" className="sr-only">
+                          Confirm New Password
+                        </label>
                         <input
+                          id="recovery-confirm-password"
+                          aria-label="Confirm New Password"
                           type="password"
                           placeholder="Confirm New Password"
                           value={recoveryState.confirmPassword}
                           onChange={(e) => setRecoveryState((prev) => ({ ...prev, confirmPassword: e.target.value, error: null }))}
                           required
                           maxLength={128}
+                          autoComplete="new-password"
                           className="ig-input"
                         />
                       </div>
@@ -1453,8 +1600,16 @@ export default function AuthPage() {
                         disabled={recoveryState.loading || recoveryState.otp.length !== 6 || recoveryState.newPassword.length < 8}
                         className="ig-btn-primary"
                         style={{ marginTop: '8px' }}
+                        aria-busy={recoveryState.loading ? 'true' : 'false'}
                       >
-                        {recoveryState.loading ? 'Resetting Password...' : 'Confirm Reset Password'}
+                        {recoveryState.loading ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                            <span className="spinner-mini" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+                            <span>Resetting Password...</span>
+                          </span>
+                        ) : (
+                          'Confirm Reset Password'
+                        )}
                       </button>
                     </form>
                   )}

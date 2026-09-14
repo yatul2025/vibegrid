@@ -26,7 +26,7 @@ export default function StoryTray({
   onOpenViewer,
   onOpenCreateStory
 }) {
-  const { user } = useAuth();
+  const { user, guardDemoAction } = useAuth();
 
   // Find if current user has active stories in the creators list
   const myCreatorEntry = creators.find((c) => user && c.userId === user.id);
@@ -50,6 +50,7 @@ export default function StoryTray({
                   const myIndex = creators.findIndex((c) => c.userId === user.id);
                   onOpenViewer(myIndex !== -1 ? myIndex : 0);
                 } else {
+                  if (guardDemoAction('create_story')) return;
                   onOpenCreateStory();
                 }
               }}
@@ -67,6 +68,7 @@ export default function StoryTray({
                 className="story-add-badge"
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (guardDemoAction('create_story')) return;
                   onOpenCreateStory();
                 }}
                 title="Add new story"
@@ -120,6 +122,9 @@ export default function StoryTray({
                 />
                 {isCloseFriend && (
                   <span className="story-tray-star-badge" title="Close Friend">★</span>
+                )}
+                {creator.isExternal && !isCloseFriend && (
+                  <span className="story-tray-discovery-badge" title="Discovery Story">🌐</span>
                 )}
               </div>
               <span className="story-username-label" title={creator.username}>

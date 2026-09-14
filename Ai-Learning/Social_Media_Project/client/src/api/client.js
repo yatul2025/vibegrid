@@ -83,7 +83,10 @@ async function handleResponse(res, endpoint = '') {
   if (contentType && contentType.includes('application/json')) {
     data = await res.json();
   } else {
-    data = { message: await res.text() };
+    const rawText = await res.text();
+    const isHtml = /<[a-z][\s\S]*>/i.test(rawText);
+    const friendly = isHtml ? `Service error (${res.status})` : rawText;
+    data = { message: friendly, error: friendly };
   }
 
   if (!res.ok) {
@@ -97,6 +100,13 @@ async function handleResponse(res, endpoint = '') {
     if (res.status === 401 && !isAuthAttempt && !isPasswordError && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('vibegrid:session-expired', {
         detail: { endpoint, status: 401 }
+      }));
+    }
+
+    // Broadcast DEMO_RESTRICTED events to automatically open the Join VibeGrid modal
+    if (res.status === 403 && data?.code === 'DEMO_RESTRICTED' && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('vibegrid:demo-restricted', {
+        detail: { endpoint, status: 403, error: data?.error }
       }));
     }
 

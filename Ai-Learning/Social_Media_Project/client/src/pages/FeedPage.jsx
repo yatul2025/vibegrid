@@ -43,8 +43,19 @@ function formatTimeAgo(dateString) {
   return past.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+// Category definitions for live syndication
+const FEED_CATEGORIES = [
+  { id: 'all', label: 'All', icon: '🌟' },
+  { id: 'entertainment', label: 'Entertainment', icon: '🎬' },
+  { id: 'jokes', label: 'Jokes & Memes', icon: '😂' },
+  { id: 'education', label: 'Education & Science', icon: '🎓' },
+  { id: 'sports', label: 'Sports', icon: '⚽' },
+  { id: 'news', label: 'News', icon: '📰' },
+  { id: 'photography', label: 'Photography', icon: '📸' }
+];
+
 export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
-  const { user } = useAuth();
+  const { user, guardDemoAction } = useAuth();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -80,43 +91,115 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
   const [viewerCreatorIndex, setViewerCreatorIndex] = useState(0);
   const [viewedCreatorIds, setViewedCreatorIds] = useState(new Set());
 
-  // Fetch active stories
-  const fetchStories = async () => {
+  // Live Aggregated Feed States
+  const [newPostsAvailable, setNewPostsAvailable] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Fetch active stories (combining real VibeGrid stories + external discovery stories)
+  const fetchStories = async (forceRefresh = false) => {
     try {
       setStoriesLoading(true);
-      const res = await apiClient.get('/stories/active');
-      if (res.success && res.data?.creators) {
-        setStoryCreators(res.data.creators);
+      const url = forceRefresh ? '/feed/stories?refresh=true' : '/feed/stories';
+      let res = await apiClient.get(url);
+      if (!res.success && res.error) {
+        res = await apiClient.get('/stories/active');
+      }
+      const creators = res.data?.creators || res.creators;
+      if (res.success && creators) {
+        setStoryCreators(creators);
       }
     } catch (err) {
-      console.error('Failed to load active stories:', err);
+      try {
+        const fallback = await apiClient.get('/stories/active');
+        if (fallback.success && (fallback.data?.creators || fallback.creators)) {
+          setStoryCreators(fallback.data?.creators || fallback.creators);
+        }
+      } catch (fbErr) {
+        console.error('Failed to load active stories:', fbErr);
+      }
     } finally {
       setStoriesLoading(false);
     }
   };
 
-  // Fetch feed posts from API
-  const fetchFeed = async () => {
+  // Fetch live feed posts from API (with category & force refresh support)
+  const fetchFeed = async (cat = selectedCategory, forceRefresh = false) => {
     try {
-      setLoading(true);
+      if (forceRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError(null);
-      const res = await apiClient.get('/posts/feed');
-      if (res.success && res.data?.posts) {
-        setPosts(res.data.posts);
+      const params = new URLSearchParams();
+      if (cat && cat !== 'all') params.append('category', cat);
+      if (forceRefresh) params.append('refresh', 'true');
+
+      const queryString = params.toString() ? `?${params.toString()}` : '';
+      let res = await apiClient.get(`/feed${queryString}`);
+      if (!res.success && res.error) {
+        res = await apiClient.get('/posts/feed');
+      }
+      const fetchedPosts = res.data?.posts || res.posts;
+      if (res.success && fetchedPosts) {
+        setPosts(fetchedPosts);
+        setNewPostsAvailable([]);
       } else {
         setError(res.error || 'Failed to load feed.');
       }
     } catch (err) {
+      try {
+        const fallback = await apiClient.get('/posts/feed');
+        if (fallback.success && fallback.data?.posts) {
+          setPosts(fallback.data.posts);
+          return;
+        }
+      } catch (fbErr) {
+        // ignore
+      }
       setError(err.message || 'Error connecting to feed.');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchFeed();
-    fetchStories();
+    fetchFeed(selectedCategory, false);
+    fetchStories(false);
   }, []);
+
+  // Background Delta Polling for live fresh content (every 2.5 minutes)
+  useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      if (posts.length === 0) return;
+      const latestTimestamp = posts[0]?.created_at;
+      if (!latestTimestamp) return;
+
+      try {
+        const res = await apiClient.get(`/feed?since=${encodeURIComponent(latestTimestamp)}`);
+        const newItems = res.data?.posts || res.posts || [];
+        if (Array.isArray(newItems) && newItems.length > 0) {
+          setNewPostsAvailable((prev) => {
+            const existingIds = new Set([...posts.map((p) => p.id), ...prev.map((p) => p.id)]);
+            const filtered = newItems.filter((item) => !existingIds.has(item.id));
+            return filtered.length > 0 ? [...filtered, ...prev] : prev;
+          });
+        }
+      } catch (pollErr) {
+        // Silent catch for background delta polling
+      }
+    }, 150000);
+
+    return () => clearInterval(pollInterval);
+  }, [posts]);
+
+  const handleRefreshNewPosts = () => {
+    if (newPostsAvailable.length === 0) return;
+    setPosts((prev) => [...newPostsAvailable, ...prev]);
+    setNewPostsAvailable([]);
+  };
 
   const handleOpenViewer = (creatorIndex) => {
     setViewerCreatorIndex(creatorIndex);
@@ -142,6 +225,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
 
   // Optimistic Like / Unlike Toggle
   const handleToggleLike = async (postId) => {
+    if (guardDemoAction('like')) return;
     if (!user) {
       alert('Please sign in to like posts.');
       return;
@@ -167,6 +251,11 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     // If modal is currently open on this post, keep it synced too
     if (activeCommentPost && activeCommentPost.id === postId) {
       setActiveCommentPost((prev) => ({ ...prev, is_liked: newLiked, likes_count: newCount }));
+    }
+
+    // External discovery items don't exist in PostgreSQL
+    if (targetPost.is_external) {
+      return;
     }
 
     try {
@@ -195,6 +284,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
 
   // Optimistic Save / Unsave Toggle (Phase 12)
   const handleToggleSave = async (postId) => {
+    if (guardDemoAction('save')) return;
     if (!user) {
       alert('Please sign in to save posts.');
       return;
@@ -210,6 +300,11 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     setPosts((prev) =>
       prev.map((p) => (p.id === postId ? { ...p, is_saved: newSaved } : p))
     );
+
+    // External discovery items don't exist in PostgreSQL
+    if (targetPost.is_external) {
+      return;
+    }
 
     try {
       const res = await apiClient.post(`/posts/${postId}/save`);
@@ -231,6 +326,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
 
   // Double-tap on image to like
   const handleImageDoubleClick = (post) => {
+    if (guardDemoAction('like')) return;
     // Show heart pop animation
     setAnimatingPostId(post.id);
     setTimeout(() => setAnimatingPostId(null), 800);
@@ -253,6 +349,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
 
   // Handle post deletion (Author only) - Opens modern confirmation modal
   const handleDeletePost = (postId) => {
+    if (guardDemoAction('create_post')) return;
     setPostToDelete(postId);
   };
 
@@ -312,39 +409,18 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     }
   };
 
-  // 1-Tap Quick Emoji Comment
-  const handleQuickEmojiComment = async (postId, emoji) => {
-    if (!user) {
-      alert('Please sign in to comment.');
-      return;
-    }
-
-    // Optimistically update comment count
-    setPosts((prev) =>
-      prev.map((p) => (p.id === postId ? { ...p, comments_count: (p.comments_count || 0) + 1 } : p))
-    );
-    setReactionToast({ postId, emoji });
-    setTimeout(() => {
-      setReactionToast((current) => (current?.postId === postId ? null : current));
-    }, 2000);
-
-    try {
-      const res = await apiClient.post(`/posts/${postId}/comments`, { content: emoji });
-      if (!res.success) {
-        throw new Error(res.error || 'Failed to post emoji');
-      }
-    } catch (err) {
-      console.error('Quick emoji comment failed:', err);
-      // Rollback
-      setPosts((prev) =>
-        prev.map((p) => (p.id === postId ? { ...p, comments_count: Math.max(0, (p.comments_count || 1) - 1) } : p))
-      );
-    }
+  // Quick Emoji Insertion into comment input
+  const handleEmojiInsert = (postId, emoji) => {
+    setInlineComments((prev) => ({
+      ...prev,
+      [postId]: ((prev[postId] || '') + emoji).slice(0, 500)
+    }));
   };
 
   // Inline Quick Comment Submit
   const handleInlineCommentSubmit = async (postId, e) => {
     e.preventDefault();
+    if (guardDemoAction('comment')) return;
     if (!user) {
       alert('Please sign in to comment.');
       return;
@@ -359,7 +435,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     );
 
     try {
-      const res = await apiClient.post(`/posts/${postId}/comments`, { content: text });
+      const res = await apiClient.post(`/posts/${encodeURIComponent(postId)}/comments`, { content: text });
       if (res.success) {
         setInlineComments((prev) => ({ ...prev, [postId]: '' }));
       } else {
@@ -411,9 +487,22 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     });
   };
 
-  const displayedPosts = filterCloseFriends
+  const filteredPosts = filterCloseFriends
     ? posts.filter((p) => closeFriendIds.has(p.user_id) || (user && p.user_id === user.id))
+    : selectedCategory !== 'all'
+    ? posts.filter((p) => {
+        if (!p.category) return false;
+        const cleanCat = selectedCategory.toLowerCase();
+        if (cleanCat === 'jokes' || cleanCat === 'humor') return p.category === 'jokes';
+        if (cleanCat === 'education') return p.category === 'education';
+        return p.category.toLowerCase() === cleanCat;
+      })
     : posts;
+
+  // Always ensure newest items are on top
+  const displayedPosts = [...filteredPosts].sort(
+    (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+  );
 
   return (
     <div className="feed-page-container">
@@ -469,12 +558,16 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
           <div className="feed-header-controls">
             <button
               type="button"
-              className="feed-control-btn"
-              onClick={fetchFeed}
+              className={`feed-control-btn ${isRefreshing ? 'refreshing' : ''}`}
+              onClick={() => {
+                fetchFeed(selectedCategory, true);
+                fetchStories(true);
+              }}
               title="Refresh feed"
+              disabled={isRefreshing}
             >
-              <span>🔄</span>
-              <span>Refresh</span>
+              <span className={`refresh-icon ${isRefreshing ? 'spinning' : ''}`}>🔄</span>
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
             </button>
             {user && (
               <button
@@ -490,25 +583,37 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
           </div>
         </div>
 
-        {/* Full-width Segmented Filter Tabs */}
-        <div className="feed-tabs-row">
+        {/* Multi-Category Filter Bar (Entertainment, Jokes, Education, Sports, News, All, Close Friends) */}
+        <div className="feed-category-chips-bar" role="tablist" aria-label="Feed Categories">
+          {FEED_CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              className={`category-chip ${selectedCategory === cat.id && !filterCloseFriends ? 'active' : ''}`}
+              onClick={() => {
+                setFilterCloseFriends(false);
+                setSelectedCategory(cat.id);
+                fetchFeed(cat.id, false);
+              }}
+              role="tab"
+              aria-selected={selectedCategory === cat.id && !filterCloseFriends}
+            >
+              <span>{cat.icon}</span>
+              <span>{cat.label}</span>
+            </button>
+          ))}
           <button
             type="button"
-            className={`feed-tab-pill ${!filterCloseFriends ? 'active' : ''}`}
-            onClick={() => setFilterCloseFriends(false)}
-          >
-            <span>All Posts</span>
-            <span className="feed-tab-count">{posts.length}</span>
-          </button>
-          <button
-            type="button"
-            className={`feed-tab-pill cf-tab-pill ${filterCloseFriends ? 'active' : ''}`}
+            className={`category-chip cf-chip ${filterCloseFriends ? 'active' : ''}`}
             onClick={() => setFilterCloseFriends(true)}
             title="Filter by Close Friends"
+            role="tab"
+            aria-selected={filterCloseFriends}
           >
-            <span>★ Close Friends</span>
+            <span>★</span>
+            <span>Close Friends</span>
             {closeFriendIds.size > 0 && (
-              <span className="feed-tab-count cf-count">{closeFriendIds.size}</span>
+              <span className="category-chip-count">{closeFriendIds.size}</span>
             )}
           </button>
         </div>
@@ -521,6 +626,18 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
             Try Again
           </button>
         </div>
+      )}
+
+      {/* Floating Fresh Posts Notification Banner */}
+      {newPostsAvailable.length > 0 && (
+        <button
+          type="button"
+          className="floating-new-posts-pill"
+          onClick={handleRefreshNewPosts}
+          title="Click to view new posts"
+        >
+          ✨ {newPostsAvailable.length} new {newPostsAvailable.length === 1 ? 'post' : 'posts'} available — Tap to view
+        </button>
       )}
 
       {/* Loading Skeleton Cards */}
@@ -611,22 +728,41 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                       <div className="post-author-name-row">
                         <span
                           className="post-author-username"
-                          onClick={() => onNavigateToProfile && onNavigateToProfile(post.username)}
+                          onClick={() => {
+                            if (post.is_external && post.source_url) {
+                              window.open(post.source_url, '_blank', 'noopener,noreferrer');
+                            } else if (onNavigateToProfile) {
+                              onNavigateToProfile(post.username);
+                            }
+                          }}
                           style={{ cursor: 'pointer' }}
                         >
                           @{post.username}
                         </span>
-                        <button
-                          type="button"
-                          className={`post-close-friend-btn ${isCloseFriend ? 'active' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleCloseFriend(post.user_id, post.username);
-                          }}
-                          title={isCloseFriend ? 'Close Friend (Click to remove)' : 'Add to Close Friends'}
-                        >
-                          ★
-                        </button>
+                        {post.is_external ? (
+                          <a
+                            href={post.source_url || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="external-source-pill"
+                            title={`Via ${post.source || 'External Discovery'}`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            🌐 Via {post.source || 'Discovery'}
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            className={`post-close-friend-btn ${isCloseFriend ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleCloseFriend(post.user_id, post.username);
+                            }}
+                            title={isCloseFriend ? 'Close Friend (Click to remove)' : 'Add to Close Friends'}
+                          >
+                            ★
+                          </button>
+                        )}
                       </div>
                       <span className="post-timestamp">{formatTimeAgo(post.created_at)}</span>
                     </div>
@@ -712,7 +848,10 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                   <button
                     type="button"
                     className="post-action-btn"
-                    onClick={() => setActiveCommentPost(post)}
+                    onClick={() => {
+                      if (guardDemoAction('comment')) return;
+                      setActiveCommentPost(post);
+                    }}
                     title="View comments thread"
                   >
                     💬
@@ -752,24 +891,19 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                 </div>
               )}
 
-                {/* 1-Tap Quick Emoji Reactions */}
+                {/* Quick Emoji Insertion Strip */}
                 <div className="feed-quick-emoji-row">
                   {['❤️', '🔥', '👏', '😍', '😂', '🥳'].map((em) => (
                     <button
                       key={em}
                       type="button"
                       className="feed-quick-emoji-btn"
-                      onClick={() => handleQuickEmojiComment(post.id, em)}
-                      title={`Quick comment ${em}`}
+                      onClick={() => handleEmojiInsert(post.id, em)}
+                      title={`Add ${em} to comment`}
                     >
                       {em}
                     </button>
                   ))}
-                  {reactionToast && reactionToast.postId === post.id && (
-                    <span className="feed-emoji-toast-badge">
-                      {reactionToast.emoji} Added!
-                    </span>
-                  )}
                 </div>
 
                 {/* View Comments Link (Quick Trigger) */}
@@ -791,7 +925,12 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     className="feed-inline-comment-form"
                     onSubmit={(e) => handleInlineCommentSubmit(post.id, e)}
                   >
+                    <label htmlFor={`feed-comment-${post.id}`} className="sr-only">
+                      Add a comment
+                    </label>
                     <input
+                      id={`feed-comment-${post.id}`}
+                      aria-label="Add a comment"
                       type="text"
                       className="feed-inline-comment-input"
                       placeholder="Add a comment..."
@@ -805,6 +944,8 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                         type="submit"
                         className="feed-inline-comment-btn"
                         disabled={submittingCommentPostId === post.id}
+                        aria-busy={submittingCommentPostId === post.id ? 'true' : 'false'}
+                        aria-label="Post comment"
                       >
                         {submittingCommentPostId === post.id ? '...' : 'Post'}
                       </button>

@@ -47,7 +47,7 @@ export default function StoryViewerModal({
   onStoryDeleted,
   onStoryViewed
 }) {
-  const { user } = useAuth();
+  const { user, guardDemoAction } = useAuth();
   const [creatorIndex, setCreatorIndex] = useState(initialCreatorIndex);
   const [storyIndex, setStoryIndex] = useState(0);
   const [animKey, setAnimKey] = useState(0);
@@ -206,6 +206,7 @@ export default function StoryViewerModal({
   // Toggle Story Heart Like
   const handleToggleStoryLike = async (e) => {
     e?.stopPropagation();
+    if (guardDemoAction('like')) return;
     if (!user) {
       showToast('Please sign in to like stories');
       return;
@@ -226,8 +227,8 @@ export default function StoryViewerModal({
     if (!isLiked) {
       triggerParticles('❤️');
       showToast(`Liked @${currentCreator.username}'s story ❤️`);
-      // Send DM notification if user is not liking own story
-      if (currentCreator.username !== user.username) {
+      // Send DM notification if user is not liking own story and not external discovery story
+      if (currentCreator.username !== user.username && !currentCreator.isExternal) {
         try {
           await apiClient.post(`/messages/${currentCreator.username}`, {
             content: `❤️ Liked your story`
@@ -241,6 +242,7 @@ export default function StoryViewerModal({
   const handleSendReply = async (e) => {
     e?.preventDefault();
     e?.stopPropagation();
+    if (guardDemoAction('message')) return;
 
     if (!replyText.trim() || sendingReply) return;
     if (!user) {
@@ -248,6 +250,12 @@ export default function StoryViewerModal({
       return;
     }
     if (!currentCreator) return;
+
+    if (currentCreator.isExternal) {
+      showToast('Direct replies are unavailable for discovery stories');
+      setReplyText('');
+      return;
+    }
 
     const content = replyText.trim();
     try {
@@ -270,6 +278,7 @@ export default function StoryViewerModal({
   // Send Quick Emoji Reaction
   const handleReaction = async (emoji, e) => {
     e?.stopPropagation();
+    if (guardDemoAction('like')) return;
     if (!user) {
       showToast('Please sign in to react');
       return;
@@ -290,6 +299,7 @@ export default function StoryViewerModal({
 
   // Open story delete confirmation modal
   const handleDeleteClick = () => {
+    if (guardDemoAction('create_story')) return;
     setIsPaused(true);
     setShowDeleteModal(true);
   };
@@ -433,7 +443,12 @@ export default function StoryViewerModal({
             <div className="story-header-names">
               <div className="story-username-line">
                 <span className="story-header-username">{currentCreator.username}</span>
-                {!isMyStory && (
+                {currentCreator.isExternal && (
+                  <span className="story-source-pill" title={`Curated via ${currentCreator.source || 'Discovery'}`}>
+                    🌐 Via {currentCreator.source || 'Discovery'}
+                  </span>
+                )}
+                {!isMyStory && !currentCreator.isExternal && (
                   <button
                     type="button"
                     className={`story-cf-pill-btn ${closeFriendIds.has(currentCreator.userId) ? 'active' : ''}`}

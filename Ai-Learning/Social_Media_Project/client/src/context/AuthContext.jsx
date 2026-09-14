@@ -29,26 +29,90 @@ export const AuthProvider = ({ children }) => {
 
   // Check if user has an active session on initial page load (via HTTP-Only cookie)
   const checkAuth = async () => {
+    let timeoutId;
     try {
-      // Only set loading true if we don't already have a cached user
       if (!user) setLoading(true);
-      const res = await apiClient.get('/auth/me');
-      if (res.success && res.data?.user) {
-        setUser(res.data.user);
-        try {
-          localStorage.setItem('vibegrid_user', JSON.stringify(res.data.user));
-        } catch {}
-      } else {
-        setUser(null);
-        localStorage.removeItem('vibegrid_user');
+
+      const controller = new AbortController();
+      timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const res = await fetch('/api/auth/me', {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && data?.data?.user) {
+          setUser(data.data.user);
+          try {
+            localStorage.setItem('vibegrid_user', JSON.stringify(data.data.user));
+          } catch {}
+          return;
+        }
       }
+      setUser(null);
+      localStorage.removeItem('vibegrid_user');
     } catch (err) {
-      // Not logged in or expired cookie
+      // Not logged in, timeout, or expired cookie
       setUser(null);
       localStorage.removeItem('vibegrid_user');
     } finally {
+      if (timeoutId) clearTimeout(timeoutId);
       setLoading(false);
     }
+  };
+
+  const isDemoMode = Boolean(user?.is_demo_session || user?.isDemoSession || user?.sessionType === 'demo');
+
+  // Global Join VibeGrid Auth Prompt Modal State
+  const [authModalState, setAuthModalState] = useState({
+    isOpen: false,
+    title: 'Join VibeGrid',
+    subtitle: 'Create an account to continue.',
+    action: null
+  });
+
+  const openAuthModal = (actionName = 'continue', customSubtitle = null) => {
+    const subtitles = {
+      like: 'Create an account to like posts and comments.',
+      comment: 'Create an account to share your thoughts and join the conversation.',
+      follow: 'Create an account to follow creators and build your feed.',
+      message: 'Create an account to send direct messages.',
+      voice: 'Create an account to send voice notes.',
+      call: 'Create an account to start voice and video calls.',
+      create_post: 'Create an account to share your vibes with the community.',
+      create_story: 'Create an account to post 24-hour stories.',
+      save: 'Create an account to save and bookmark posts.',
+      edit_profile: 'Create an account to customize your profile.',
+      settings: 'Create an account to manage personal account settings.',
+      pin: 'Create an account to pin messages.',
+      star: 'Create an account to star messages.',
+      report: 'Create an account to submit reports.',
+      block: 'Create an account to block profiles.',
+      share: 'Create an account to share and repost content.'
+    };
+
+    setAuthModalState({
+      isOpen: true,
+      title: 'Join VibeGrid',
+      subtitle: customSubtitle || subtitles[actionName] || 'Create an account to continue.',
+      action: actionName
+    });
+  };
+
+  const closeAuthModal = () => {
+    setAuthModalState((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const guardDemoAction = (actionName, customSubtitle = null) => {
+    if (isDemoMode) {
+      openAuthModal(actionName, customSubtitle);
+      return true; // Intercepted
+    }
+    return false; // Permitted
   };
 
   useEffect(() => {
@@ -64,11 +128,40 @@ export const AuthProvider = ({ children }) => {
       } catch {}
     };
 
+    // Listen for 403 DEMO_RESTRICTED broadcasts from API client
+    const handleDemoRestricted = (e) => {
+      const action = e.detail?.action || 'continue';
+      openAuthModal(action);
+    };
+
     window.addEventListener('vibegrid:session-expired', handleSessionExpired);
+    window.addEventListener('vibegrid:demo-restricted', handleDemoRestricted);
     return () => {
       window.removeEventListener('vibegrid:session-expired', handleSessionExpired);
+      window.removeEventListener('vibegrid:demo-restricted', handleDemoRestricted);
     };
   }, []);
+
+  // Dedicated Demo Mode Session Starter
+  const startDemoSession = async (persona = 'sophia_wander') => {
+    setError(null);
+    try {
+      const res = await apiClient.post('/auth/demo-session', { persona });
+      if (res.success && res.data?.user) {
+        setUser(res.data.user);
+        try {
+          localStorage.setItem('vibegrid_user', JSON.stringify(res.data.user));
+          sessionStorage.setItem('vibegrid_active_tab', 'feed');
+          sessionStorage.removeItem('vibegrid_viewed_username');
+        } catch {}
+        return { success: true, user: res.data.user };
+      }
+      throw new Error(res.error || 'Failed to start demo session.');
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  };
 
   // Login handler
   const login = async (identifier, password, isDemoAccess = false) => {
@@ -221,6 +314,12 @@ export const AuthProvider = ({ children }) => {
     loading,
     error,
     isAuthenticated: !!user,
+    isDemoMode,
+    startDemoSession,
+    authModalState,
+    openAuthModal,
+    closeAuthModal,
+    guardDemoAction,
     login,
     verifyLoginOtp,
     resendLoginOtp,

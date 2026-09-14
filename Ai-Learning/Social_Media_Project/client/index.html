@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="VibeGrid is a modern, real-time social platform featuring live curated feeds, 24-hour stories, end-to-end encrypted messaging, and creator discovery." />
+    <meta name="theme-color" content="#1a1a2e" />
+    <meta property="og:title" content="VibeGrid — Modern Social Platform" />
+    <meta property="og:description" content="Connect, share moments, and explore live content on VibeGrid." />
+    <meta property="og:type" content="website" />
     <title>VibeGrid — Modern Social Platform</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -10,6 +15,20 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      window.addEventListener('error', function (e) {
+        var root = document.getElementById('root');
+        if (root && !root.hasChildNodes()) {
+          root.innerHTML = '<div style="color:#ef4444;background:#1e1e2e;padding:24px;margin:20px;border-radius:12px;font-family:sans-serif;border:1px solid #ef4444;"><h3>Startup Error</h3><pre style="white-space:pre-wrap;color:#f87171;">' + (e.error ? (e.error.stack || e.error.message) : e.message) + '</pre></div>';
+        }
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var root = document.getElementById('root');
+        if (root && !root.hasChildNodes()) {
+          root.innerHTML = '<div style="color:#ef4444;background:#1e1e2e;padding:24px;margin:20px;border-radius:12px;font-family:sans-serif;border:1px solid #ef4444;"><h3>Unhandled Promise Error</h3><pre style="white-space:pre-wrap;color:#f87171;">' + (e.reason ? (e.reason.stack || e.reason.message) : e.reason) + '</pre></div>';
+        }
+      });
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

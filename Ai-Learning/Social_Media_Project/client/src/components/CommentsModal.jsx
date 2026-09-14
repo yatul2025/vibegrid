@@ -39,7 +39,7 @@ export default function CommentsModal({
   onNavigateToProfile,
   onHashtagClick
 }) {
-  const { user } = useAuth();
+  const { user, guardDemoAction } = useAuth();
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
@@ -55,7 +55,7 @@ export default function CommentsModal({
     try {
       setLoading(true);
       setError(null);
-      const res = await apiClient.get(`/posts/${post.id}/comments`);
+      const res = await apiClient.get(`/posts/${encodeURIComponent(post.id)}/comments`);
       if (res.success && res.data?.comments) {
         setComments(res.data.comments);
       }
@@ -80,6 +80,7 @@ export default function CommentsModal({
   // Submit new comment
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (guardDemoAction('comment')) return;
     if (!newComment.trim() || submitting) return;
 
     if (newComment.trim().length > 500) {
@@ -90,7 +91,7 @@ export default function CommentsModal({
     try {
       setSubmitting(true);
       setError(null);
-      const res = await apiClient.post(`/posts/${post.id}/comments`, {
+      const res = await apiClient.post(`/posts/${encodeURIComponent(post.id)}/comments`, {
         comment_text: newComment.trim().slice(0, 500)
       });
 
@@ -111,6 +112,7 @@ export default function CommentsModal({
 
   // Delete a comment - Opens modern confirm modal
   const handleDeleteComment = (commentId) => {
+    if (guardDemoAction('comment')) return;
     setCommentToDelete(commentId);
   };
 
@@ -268,30 +270,51 @@ export default function CommentsModal({
               <div ref={commentsEndRef} />
             </div>
 
-            {/* Bottom Add Comment Bar */}
+            {/* Bottom Add Comment Bar with Quick Emoji strip */}
             {user ? (
-              <form onSubmit={handleSubmit} className="comments-input-bar">
-                <input
-                  type="text"
-                  placeholder="Add a comment..."
-                  maxLength={500}
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value.slice(0, 500))}
-                  disabled={submitting}
-                />
-                <div className="input-bar-actions">
-                  <span className={`char-counter-mini ${500 - newComment.length < 50 ? 'warning' : ''}`}>
-                    {500 - newComment.length}
-                  </span>
-                  <button
-                    type="submit"
-                    className="comment-post-btn"
-                    disabled={submitting || !newComment.trim()}
-                  >
-                    Post
-                  </button>
+              <div className="comments-composer-container">
+                <div className="comments-quick-emoji-row">
+                  {['❤️', '🔥', '👏', '😍', '😂', '🥳', '🙌', '✨'].map((em) => (
+                    <button
+                      key={em}
+                      type="button"
+                      className="comments-quick-emoji-btn"
+                      onClick={() => setNewComment((prev) => (prev + em).slice(0, 500))}
+                      title={`Add ${em}`}
+                    >
+                      {em}
+                    </button>
+                  ))}
                 </div>
-              </form>
+                <form onSubmit={handleSubmit} className="comments-input-bar">
+                  <label htmlFor="comments-modal-input" className="sr-only">
+                    Add a comment
+                  </label>
+                  <input
+                    id="comments-modal-input"
+                    aria-label="Add a comment"
+                    type="text"
+                    placeholder="Add a comment..."
+                    maxLength={500}
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value.slice(0, 500))}
+                    disabled={submitting}
+                  />
+                  <div className="input-bar-actions">
+                    <span className={`char-counter-mini ${500 - newComment.length < 50 ? 'warning' : ''}`}>
+                      {500 - newComment.length}
+                    </span>
+                    <button
+                      type="submit"
+                      className="comment-post-btn"
+                      disabled={submitting || !newComment.trim()}
+                      aria-busy={submitting ? 'true' : 'false'}
+                    >
+                      {submitting ? 'Posting...' : 'Post'}
+                    </button>
+                  </div>
+                </form>
+              </div>
             ) : (
               <div className="comments-signin-prompt">
                 Please sign in to leave a comment.

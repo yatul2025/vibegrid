@@ -202,6 +202,54 @@ function initSocket(httpServer) {
       }
     });
 
+    // Reaction relay
+    socket.on('message:reaction', ({ conversationId, targetUserId, messageId, reactions, action }) => {
+      const payload = { messageId, conversationId, reactions, action, userId };
+      if (conversationId) {
+        socket.to(`conv:${conversationId}`).emit('message:reaction', payload);
+      }
+      if (targetUserId) {
+        socket.to(`user:${targetUserId}`).emit('message:reaction', payload);
+      }
+    });
+
+    // Pin message relay
+    socket.on('message:pin', ({ conversationId, pinnedMessageId, pinnedMessage }) => {
+      if (conversationId) {
+        socket.to(`conv:${conversationId}`).emit('message:pin', {
+          conversationId,
+          pinnedMessageId,
+          pinnedMessage
+        });
+      }
+    });
+
+    // Delivery receipt broadcast
+    socket.on('message:delivered', async ({ messageId, senderId, conversationId }) => {
+      try {
+        if (messageId) {
+          await query(
+            'UPDATE messages SET delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP) WHERE id = $1',
+            [messageId]
+          );
+        }
+        const payload = {
+          messageId: Number(messageId),
+          conversationId,
+          recipientId: userId,
+          deliveredAt: new Date().toISOString()
+        };
+        if (senderId) {
+          socket.to(`user:${senderId}`).emit('message:delivery_receipt', payload);
+        }
+        if (conversationId) {
+          socket.to(`conv:${conversationId}`).emit('message:delivery_receipt', payload);
+        }
+      } catch (err) {
+        console.error('[Socket] Error updating delivered_at:', err.message);
+      }
+    });
+
     // ========================================================================
     // WebRTC 1-to-1 Audio & Video Call Signaling
     // ========================================================================
@@ -447,12 +495,18 @@ function initSocket(httpServer) {
     // ========================================================================
     // Disconnect Handler
     // ========================================================================
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
       const remainingCount = Math.max(0, (onlineUsers.get(userId) || 1) - 1);
       if (remainingCount === 0) {
         onlineUsers.delete(userId);
+        const nowIso = new Date().toISOString();
+        try {
+          await query('UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1', [userId]);
+        } catch (dbErr) {
+          console.error('[Socket] Error updating last_seen_at:', dbErr.message);
+        }
         if (user.show_online_status !== false) {
-          socket.broadcast.emit('presence:update', { userId, status: 'offline' });
+          socket.broadcast.emit('presence:update', { userId, status: 'offline', lastSeen: nowIso });
         }
       } else {
         onlineUsers.set(userId, remainingCount);

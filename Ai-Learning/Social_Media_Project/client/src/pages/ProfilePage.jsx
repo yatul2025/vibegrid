@@ -30,7 +30,7 @@ export default function ProfilePage({
   onOpenDirectMessage,
   onOpenSettings
 }) {
-  const { user: currentUser, updateUser, logout } = useAuth();
+  const { user: currentUser, updateUser, logout, guardDemoAction } = useAuth();
 
   const isDemoUser = Boolean(
     currentUser?.is_demo_session ||
@@ -274,6 +274,7 @@ export default function ProfilePage({
 
   // Handle post deletion from profile - Opens modern confirmation modal
   const handleDeletePost = (postId) => {
+    if (guardDemoAction('create_post')) return;
     setConfirmAction({
       title: 'Delete Post?',
       description: 'Are you sure you want to permanently delete this post? This action cannot be undone.',
@@ -299,6 +300,7 @@ export default function ProfilePage({
 
   // Handle like toggle inside profile post modal
   const handleToggleLike = async (postId) => {
+    if (guardDemoAction('like')) return;
     if (!currentUser) {
       alert('Please sign in to like posts.');
       return;
@@ -328,6 +330,7 @@ export default function ProfilePage({
 
   // Handle bookmark / save toggle inside profile (Phase 12)
   const handleToggleSave = async (postId) => {
+    if (guardDemoAction('save')) return;
     if (!currentUser) {
       alert('Please sign in to save posts.');
       return;
@@ -388,6 +391,7 @@ export default function ProfilePage({
 
   // Handle optimistic follow / unfollow toggle
   const handleToggleFollow = async () => {
+    if (guardDemoAction('follow')) return;
     if (!currentUser) {
       alert('Please sign in to follow creators.');
       return;
@@ -422,6 +426,7 @@ export default function ProfilePage({
   // Handle Profile Update (Username, Full Name, Bio, Website, Location, DOB)
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    if (guardDemoAction('edit_profile')) return;
     if (isDemoUser) {
       setProfileMsg({ type: 'error', text: '🔒 Profile details cannot be modified on official demo accounts.' });
       return;
@@ -526,6 +531,7 @@ export default function ProfilePage({
 
   // Handle Avatar Removal (Revert to default) - Opens modern confirmation modal
   const handleRemoveAvatar = () => {
+    if (guardDemoAction('edit_profile')) return;
     if (isDemoUser) {
       setAvatarError('🔒 Profile photo cannot be removed on official demo accounts.');
       return;
@@ -781,6 +787,7 @@ export default function ProfilePage({
 
   // Handle Avatar Selection & Upload
   const handleAvatarSelect = async (e) => {
+    if (guardDemoAction('edit_profile')) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -1273,16 +1280,16 @@ export default function ProfilePage({
                     type="button"
                     className="btn-profile-primary"
                     onClick={() => {
+                      if (guardDemoAction('edit_profile')) return;
                       if (isDemoUser) {
                         setAvatarError('🔒 Profile editing is locked on official demo accounts.');
                         return;
                       }
                       setIsEditing(!isEditing);
                     }}
-                    disabled={isDemoUser}
-                    title={isDemoUser ? 'Official demo accounts are read-only' : undefined}
+                    title="Edit profile details"
                   >
-                    {isDemoUser ? '🔒 Profile Locked' : (isEditing ? 'Cancel' : '✏️ Edit Profile')}
+                    {isEditing ? 'Cancel' : '✏️ Edit Profile'}
                   </button>
                   <button
                     type="button"

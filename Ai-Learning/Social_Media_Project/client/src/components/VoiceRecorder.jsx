@@ -11,6 +11,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
 export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
   const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
 
   const mediaRecorderRef = useRef(null);
@@ -69,6 +70,7 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
 
         mediaRecorder.start(200);
         setIsRecording(true);
+        setIsPaused(false);
 
         timerRef.current = setInterval(() => {
           setRecordSeconds((prev) => prev + 1);
@@ -94,6 +96,25 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
       }
     };
   }, []);
+
+  const handlePauseResume = () => {
+    if (!mediaRecorderRef.current) return;
+    if (isPaused) {
+      if (mediaRecorderRef.current.state === 'paused') {
+        mediaRecorderRef.current.resume();
+      }
+      setIsPaused(false);
+      timerRef.current = setInterval(() => {
+        setRecordSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.pause();
+      }
+      setIsPaused(true);
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+  };
 
   const handleStopAndSend = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -121,12 +142,31 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
   return (
     <div className="voice-recorder-bar">
       <div className="voice-recorder-status">
-        <span className="rec-pulse-dot"></span>
+        <span className={`rec-pulse-dot ${isPaused ? 'paused' : ''}`}></span>
         <span className="rec-timer-label">{formatTimer(recordSeconds)}</span>
-        <span className="rec-hint">Recording voice note...</span>
+        
+        {/* Waveform Visualizer */}
+        <div className={`rec-waveform ${isPaused ? 'paused' : ''}`}>
+          <span className="wave-bar bar-1"></span>
+          <span className="wave-bar bar-2"></span>
+          <span className="wave-bar bar-3"></span>
+          <span className="wave-bar bar-4"></span>
+          <span className="wave-bar bar-5"></span>
+        </div>
+
+        <span className="rec-hint">{isPaused ? 'Recording paused' : 'Recording voice note...'}</span>
       </div>
 
       <div className="voice-recorder-actions">
+        <button
+          type="button"
+          className="btn-rec-action btn-rec-pause"
+          onClick={handlePauseResume}
+          title={isPaused ? 'Resume Recording' : 'Pause Recording'}
+        >
+          {isPaused ? '▶' : '⏸'}
+        </button>
+
         <button
           type="button"
           className="btn-rec-action btn-rec-cancel"
@@ -173,6 +213,11 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
           animation: recPulse 1.2s infinite ease-in-out;
         }
 
+        .rec-pulse-dot.paused {
+          animation: none;
+          background: #f59e0b;
+        }
+
         @keyframes recPulse {
           0%, 100% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.4); opacity: 0.4; }
@@ -185,6 +230,37 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
           color: #ef4444;
         }
 
+        .rec-waveform {
+          display: flex;
+          align-items: center;
+          gap: 3px;
+          height: 16px;
+        }
+
+        .wave-bar {
+          width: 3px;
+          background: #ef4444;
+          border-radius: 3px;
+          animation: wavePulse 0.8s infinite ease-in-out alternate;
+        }
+
+        .wave-bar.bar-1 { height: 8px; animation-delay: 0.1s; }
+        .wave-bar.bar-2 { height: 14px; animation-delay: 0.3s; }
+        .wave-bar.bar-3 { height: 18px; animation-delay: 0.5s; }
+        .wave-bar.bar-4 { height: 12px; animation-delay: 0.2s; }
+        .wave-bar.bar-5 { height: 6px; animation-delay: 0.4s; }
+
+        .rec-waveform.paused .wave-bar {
+          animation: none;
+          background: #f59e0b;
+          height: 4px;
+        }
+
+        @keyframes wavePulse {
+          0% { height: 4px; }
+          100% { height: 16px; }
+        }
+
         .rec-hint {
           font-size: 0.8rem;
           color: var(--text-secondary, #64748b);
@@ -193,7 +269,7 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
         .voice-recorder-actions {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
         }
 
         .btn-rec-action {
@@ -205,8 +281,13 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          font-size: 14px;
+          font-size: 13px;
           transition: transform 0.15s ease;
+        }
+
+        .btn-rec-pause {
+          background: rgba(255, 255, 255, 0.1);
+          color: #f1f5f9;
         }
 
         .btn-rec-cancel {

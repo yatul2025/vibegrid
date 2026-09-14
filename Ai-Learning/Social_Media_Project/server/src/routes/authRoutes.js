@@ -20,7 +20,8 @@ const {
   resetPassword, 
   changePassword, 
   verifyLoginOtp, 
-  resendLoginOtp 
+  resendLoginOtp,
+  createDemoSession
 } = require('../controllers/authController');
 const { 
   validateRegistration, 
@@ -99,6 +100,9 @@ router.post('/resend-login-otp', forgotPasswordLimiter, resendLoginOtp);
 
 // POST /api/auth/logout — Log out & clear cookie
 router.post('/logout', logout);
+
+// POST /api/auth/demo-session — Enter Demo Mode without password (Restricted read-only session)
+router.post('/demo-session', createDemoSession);
 
 // GET /api/auth/me — Get current authenticated user session (Protected)
 router.get('/me', protect, getMe);
