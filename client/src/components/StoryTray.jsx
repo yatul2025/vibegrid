@@ -123,6 +123,9 @@ export default function StoryTray({
                 {isCloseFriend && (
                   <span className="story-tray-star-badge" title="Close Friend">★</span>
                 )}
+                {creator.isExternal && !isCloseFriend && (
+                  <span className="story-tray-discovery-badge" title="Discovery Story">🌐</span>
+                )}
               </div>
               <span className="story-username-label" title={creator.username}>
                 {creator.username.length > 10 ? `${creator.username.slice(0, 9)}…` : creator.username}

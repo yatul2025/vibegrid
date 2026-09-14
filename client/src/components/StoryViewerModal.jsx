@@ -227,8 +227,8 @@ export default function StoryViewerModal({
     if (!isLiked) {
       triggerParticles('❤️');
       showToast(`Liked @${currentCreator.username}'s story ❤️`);
-      // Send DM notification if user is not liking own story
-      if (currentCreator.username !== user.username) {
+      // Send DM notification if user is not liking own story and not external discovery story
+      if (currentCreator.username !== user.username && !currentCreator.isExternal) {
         try {
           await apiClient.post(`/messages/${currentCreator.username}`, {
             content: `❤️ Liked your story`
@@ -250,6 +250,12 @@ export default function StoryViewerModal({
       return;
     }
     if (!currentCreator) return;
+
+    if (currentCreator.isExternal) {
+      showToast('Direct replies are unavailable for discovery stories');
+      setReplyText('');
+      return;
+    }
 
     const content = replyText.trim();
     try {
@@ -437,7 +443,12 @@ export default function StoryViewerModal({
             <div className="story-header-names">
               <div className="story-username-line">
                 <span className="story-header-username">{currentCreator.username}</span>
-                {!isMyStory && (
+                {currentCreator.isExternal && (
+                  <span className="story-source-pill" title={`Curated via ${currentCreator.source || 'Discovery'}`}>
+                    🌐 Via {currentCreator.source || 'Discovery'}
+                  </span>
+                )}
+                {!isMyStory && !currentCreator.isExternal && (
                   <button
                     type="button"
                     className={`story-cf-pill-btn ${closeFriendIds.has(currentCreator.userId) ? 'active' : ''}`}

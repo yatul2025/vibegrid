@@ -80,33 +80,60 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
   const [viewerCreatorIndex, setViewerCreatorIndex] = useState(0);
   const [viewedCreatorIds, setViewedCreatorIds] = useState(new Set());
 
-  // Fetch active stories
+  // Live Aggregated Feed States
+  const [newPostsAvailable, setNewPostsAvailable] = useState([]);
+
+  // Fetch active stories (combining real VibeGrid stories + external discovery stories)
   const fetchStories = async () => {
     try {
       setStoriesLoading(true);
-      const res = await apiClient.get('/stories/active');
-      if (res.success && res.data?.creators) {
-        setStoryCreators(res.data.creators);
+      let res = await apiClient.get('/feed/stories');
+      if (!res.success && res.error) {
+        res = await apiClient.get('/stories/active');
+      }
+      const creators = res.data?.creators || res.creators;
+      if (res.success && creators) {
+        setStoryCreators(creators);
       }
     } catch (err) {
-      console.error('Failed to load active stories:', err);
+      try {
+        const fallback = await apiClient.get('/stories/active');
+        if (fallback.success && (fallback.data?.creators || fallback.creators)) {
+          setStoryCreators(fallback.data?.creators || fallback.creators);
+        }
+      } catch (fbErr) {
+        console.error('Failed to load active stories:', fbErr);
+      }
     } finally {
       setStoriesLoading(false);
     }
   };
 
-  // Fetch feed posts from API
+  // Fetch live feed posts from API (interleaving VibeGrid users + external discovery)
   const fetchFeed = async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await apiClient.get('/posts/feed');
-      if (res.success && res.data?.posts) {
-        setPosts(res.data.posts);
+      let res = await apiClient.get('/feed');
+      if (!res.success && res.error) {
+        res = await apiClient.get('/posts/feed');
+      }
+      const fetchedPosts = res.data?.posts || res.posts;
+      if (res.success && fetchedPosts) {
+        setPosts(fetchedPosts);
       } else {
         setError(res.error || 'Failed to load feed.');
       }
     } catch (err) {
+      try {
+        const fallback = await apiClient.get('/posts/feed');
+        if (fallback.success && fallback.data?.posts) {
+          setPosts(fallback.data.posts);
+          return;
+        }
+      } catch (fbErr) {
+        // ignore
+      }
       setError(err.message || 'Error connecting to feed.');
     } finally {
       setLoading(false);
@@ -117,6 +144,37 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     fetchFeed();
     fetchStories();
   }, []);
+
+  // Background Delta Polling for live fresh content (every 2.5 minutes)
+  useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      if (posts.length === 0) return;
+      const latestTimestamp = posts[0]?.created_at;
+      if (!latestTimestamp) return;
+
+      try {
+        const res = await apiClient.get(`/feed?since=${encodeURIComponent(latestTimestamp)}`);
+        const newItems = res.data?.posts || res.posts || [];
+        if (Array.isArray(newItems) && newItems.length > 0) {
+          setNewPostsAvailable((prev) => {
+            const existingIds = new Set([...posts.map((p) => p.id), ...prev.map((p) => p.id)]);
+            const filtered = newItems.filter((item) => !existingIds.has(item.id));
+            return filtered.length > 0 ? [...filtered, ...prev] : prev;
+          });
+        }
+      } catch (pollErr) {
+        // Silent catch for background delta polling
+      }
+    }, 150000);
+
+    return () => clearInterval(pollInterval);
+  }, [posts]);
+
+  const handleRefreshNewPosts = () => {
+    if (newPostsAvailable.length === 0) return;
+    setPosts((prev) => [...newPostsAvailable, ...prev]);
+    setNewPostsAvailable([]);
+  };
 
   const handleOpenViewer = (creatorIndex) => {
     setViewerCreatorIndex(creatorIndex);
@@ -170,6 +228,11 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
       setActiveCommentPost((prev) => ({ ...prev, is_liked: newLiked, likes_count: newCount }));
     }
 
+    // External discovery items don't exist in PostgreSQL
+    if (targetPost.is_external) {
+      return;
+    }
+
     try {
       // 3. Background API request
       const res = await apiClient.post(`/posts/${postId}/like`);
@@ -212,6 +275,11 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     setPosts((prev) =>
       prev.map((p) => (p.id === postId ? { ...p, is_saved: newSaved } : p))
     );
+
+    // External discovery items don't exist in PostgreSQL
+    if (targetPost.is_external) {
+      return;
+    }
 
     try {
       const res = await apiClient.post(`/posts/${postId}/save`);
@@ -529,6 +597,18 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
         </div>
       )}
 
+      {/* Floating Fresh Posts Notification Banner */}
+      {newPostsAvailable.length > 0 && (
+        <button
+          type="button"
+          className="floating-new-posts-pill"
+          onClick={handleRefreshNewPosts}
+          title="Click to view new posts"
+        >
+          ✨ {newPostsAvailable.length} new {newPostsAvailable.length === 1 ? 'post' : 'posts'} available — Tap to view
+        </button>
+      )}
+
       {/* Loading Skeleton Cards */}
       {loading ? (
         <div className="feed-timeline">
@@ -617,22 +697,41 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                       <div className="post-author-name-row">
                         <span
                           className="post-author-username"
-                          onClick={() => onNavigateToProfile && onNavigateToProfile(post.username)}
+                          onClick={() => {
+                            if (post.is_external && post.source_url) {
+                              window.open(post.source_url, '_blank', 'noopener,noreferrer');
+                            } else if (onNavigateToProfile) {
+                              onNavigateToProfile(post.username);
+                            }
+                          }}
                           style={{ cursor: 'pointer' }}
                         >
                           @{post.username}
                         </span>
-                        <button
-                          type="button"
-                          className={`post-close-friend-btn ${isCloseFriend ? 'active' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleCloseFriend(post.user_id, post.username);
-                          }}
-                          title={isCloseFriend ? 'Close Friend (Click to remove)' : 'Add to Close Friends'}
-                        >
-                          ★
-                        </button>
+                        {post.is_external ? (
+                          <a
+                            href={post.source_url || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="external-source-pill"
+                            title={`Via ${post.source || 'External Discovery'}`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            🌐 Via {post.source || 'Discovery'}
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            className={`post-close-friend-btn ${isCloseFriend ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleCloseFriend(post.user_id, post.username);
+                            }}
+                            title={isCloseFriend ? 'Close Friend (Click to remove)' : 'Add to Close Friends'}
+                          >
+                            ★
+                          </button>
+                        )}
                       </div>
                       <span className="post-timestamp">{formatTimeAgo(post.created_at)}</span>
                     </div>
@@ -718,7 +817,10 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                   <button
                     type="button"
                     className="post-action-btn"
-                    onClick={() => setActiveCommentPost(post)}
+                    onClick={() => {
+                      if (guardDemoAction('comment')) return;
+                      setActiveCommentPost(post);
+                    }}
                     title="View comments thread"
                   >
                     💬
