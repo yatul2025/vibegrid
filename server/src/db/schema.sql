@@ -116,14 +116,35 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created
 -- 8. Messages Table (Direct Messaging & Private Chat)
 CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
+    conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
     sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sender_device_id VARCHAR(64),
     content TEXT NOT NULL,
+    ciphertext TEXT,
+    iv_nonce TEXT,
+    message_type VARCHAR(20) DEFAULT 'text',
+    reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
     is_read BOOLEAN DEFAULT FALSE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    is_forwarded BOOLEAN DEFAULT FALSE,
+    edited_at TIMESTAMP WITH TIME ZONE,
+    expires_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender_id, recipient_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_recipient_unread ON messages(recipient_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_messages_reply_to ON messages(reply_to_id);
+
+-- 8b. Message Deletions Table (Per-user "Delete for me")
+CREATE TABLE IF NOT EXISTS message_deletions (
+    id SERIAL PRIMARY KEY,
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    deleted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(message_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_message_deletions_user ON message_deletions(user_id, message_id);
 
 -- 9. Saved Posts Table (Phase 12 - Bookmarks & Private Collections)
 CREATE TABLE IF NOT EXISTS saved_posts (

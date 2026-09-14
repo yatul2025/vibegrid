@@ -57,8 +57,37 @@ import {
   Check,
   CheckCheck,
   PhoneCall,
-  Lock
+  Lock,
+  Reply,
+  Edit2,
+  Trash2,
+  Trash,
+  Copy,
+  Ban,
+  CornerUpLeft
 } from 'lucide-react';
+
+function getDateSeparatorLabel(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const isSameDay = (d1, d2) =>
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate();
+
+  if (isSameDay(date, today)) return 'Today';
+  if (isSameDay(date, yesterday)) return 'Yesterday';
+
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'long',
+    year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
+  });
+}
 
 function formatMessageTime(dateString) {
   if (!dateString) return '';
@@ -136,12 +165,32 @@ export default function MessagesPage({
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
 
+  // Phase 1: Core Message Actions & Status States
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [deleteModalTarget, setDeleteModalTarget] = useState(null);
+
   const messagesEndRef = useRef(null);
   const chatStreamRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const longPressTimerRef = useRef(null);
   const activePartnerRef = useRef(activePartner);
   activePartnerRef.current = activePartner;
+
+  // Jump and highlight a quoted reply message
+  const scrollToMessage = (messageId) => {
+    if (!messageId) return;
+    const el = document.getElementById(`msg-${messageId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('pulse-highlight');
+      setTimeout(() => {
+        el.classList.remove('pulse-highlight');
+      }, 1500);
+    }
+  };
 
   // Auto-scroll to bottom of message thread (isolated to chat-stream container to prevent window shifting)
   const scrollToBottom = (smooth = true) => {
@@ -363,18 +412,82 @@ export default function MessagesPage({
       }
     };
 
+    // 5. Real-Time Message Edit
+    const handleMessageEdit = (payload) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          Number(m.id) === Number(payload.messageId)
+            ? {
+                ...m,
+                content: payload.content,
+                ciphertext: payload.ciphertext,
+                iv_nonce: payload.ivNonce,
+                edited_at: payload.editedAt
+              }
+            : m
+        )
+      );
+    };
+
+    // 6. Real-Time Message Delete
+    const handleMessageDelete = (payload) => {
+      setMessages((prev) =>
+        payload.forEveryone
+          ? prev.map((m) =>
+              Number(m.id) === Number(payload.messageId)
+                ? {
+                    ...m,
+                    is_deleted: true,
+                    content: 'This message was deleted',
+                    ciphertext: null,
+                    iv_nonce: null
+                  }
+                : m
+            )
+          : prev.filter((m) => Number(m.id) !== Number(payload.messageId))
+      );
+    };
+
     socketService.on('message:receive', handleReceiveMessage);
     socketService.on('typing:status', handleTypingStatus);
     socketService.on('presence:update', handlePresenceUpdate);
     socketService.on('message:read_receipt', handleReadReceipt);
+    socketService.on('message:edit', handleMessageEdit);
+    socketService.on('message:delete', handleMessageDelete);
 
     return () => {
       socketService.off('message:receive', handleReceiveMessage);
       socketService.off('typing:status', handleTypingStatus);
       socketService.off('presence:update', handlePresenceUpdate);
       socketService.off('message:read_receipt', handleReadReceipt);
+      socketService.off('message:edit', handleMessageEdit);
+      socketService.off('message:delete', handleMessageDelete);
     };
   }, [user, activeConversationId, fetchConversations, onUnreadCountChange]);
+
+  // Window-level escape and click dismissal for Context Menu & Active Banners
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setContextMenu(null);
+    };
+    const handleGlobalKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setContextMenu(null);
+        setReplyingTo(null);
+        if (editingMessage) {
+          setEditingMessage(null);
+          setMessageInput('');
+        }
+      }
+    };
+
+    window.addEventListener('click', handleGlobalClick);
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('click', handleGlobalClick);
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [editingMessage]);
 
   // ==========================================================================
   // 3. Typing Notification Emitter
@@ -398,6 +511,9 @@ export default function MessagesPage({
   // ==========================================================================
   // 4. Send Encrypted Text Message
   // ==========================================================================
+  // ==========================================================================
+  // 4. Send or Edit Encrypted Text Message
+  // ==========================================================================
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!messageInput.trim() || !activePartner || sending) return;
@@ -405,6 +521,47 @@ export default function MessagesPage({
     const textToSend = messageInput.trim();
     setMessageInput('');
     socketService.sendTypingStop(activeConversationId, activePartner.id);
+
+    // Case A: Editing an existing message
+    if (editingMessage) {
+      const targetId = editingMessage.id;
+      setEditingMessage(null);
+      try {
+        setSending(true);
+        const encEnvelope = await e2eeService.encryptMessage(activePartner.id, textToSend);
+
+        const res = await apiClient.put(`/messages/msg/${targetId}/edit`, {
+          content: textToSend,
+          ciphertext: encEnvelope.ciphertext || null,
+          ivNonce: encEnvelope.ivNonce || null
+        });
+
+        if (res.success && res.data?.message) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              Number(m.id) === Number(targetId)
+                ? {
+                    ...m,
+                    content: textToSend,
+                    ciphertext: encEnvelope.ciphertext || null,
+                    iv_nonce: encEnvelope.ivNonce || null,
+                    edited_at: res.data.message.edited_at || new Date().toISOString()
+                  }
+                : m
+            )
+          );
+        }
+      } catch (err) {
+        alert(err.message || 'Failed to edit message.');
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
+    // Case B: Sending a new message (with optional reply)
+    const activeReply = replyingTo;
+    setReplyingTo(null);
 
     const tempId = `temp-${Date.now()}`;
     const optimisticMessage = {
@@ -415,7 +572,17 @@ export default function MessagesPage({
       is_read: false,
       created_at: new Date().toISOString(),
       is_mine: true,
-      is_encrypted: true
+      is_encrypted: true,
+      reply_to_id: activeReply?.id || null,
+      reply_to_message: activeReply
+        ? {
+            id: activeReply.id,
+            sender_id: activeReply.sender_id,
+            sender_username: activeReply.sender_username,
+            content: activeReply.content,
+            is_deleted: activeReply.is_deleted
+          }
+        : null
     };
 
     setMessages((prev) => [...prev, optimisticMessage]);
@@ -430,14 +597,20 @@ export default function MessagesPage({
         content: textToSend,
         ciphertext: encEnvelope.ciphertext || null,
         ivNonce: encEnvelope.ivNonce || null,
-        senderDeviceId: encEnvelope.senderDeviceId || null
+        senderDeviceId: encEnvelope.senderDeviceId || null,
+        replyToId: activeReply?.id || null
       });
 
       if (res.success && res.data?.message) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId
-              ? { ...res.data.message, content: textToSend, is_encrypted: Boolean(encEnvelope.ciphertext) }
+              ? {
+                  ...res.data.message,
+                  content: textToSend,
+                  is_encrypted: Boolean(encEnvelope.ciphertext),
+                  reply_to_message: optimisticMessage.reply_to_message
+                }
               : m
           )
         );
@@ -464,6 +637,9 @@ export default function MessagesPage({
   const handleSendImage = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !activePartner || sending) return;
+
+    const activeReply = replyingTo;
+    setReplyingTo(null);
 
     try {
       setSending(true);
@@ -498,7 +674,8 @@ export default function MessagesPage({
         content: payloadString,
         ciphertext: encEnvelope.ciphertext || null,
         ivNonce: encEnvelope.ivNonce || null,
-        senderDeviceId: encEnvelope.senderDeviceId || null
+        senderDeviceId: encEnvelope.senderDeviceId || null,
+        replyToId: activeReply?.id || null
       });
 
       if (res.success && res.data?.message) {
@@ -508,7 +685,8 @@ export default function MessagesPage({
             ...res.data.message,
             content: payloadString,
             is_mine: true,
-            is_encrypted: true
+            is_encrypted: true,
+            reply_to_message: activeReply
           }
         ]);
         setTimeout(() => scrollToBottom(true), 30);
@@ -527,6 +705,9 @@ export default function MessagesPage({
   // ==========================================================================
   const handleSendVoiceNote = async (audioBlob, durationSeconds, recordedMimeType) => {
     if (!audioBlob || !activePartner || sending) return;
+
+    const activeReply = replyingTo;
+    setReplyingTo(null);
 
     try {
       setSending(true);
@@ -563,7 +744,8 @@ export default function MessagesPage({
         content: payloadString,
         ciphertext: encEnvelope.ciphertext || null,
         ivNonce: encEnvelope.ivNonce || null,
-        senderDeviceId: encEnvelope.senderDeviceId || null
+        senderDeviceId: encEnvelope.senderDeviceId || null,
+        replyToId: activeReply?.id || null
       });
 
       if (res.success && res.data?.message) {
@@ -573,7 +755,8 @@ export default function MessagesPage({
             ...res.data.message,
             content: payloadString,
             is_mine: true,
-            is_encrypted: true
+            is_encrypted: true,
+            reply_to_message: activeReply
           }
         ]);
         setTimeout(() => scrollToBottom(true), 30);
@@ -583,6 +766,109 @@ export default function MessagesPage({
     } finally {
       setSending(false);
       setUploadingMedia(false);
+    }
+  };
+
+  // ==========================================================================
+  // 6b. VibeGrid Message Action Handlers (Reply, Edit, Copy, Delete)
+  // ==========================================================================
+  const handleContextMenu = (e, msg) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const mouseX = e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? 100;
+    const mouseY = e.clientY ?? (e.touches && e.touches[0]?.clientY) ?? 100;
+
+    const menuWidth = 190;
+    const menuHeight = 220;
+    const x = mouseX + menuWidth > window.innerWidth ? window.innerWidth - menuWidth - 16 : mouseX;
+    const y = mouseY + menuHeight > window.innerHeight ? window.innerHeight - menuHeight - 16 : mouseY;
+
+    setContextMenu({ x, y, message: msg });
+  };
+
+  const handleTouchStart = (e, msg) => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    const touch = e.touches?.[0];
+    if (!touch) return;
+    const clientX = touch.clientX;
+    const clientY = touch.clientY;
+    longPressTimerRef.current = setTimeout(() => {
+      handleContextMenu({ clientX, clientY, preventDefault: () => {}, stopPropagation: () => {} }, msg);
+    }, 450);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleStartReply = (msg) => {
+    setContextMenu(null);
+    setEditingMessage(null);
+    setReplyingTo({
+      id: msg.id,
+      sender_id: msg.sender_id,
+      sender_username: msg.is_mine ? user?.username : activePartner?.username,
+      content: msg.content,
+      is_deleted: msg.is_deleted,
+      is_mine: msg.is_mine
+    });
+  };
+
+  const handleStartEdit = (msg) => {
+    setContextMenu(null);
+    setReplyingTo(null);
+    setEditingMessage({ id: msg.id, content: msg.content });
+    setMessageInput(msg.content);
+  };
+
+  const handleCopyMessage = (msg) => {
+    setContextMenu(null);
+    if (msg.content && !msg.is_deleted) {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(msg.content);
+      }
+    }
+  };
+
+  const handlePromptDelete = (msg) => {
+    setContextMenu(null);
+    if (msg.is_mine && !msg.is_deleted) {
+      setDeleteModalTarget({ message: msg });
+    } else {
+      handleDeleteMessage(msg, 'for_me');
+    }
+  };
+
+  const handleDeleteMessage = async (msg, type = 'for_everyone') => {
+    setContextMenu(null);
+    setDeleteModalTarget(null);
+
+    if (type === 'for_everyone' && !msg.is_mine) {
+      alert('You can only delete your own messages for everyone.');
+      return;
+    }
+
+    try {
+      const res = await apiClient.delete(`/messages/msg/${msg.id}?type=${type}`);
+      if (res.success) {
+        if (type === 'for_everyone') {
+          setMessages((prev) =>
+            prev.map((m) =>
+              Number(m.id) === Number(msg.id)
+                ? { ...m, is_deleted: true, content: 'This message was deleted', ciphertext: null, iv_nonce: null }
+                : m
+            )
+          );
+        } else {
+          setMessages((prev) => prev.filter((m) => Number(m.id) !== Number(msg.id)));
+        }
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to delete message.');
     }
   };
 
@@ -1003,50 +1289,101 @@ export default function MessagesPage({
                       if (!chatSearchQuery.trim()) return true;
                       return m.content && m.content.toLowerCase().includes(chatSearchQuery.toLowerCase());
                     })
-                    .map((m) => {
+                    .map((m, idx, arr) => {
+                      // ---------- Date separator ----------
+                      const currDate = new Date(m.created_at).toDateString();
+                      const prevDate = idx > 0 ? new Date(arr[idx - 1].created_at).toDateString() : null;
+                      const showDateSep = idx === 0 || currDate !== prevDate;
+
                       // System call log bubble
                       if (m.message_type === 'call_log') {
                         return (
-                          <div key={m.id} className="call-log-bubble-row">
-                            <div className="call-log-bubble">
-                              <PhoneCall size={14} className="call-log-icon" />
-                              <span className="call-log-text">{m.content}</span>
-                              <span className="call-log-time">{formatMessageTime(m.created_at)}</span>
+                          <React.Fragment key={m.id}>
+                            {showDateSep && (
+                              <div className="date-separator">
+                                <span>{getDateSeparatorLabel(m.created_at)}</span>
+                              </div>
+                            )}
+                            <div className="call-log-bubble-row">
+                              <div className="call-log-bubble">
+                                <PhoneCall size={14} className="call-log-icon" />
+                                <span className="call-log-text">{m.content}</span>
+                                <span className="call-log-time">{formatMessageTime(m.created_at)}</span>
+                              </div>
                             </div>
-                          </div>
+                          </React.Fragment>
                         );
                       }
 
-                      const mediaPayload = parseMediaPayload(m.content);
+                      const mediaPayload = m.is_deleted ? null : parseMediaPayload(m.content);
 
                       return (
-                        <div
-                          key={m.id}
-                          className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'}`}
-                        >
-                          <div className={`message-bubble ${mediaPayload ? 'has-media' : ''}`}>
-                            {mediaPayload ? (
-                              <EncryptedMediaRenderer mediaPayload={mediaPayload} />
-                            ) : (
-                              <p className="message-text">{m.content}</p>
-                            )}
+                        <React.Fragment key={m.id}>
+                          {showDateSep && (
+                            <div className="date-separator">
+                              <span>{getDateSeparatorLabel(m.created_at)}</span>
+                            </div>
+                          )}
+                          <div
+                            id={`msg-${m.id}`}
+                            className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'}`}
+                            onContextMenu={(e) => handleContextMenu(e, m)}
+                            onTouchStart={(e) => handleTouchStart(e, m)}
+                            onTouchEnd={handleTouchEnd}
+                          >
+                            <div className={`message-bubble ${mediaPayload ? 'has-media' : ''} ${m.is_deleted ? 'deleted-bubble' : ''}`}>
+                              {/* Reply-to quote */}
+                              {m.reply_to_message && !m.is_deleted && (
+                                <div
+                                  className="reply-quote"
+                                  onClick={() => scrollToMessage(m.reply_to_message.id)}
+                                >
+                                  <span className="reply-quote-author">
+                                    <CornerUpLeft size={12} />
+                                    {m.reply_to_message.sender_username
+                                      ? `@${m.reply_to_message.sender_username}`
+                                      : 'Unknown'}
+                                  </span>
+                                  <p className="reply-quote-text">
+                                    {m.reply_to_message.is_deleted
+                                      ? 'This message was deleted'
+                                      : (m.reply_to_message.content?.slice(0, 120) || '…')}
+                                  </p>
+                                </div>
+                              )}
 
-                            <div className="message-info-row">
-                              <span className="message-timestamp">
-                                {formatMessageTime(m.created_at)}
-                              </span>
-                              {m.is_mine && (
-                                <span className="message-receipt-tick" title={m.is_read ? 'Read' : 'Delivered'}>
-                                  {m.is_read ? (
-                                    <CheckCheck size={14} className="receipt-check-read" />
-                                  ) : (
-                                    <Check size={13} className="receipt-check-delivered" />
+                              {/* Message body */}
+                              {m.is_deleted ? (
+                                <p className="deleted-placeholder">
+                                  <Ban size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                                  This message was deleted
+                                </p>
+                              ) : mediaPayload ? (
+                                <EncryptedMediaRenderer mediaPayload={mediaPayload} />
+                              ) : (
+                                <p className="message-text">{m.content}</p>
+                              )}
+
+                              <div className="message-info-row">
+                                <span className="message-timestamp">
+                                  {formatMessageTime(m.created_at)}
+                                  {m.edited_at && (
+                                    <span className="edited-badge">Edited</span>
                                   )}
                                 </span>
-                              )}
+                                {m.is_mine && (
+                                  <span className="message-receipt-tick" title={m.is_read ? 'Read' : 'Delivered'}>
+                                    {m.is_read ? (
+                                      <CheckCheck size={14} className="receipt-check-read" />
+                                    ) : (
+                                      <Check size={13} className="receipt-check-delivered" />
+                                    )}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        </React.Fragment>
                       );
                     })
                 )}
@@ -1067,6 +1404,56 @@ export default function MessagesPage({
 
               {/* Chat Composer Bar */}
               <div className="chat-composer-container">
+                {/* Reply Preview Banner */}
+                {replyingTo && (
+                  <div className="reply-preview-banner">
+                    <div className="reply-preview-content">
+                      <Reply size={14} className="reply-preview-icon" />
+                      <div className="reply-preview-meta">
+                        <span className="reply-preview-author">
+                          Replying to @{replyingTo.sender_username}
+                        </span>
+                        <p className="reply-preview-snippet">
+                          {replyingTo.is_deleted
+                            ? 'This message was deleted'
+                            : (replyingTo.content?.slice(0, 100) || '…')}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="reply-preview-close"
+                      onClick={() => setReplyingTo(null)}
+                      title="Cancel reply"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                )}
+
+                {/* Editing Preview Banner */}
+                {editingMessage && (
+                  <div className="reply-preview-banner editing-banner">
+                    <div className="reply-preview-content">
+                      <Edit2 size={14} className="reply-preview-icon" />
+                      <div className="reply-preview-meta">
+                        <span className="reply-preview-author">Editing message</span>
+                        <p className="reply-preview-snippet">
+                          {editingMessage.content?.slice(0, 100) || '…'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="reply-preview-close"
+                      onClick={() => { setEditingMessage(null); setMessageInput(''); }}
+                      title="Cancel edit"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                )}
+
                 {isVoiceRecording ? (
                   <VoiceRecorder
                     onAudioRecorded={handleSendVoiceNote}
@@ -1229,6 +1616,68 @@ export default function MessagesPage({
         isOpen={isKeyBackupOpen}
         onClose={() => setIsKeyBackupOpen(false)}
       />
+
+      {/* Floating Context Menu */}
+      {contextMenu && (
+        <div className="vg-context-overlay" onClick={() => setContextMenu(null)}>
+          <div
+            className="vg-context-menu"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {!contextMenu.message.is_deleted && (
+              <button className="vg-ctx-item" onClick={() => handleStartReply(contextMenu.message)}>
+                <Reply size={15} /> Reply
+              </button>
+            )}
+            {contextMenu.message.is_mine && !contextMenu.message.is_deleted && (
+              <button className="vg-ctx-item" onClick={() => handleStartEdit(contextMenu.message)}>
+                <Edit2 size={15} /> Edit
+              </button>
+            )}
+            {!contextMenu.message.is_deleted && (
+              <button className="vg-ctx-item" onClick={() => handleCopyMessage(contextMenu.message)}>
+                <Copy size={15} /> Copy
+              </button>
+            )}
+            <button className="vg-ctx-item vg-ctx-danger" onClick={() => handlePromptDelete(contextMenu.message)}>
+              <Trash2 size={15} /> Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalTarget && (
+        <div className="modal-backdrop" onClick={() => setDeleteModalTarget(null)}>
+          <div className="modal-card vg-delete-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Delete Message</h3>
+            <p className="vg-delete-preview">
+              {deleteModalTarget.message.content?.slice(0, 80) || '(media)'}
+            </p>
+            <div className="vg-delete-actions">
+              <button
+                className="btn-secondary"
+                onClick={() => handleDeleteMessage(deleteModalTarget.message, 'for_me')}
+              >
+                <Trash size={14} /> Delete for me
+              </button>
+              <button
+                className="btn-danger"
+                onClick={() => handleDeleteMessage(deleteModalTarget.message, 'for_everyone')}
+              >
+                <Trash2 size={14} /> Delete for everyone
+              </button>
+              <button
+                className="btn-ghost"
+                onClick={() => setDeleteModalTarget(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Embedded CSS Enhancements */}
       <style>{`
@@ -1851,6 +2300,288 @@ export default function MessagesPage({
         @keyframes slideDown {
           from { opacity: 0; transform: translateY(-8px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===== Date Separator ===== */
+        .date-separator {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 10px 0 6px;
+          user-select: none;
+        }
+
+        .date-separator span {
+          background: rgba(99, 102, 241, 0.12);
+          color: #a5b4fc;
+          font-size: 0.72rem;
+          font-weight: 600;
+          padding: 3px 14px;
+          border-radius: 12px;
+          letter-spacing: 0.02em;
+        }
+
+        /* ===== Reply Quote inside bubble ===== */
+        .reply-quote {
+          background: rgba(99, 102, 241, 0.08);
+          border-left: 3px solid #6366f1;
+          border-radius: 6px;
+          padding: 5px 10px;
+          margin-bottom: 6px;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .reply-quote:hover {
+          background: rgba(99, 102, 241, 0.15);
+        }
+
+        .reply-quote-author {
+          font-size: 0.72rem;
+          font-weight: 600;
+          color: #818cf8;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .reply-quote-text {
+          font-size: 0.78rem;
+          color: var(--text-secondary, #94a3b8);
+          margin: 2px 0 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 260px;
+        }
+
+        /* ===== Deleted message placeholder ===== */
+        .deleted-placeholder {
+          font-size: 0.82rem;
+          color: var(--text-secondary, #64748b);
+          font-style: italic;
+          opacity: 0.75;
+          margin: 0;
+          display: flex;
+          align-items: center;
+        }
+
+        .deleted-bubble {
+          opacity: 0.7;
+        }
+
+        /* ===== Edited badge ===== */
+        .edited-badge {
+          font-size: 0.68rem;
+          color: var(--text-secondary, #94a3b8);
+          margin-left: 4px;
+          font-style: italic;
+        }
+
+        /* ===== Reply Preview Banner ===== */
+        .reply-preview-banner {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: rgba(99, 102, 241, 0.08);
+          border-left: 3px solid #6366f1;
+          border-radius: 8px;
+          padding: 8px 12px;
+          margin: 0 12px 6px;
+          animation: slideDown 0.18s ease;
+        }
+
+        .reply-preview-banner.editing-banner {
+          border-left-color: #f59e0b;
+          background: rgba(245, 158, 11, 0.08);
+        }
+
+        .reply-preview-content {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          flex: 1;
+          min-width: 0;
+        }
+
+        .reply-preview-icon {
+          color: #818cf8;
+          flex-shrink: 0;
+          margin-top: 2px;
+        }
+
+        .editing-banner .reply-preview-icon {
+          color: #f59e0b;
+        }
+
+        .reply-preview-meta {
+          min-width: 0;
+          flex: 1;
+        }
+
+        .reply-preview-author {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #818cf8;
+          display: block;
+        }
+
+        .editing-banner .reply-preview-author {
+          color: #f59e0b;
+        }
+
+        .reply-preview-snippet {
+          font-size: 0.78rem;
+          color: var(--text-secondary, #94a3b8);
+          margin: 2px 0 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .reply-preview-close {
+          background: none;
+          border: none;
+          color: var(--text-secondary, #94a3b8);
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          transition: background 0.15s, color 0.15s;
+        }
+
+        .reply-preview-close:hover {
+          background: rgba(255, 255, 255, 0.1);
+          color: var(--text-primary, #f8fafc);
+        }
+
+        /* ===== Floating Context Menu ===== */
+        .vg-context-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          background: transparent;
+        }
+
+        .vg-context-menu {
+          position: fixed;
+          background: var(--bg-card, #1e293b);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+          border-radius: 12px;
+          padding: 6px;
+          min-width: 160px;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+          animation: ctxFadeIn 0.12s ease;
+          z-index: 10000;
+        }
+
+        @keyframes ctxFadeIn {
+          from { opacity: 0; transform: scale(0.92); }
+          to { opacity: 1; transform: scale(1); }
+        }
+
+        .vg-ctx-item {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 9px 12px;
+          border: none;
+          background: none;
+          color: var(--text-primary, #e2e8f0);
+          font-size: 0.84rem;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: background 0.12s;
+        }
+
+        .vg-ctx-item:hover {
+          background: rgba(255, 255, 255, 0.06);
+        }
+
+        .vg-ctx-danger {
+          color: #f87171;
+        }
+
+        .vg-ctx-danger:hover {
+          background: rgba(248, 113, 113, 0.1);
+        }
+
+        /* ===== Delete Confirmation Modal ===== */
+        .vg-delete-modal {
+          max-width: 380px;
+          text-align: center;
+        }
+
+        .vg-delete-modal h3 {
+          margin: 0 0 8px;
+          font-size: 1.05rem;
+        }
+
+        .vg-delete-preview {
+          font-size: 0.82rem;
+          color: var(--text-secondary, #94a3b8);
+          background: rgba(255, 255, 255, 0.04);
+          border-radius: 8px;
+          padding: 8px 12px;
+          margin: 0 0 16px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .vg-delete-actions {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .vg-delete-actions button {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 10px;
+          border-radius: 8px;
+          font-size: 0.85rem;
+          cursor: pointer;
+          border: none;
+          transition: background 0.15s, color 0.15s;
+        }
+
+        .btn-danger {
+          background: rgba(239, 68, 68, 0.15);
+          color: #f87171;
+        }
+
+        .btn-danger:hover {
+          background: #ef4444;
+          color: #fff;
+        }
+
+        .btn-ghost {
+          background: none;
+          color: var(--text-secondary, #94a3b8);
+        }
+
+        .btn-ghost:hover {
+          background: rgba(255, 255, 255, 0.06);
+          color: var(--text-primary, #f8fafc);
+        }
+
+        /* ===== Pulse highlight for scroll-to-message ===== */
+        @keyframes pulseHighlight {
+          0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+          50% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.15); }
+          100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+        }
+
+        .pulse-highlight .message-bubble {
+          animation: pulseHighlight 0.75s ease 2;
+          border-color: rgba(99, 102, 241, 0.5) !important;
         }
       `}</style>
     </div>
