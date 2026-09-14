@@ -19,18 +19,9 @@ const DEFAULT_ICE_SERVERS = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun.cloudflare.com:3478' },
-    { urls: 'stun:openrelay.metered.ca:80' },
-    {
-      urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp',
-        'turns:openrelay.metered.ca:443?transport=tcp'
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    }
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' }
   ]
 };
 
@@ -68,11 +59,16 @@ function toIceCandidate(input) {
   if (!candidateStr || typeof candidateStr !== 'string' || !candidateStr.trim()) {
     return null;
   }
-  return new RTCIceCandidate({
-    candidate: candidateStr,
-    sdpMid: input.sdpMid !== undefined && input.sdpMid !== null ? String(input.sdpMid) : null,
-    sdpMLineIndex: input.sdpMLineIndex !== undefined && input.sdpMLineIndex !== null ? Number(input.sdpMLineIndex) : 0
-  });
+  const init = { candidate: candidateStr };
+  if (input.sdpMid !== undefined && input.sdpMid !== null) {
+    init.sdpMid = String(input.sdpMid);
+  } else if (input.sdpMLineIndex !== undefined && input.sdpMLineIndex !== null) {
+    init.sdpMLineIndex = Number(input.sdpMLineIndex);
+  }
+  if (input.usernameFragment) {
+    init.usernameFragment = input.usernameFragment;
+  }
+  return new RTCIceCandidate(init);
 }
 
 class WebRTCService {
@@ -136,7 +132,7 @@ class WebRTCService {
         return { iceServers: res.data.iceServers };
       }
     } catch (err) {
-      console.warn('[WebRTC] Using default STUN/TURN servers:', err.message);
+      console.warn('[WebRTC] Using default STUN servers:', err.message);
     }
     return DEFAULT_ICE_SERVERS;
   }
@@ -184,19 +180,24 @@ class WebRTCService {
     pc.ontrack = (event) => {
       console.log('[WebRTC] Remote track received:', event.track.kind, event.track.id);
 
+      if (!this.remoteStream) {
+        this.remoteStream = new MediaStream();
+      }
+
       if (event.streams && event.streams[0]) {
-        this.remoteStream = event.streams[0];
-      } else {
-        if (!this.remoteStream) {
-          this.remoteStream = new MediaStream();
-        }
+        event.streams[0].getTracks().forEach((track) => {
+          if (!this.remoteStream.getTracks().some((t) => t.id === track.id)) {
+            this.remoteStream.addTrack(track);
+          }
+        });
+      } else if (event.track) {
         if (!this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
           this.remoteStream.addTrack(event.track);
         }
       }
 
       if (this.onRemoteStream) {
-        this.onRemoteStream(this.remoteStream);
+        this.onRemoteStream(new MediaStream(this.remoteStream.getTracks()));
       }
     };
 
