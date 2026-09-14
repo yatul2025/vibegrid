@@ -10,8 +10,20 @@
 const crypto = require('crypto');
 const { query } = require('../config/db');
 const { hashPassword, comparePassword } = require('../utils/password');
+const jwt = require('jsonwebtoken');
+const config = require('../config/env');
 const { generateToken, setAuthCookie } = require('../utils/jwt');
 const { parseUserAgent, getClientIp, getApproxLocation } = require('../utils/deviceParser');
+const { sendLoginOtpEmail, sendSignupOtpEmail } = require('../utils/mailer');
+
+const maskEmail = (email) => {
+  if (!email || !email.includes('@')) return email || '';
+  const [namePart, domainPart] = email.split('@');
+  const visible = namePart.length > 2 ? namePart.slice(0, 2) : namePart.slice(0, 1);
+  return `${visible}***@${domainPart}`;
+};
+
+const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
 /**
  * Helper to record an active device session in user_sessions table
@@ -33,12 +45,12 @@ const createSessionRecord = async (userId, req) => {
 };
 
 /**
- * Register a new user
+ * Register a new user (Step 1: Validate Details & Dispatch Signup OTP)
  * Route: POST /api/auth/register
  */
 const register = async (req, res, next) => {
   try {
-    const { username, email, password, fullName } = req.body;
+    const { username, email, password, fullName, dateOfBirth, gender } = req.body;
 
     // 1. Check if username or email is already registered
     const existingUserCheck = await query(
@@ -65,25 +77,126 @@ const register = async (req, res, next) => {
     // 2. Hash the password securely using bcrypt (12 rounds)
     const passwordHash = await hashPassword(password);
 
-    // 3. Insert the new user into the PostgreSQL database
+    // 3. Generate 6-digit OTP code & cryptographic HMAC
+    const otpCode = crypto.randomInt(100000, 999999).toString();
+    const otpHmac = crypto.createHmac('sha256', config.jwtSecret).update(otpCode).digest('hex');
+
+    // 4. Dispatch Signup verification email via Gmail SMTP
+    const mailResult = await sendSignupOtpEmail(email, otpCode);
+
+    // 5. Generate signed registration token (valid for 10 minutes)
+    const registerToken = jwt.sign(
+      {
+        action: 'signup_verification',
+        username,
+        email,
+        passwordHash,
+        fullName: fullName || null,
+        dateOfBirth: dateOfBirth || null,
+        gender: gender || 'unspecified',
+        otpHmac
+      },
+      config.jwtSecret,
+      { expiresIn: '10m' }
+    );
+
+    const masked = maskEmail(email);
+
+    return res.status(200).json({
+      success: true,
+      message: `A 6-digit verification code has been dispatched to ${masked}.`,
+      data: {
+        step: 'otp_required',
+        registerToken,
+        maskedEmail: masked,
+        debugOtp: config.nodeEnv === 'development' && (!config.email.user || !config.email.pass) ? otpCode : undefined
+      }
+    });
+  } catch (error) {
+    console.error('[Register Error]', error);
+    next(error);
+  }
+};
+
+/**
+ * Verify Signup OTP & Create Account (Step 2)
+ * Route: POST /api/auth/verify-register-otp
+ */
+const verifyRegisterOtp = async (req, res, next) => {
+  try {
+    const { registerToken, otpCode } = req.body;
+
+    if (!registerToken || !otpCode) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please provide both the registration token and verification code.'
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(registerToken, config.jwtSecret);
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
+        error: 'Your verification session has expired. Please sign up again.'
+      });
+    }
+
+    if (decoded.action !== 'signup_verification') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid registration token.'
+      });
+    }
+
+    // Verify 6-digit OTP code against HMAC
+    const expectedHmac = crypto.createHmac('sha256', config.jwtSecret).update(otpCode.trim()).digest('hex');
+    if (decoded.otpHmac !== expectedHmac) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid verification code. Please check your email and try again.'
+      });
+    }
+
+    const { username, email, passwordHash, fullName, dateOfBirth, gender } = decoded;
+    const { getDefaultAvatar } = require('../utils/avatar');
+    const avatarUrl = getDefaultAvatar(gender);
+
+    // Concurrency safeguard: ensure username/email were not taken while waiting for OTP
+    const existingCheck = await query(
+      'SELECT id FROM users WHERE username = $1 OR email = $2 LIMIT 1',
+      [username, email]
+    );
+    if (existingCheck.rows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: 'This username or email was registered by someone else in the meantime.'
+      });
+    }
+
+    // Insert verified user into database with gender and date of birth
     const insertQuery = `
-      INSERT INTO users (username, email, password_hash, full_name)
-      VALUES ($1, $2, $3, $4)
-      RETURNING id, username, email, full_name, bio, avatar_url, token_version, created_at
+      INSERT INTO users (username, email, password_hash, full_name, date_of_birth, gender, avatar_url, is_email_verified)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+      RETURNING id, username, email, full_name, bio, avatar_url, gender, date_of_birth, COALESCE(test, 0) AS test, token_version, created_at
     `;
     const result = await query(insertQuery, [
       username,
       email,
       passwordHash,
-      fullName || null
+      fullName || null,
+      dateOfBirth || null,
+      gender || 'unspecified',
+      avatarUrl
     ]);
 
     const newUser = result.rows[0];
 
-    // 4. Create active session record in database
+    // Create session record in database
     const sessionId = await createSessionRecord(newUser.id, req);
 
-    // 5. Generate signed JWT token with token version and session ID
+    // Generate signed session JWT token
     const token = generateToken({
       id: newUser.id,
       username: newUser.username,
@@ -91,21 +204,86 @@ const register = async (req, res, next) => {
       sessionId
     });
 
-    // 6. Attach token as a secure HTTP-Only cookie to the response
+    // Attach token as HTTP-Only cookie
     setAuthCookie(res, token);
-
-    // 7. Exclude internal security fields from response
     delete newUser.token_version;
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: 'Account created successfully!',
+      message: 'Email verified and account created successfully!',
       data: {
         user: newUser
       }
     });
   } catch (error) {
-    console.error('[Register Error]', error);
+    console.error('[Verify Register OTP Error]', error);
+    next(error);
+  }
+};
+
+/**
+ * Resend Signup OTP
+ * Route: POST /api/auth/resend-register-otp
+ */
+const resendRegisterOtp = async (req, res, next) => {
+  try {
+    const { registerToken } = req.body;
+
+    if (!registerToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Registration token is required to resend verification code.'
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(registerToken, config.jwtSecret);
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
+        error: 'Your registration session has expired. Please sign up again.'
+      });
+    }
+
+    if (decoded.action !== 'signup_verification') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid token.'
+      });
+    }
+
+    // Generate new OTP & HMAC
+    const newOtp = crypto.randomInt(100000, 999999).toString();
+    const newOtpHmac = crypto.createHmac('sha256', config.jwtSecret).update(newOtp).digest('hex');
+
+    // Dispatch email
+    const mailResult = await sendSignupOtpEmail(decoded.email, newOtp);
+
+    // Re-sign registerToken with updated HMAC
+    const newRegisterToken = jwt.sign(
+      {
+        action: 'signup_verification',
+        username: decoded.username,
+        email: decoded.email,
+        passwordHash: decoded.passwordHash,
+        fullName: decoded.fullName,
+        otpHmac: newOtpHmac
+      },
+      config.jwtSecret,
+      { expiresIn: '10m' }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'A fresh verification code has been dispatched to your email.',
+      data: {
+        registerToken: newRegisterToken,
+        debugOtp: config.nodeEnv === 'development' && (!config.email.user || !config.email.pass) ? newOtp : undefined
+      }
+    });
+  } catch (error) {
+    console.error('[Resend Register OTP Error]', error);
     next(error);
   }
 };
@@ -129,7 +307,7 @@ const login = async (req, res, next) => {
 
     // 1. Fetch user by either username OR email (including token_version and is_deactivated)
     const userQuery = `
-      SELECT id, username, email, password_hash, full_name, bio, avatar_url, token_version, is_deactivated, created_at
+      SELECT id, username, email, password_hash, full_name, bio, avatar_url, COALESCE(test, 0) AS test, token_version, is_deactivated, created_at
       FROM users
       WHERE username = $1 OR email = $1
       LIMIT 1
@@ -168,34 +346,288 @@ const login = async (req, res, next) => {
       wasReactivated = true;
     }
 
-    // 4. Create active session record in database
-    const sessionId = await createSessionRecord(user.id, req);
+    const isDemoAccess = req.body.isDemoAccess === true || req.body.isDemoAccess === 'true';
+    const isDemoAccount = Boolean(isDemoAccess || DEMO_USERNAMES.includes((user.username || '').toLowerCase()));
+    const isTestProfile = Boolean([1, 2, 3, 4].includes(Number(user.id)) || Number(user.test) === 1);
 
-    // 5. Issue new signed JWT token with active token version and session ID
-    const token = generateToken({
-      id: user.id,
-      username: user.username,
-      tokenVersion: user.token_version || 1,
-      sessionId
-    });
+    // Demo accounts & Test profiles (User IDs 1, 2, 3, 4) bypass 2FA OTP - password only
+    if (isDemoAccount || isTestProfile) {
+      const sessionId = await createSessionRecord(user.id, req);
+      const token = generateToken({
+        id: user.id,
+        username: user.username,
+        tokenVersion: user.token_version || 1,
+        sessionId,
+        isDemoAccess: isDemoAccount
+      });
 
-    // 6. Attach token as a secure HTTP-Only cookie
-    setAuthCookie(res, token);
+      setAuthCookie(res, token);
+      delete user.password_hash;
+      delete user.token_version;
+      if (isDemoAccount) user.is_demo_session = true;
 
-    // 7. Exclude password_hash & token_version from response
-    delete user.password_hash;
-    delete user.token_version;
+      return res.status(200).json({
+        success: true,
+        message: wasReactivated ? 'Welcome back! Your account has been reactivated.' : 'Logged in successfully!',
+        data: {
+          user,
+          reactivated: wasReactivated
+        }
+      });
+    }
 
-    res.status(200).json({
+    // Standard accounts: Generate 6-digit OTP and send via Email
+    const otpCode = crypto.randomInt(100000, 999999).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Invalidate existing unused login OTPs for this user
+    await query(
+      "UPDATE account_verifications SET used = TRUE WHERE user_id = $1 AND type = 'login_otp' AND used = FALSE",
+      [user.id]
+    );
+
+    // Store in account_verifications
+    await query(
+      `INSERT INTO account_verifications (user_id, type, target_value, otp_code, expires_at)
+       VALUES ($1, 'login_otp', $2, $3, $4)`,
+      [user.id, user.email, otpCode, expiresAt]
+    );
+
+    // Send email using Nodemailer
+    await sendLoginOtpEmail(user.email, otpCode);
+
+    // Generate short-lived (10m) token for the verification step
+    const loginToken = jwt.sign(
+      {
+        userId: user.id,
+        username: user.username,
+        purpose: 'login_2fa',
+        wasReactivated
+      },
+      config.jwtSecret,
+      { expiresIn: '10m' }
+    );
+
+    // Mask email for user privacy display
+    const [namePart, domainPart] = (user.email || '').split('@');
+    const maskedEmail = `${namePart.length > 2 ? namePart.slice(0, 2) : namePart}***@${domainPart || 'gmail.com'}`;
+
+    return res.status(200).json({
       success: true,
-      message: wasReactivated ? 'Welcome back! Your account has been reactivated.' : 'Logged in successfully!',
+      message: `A 6-digit verification code has been sent to ${maskedEmail}.`,
       data: {
-        user,
-        reactivated: wasReactivated
+        step: 'otp_required',
+        loginToken,
+        maskedEmail,
+        deliveryMethod: 'email',
+        debugOtp: config.nodeEnv === 'development' && (!config.email.user || !config.email.pass) ? otpCode : undefined
       }
     });
   } catch (error) {
     console.error('[Login Error]', error);
+    next(error);
+  }
+};
+
+/**
+ * Verify 2FA Login OTP Code
+ * Route: POST /api/auth/verify-login-otp
+ */
+const verifyLoginOtp = async (req, res, next) => {
+  try {
+    const { loginToken, otpCode } = req.body;
+
+    if (!loginToken || !otpCode || otpCode.trim().length !== 6) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please enter a valid 6-digit verification code.'
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(loginToken, config.jwtSecret);
+      if (decoded.purpose !== 'login_2fa') {
+        throw new Error('Invalid token purpose');
+      }
+    } catch {
+      return res.status(401).json({
+        success: false,
+        error: 'Your login verification session has expired. Please sign in again.'
+      });
+    }
+
+    const userId = decoded.userId;
+
+    // Check for pending active OTP
+    const otpRes = await query(
+      `SELECT id, otp_code, attempts, expires_at
+       FROM account_verifications
+       WHERE user_id = $1 AND type = 'login_otp' AND used = FALSE
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (otpRes.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No active verification code found. Please sign in again.'
+      });
+    }
+
+    const record = otpRes.rows[0];
+
+    // Check expiry
+    if (new Date() > new Date(record.expires_at)) {
+      await query('UPDATE account_verifications SET used = TRUE WHERE id = $1', [record.id]);
+      return res.status(400).json({
+        success: false,
+        error: 'Verification code has expired. Please request a new code.'
+      });
+    }
+
+    // Rate limiting: Maximum 5 attempts
+    if (record.attempts >= 5) {
+      await query('UPDATE account_verifications SET used = TRUE WHERE id = $1', [record.id]);
+      return res.status(429).json({
+        success: false,
+        error: 'Too many incorrect attempts. Please sign in again.'
+      });
+    }
+
+    // Check code
+    if (record.otp_code !== otpCode.trim()) {
+      await query('UPDATE account_verifications SET attempts = attempts + 1 WHERE id = $1', [record.id]);
+      const attemptsLeft = 5 - (record.attempts + 1);
+      return res.status(400).json({
+        success: false,
+        error: `Incorrect code. ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining.`
+      });
+    }
+
+    // Mark OTP as used
+    await query('UPDATE account_verifications SET used = TRUE WHERE id = $1', [record.id]);
+
+    // Fetch user details
+    const userRes = await query(
+      `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
+              date_of_birth, gender, is_email_verified, is_phone_verified, is_private, is_deactivated, 
+              COALESCE(test, 0) AS test, token_version, created_at 
+       FROM users 
+       WHERE id = $1 
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User account no longer exists.' });
+    }
+
+    const user = userRes.rows[0];
+
+    // Reactivate if previously deactivated
+    if (user.is_deactivated || decoded.wasReactivated) {
+      await query('UPDATE users SET is_deactivated = false, deactivated_at = NULL WHERE id = $1', [user.id]);
+      user.is_deactivated = false;
+    }
+
+    // Create session and set cookie
+    const sessionId = await createSessionRecord(user.id, req);
+    const token = generateToken({
+      id: user.id,
+      username: user.username,
+      tokenVersion: user.token_version || 1,
+      sessionId,
+      isDemoAccess: false
+    });
+
+    setAuthCookie(res, token);
+    delete user.token_version;
+    user.is_demo_session = false;
+
+    res.status(200).json({
+      success: true,
+      message: decoded.wasReactivated ? 'Welcome back! Your account has been reactivated.' : 'Logged in successfully!',
+      data: {
+        user,
+        reactivated: Boolean(decoded.wasReactivated)
+      }
+    });
+  } catch (error) {
+    console.error('[Verify Login OTP Error]', error);
+    next(error);
+  }
+};
+
+/**
+ * Resend 2FA Login OTP Code
+ * Route: POST /api/auth/resend-login-otp
+ */
+const resendLoginOtp = async (req, res, next) => {
+  try {
+    const { loginToken } = req.body;
+    if (!loginToken) {
+      return res.status(400).json({ success: false, error: 'Missing login session token.' });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(loginToken, config.jwtSecret);
+      if (decoded.purpose !== 'login_2fa') throw new Error('Invalid token purpose');
+    } catch {
+      return res.status(401).json({ success: false, error: 'Verification session expired. Please sign in again.' });
+    }
+
+    const userId = decoded.userId;
+    const userRes = await query('SELECT id, username, email FROM users WHERE id = $1 LIMIT 1', [userId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+    const user = userRes.rows[0];
+
+    // Rate limit: 30s cooldown
+    const recentRes = await query(
+      `SELECT created_at FROM account_verifications 
+       WHERE user_id = $1 AND type = 'login_otp' 
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId]
+    );
+
+    if (recentRes.rows.length > 0) {
+      const elapsed = Date.now() - new Date(recentRes.rows[0].created_at).getTime();
+      if (elapsed < 30 * 1000) {
+        const waitSec = Math.ceil((30 * 1000 - elapsed) / 1000);
+        return res.status(429).json({
+          success: false,
+          error: `Please wait ${waitSec}s before requesting a new code.`
+        });
+      }
+    }
+
+    // Invalidate old OTPs
+    await query("UPDATE account_verifications SET used = TRUE WHERE user_id = $1 AND type = 'login_otp' AND used = FALSE", [userId]);
+
+    // Generate new OTP
+    const otpCode = crypto.randomInt(100000, 999999).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await query(
+      `INSERT INTO account_verifications (user_id, type, target_value, otp_code, expires_at)
+       VALUES ($1, 'login_otp', $2, $3, $4)`,
+      [userId, user.email, otpCode, expiresAt]
+    );
+
+    await sendLoginOtpEmail(user.email, otpCode);
+
+    res.status(200).json({
+      success: true,
+      message: 'A fresh verification code has been sent.',
+      data: {
+        debugOtp: config.nodeEnv === 'development' && (!config.email.user || !config.email.pass) ? otpCode : undefined
+      }
+    });
+  } catch (error) {
+    console.error('[Resend Login OTP Error]', error);
     next(error);
   }
 };
@@ -281,6 +713,15 @@ const forgotPassword = async (req, res, next) => {
 
     if (userRes.rows.length > 0) {
       const user = userRes.rows[0];
+
+      // Disallow password reset on official demo accounts
+      const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+      if (DEMO_USERNAMES.includes(user.username.toLowerCase())) {
+        return res.status(403).json({
+          success: false,
+          error: 'Password reset is disabled for official demo accounts.'
+        });
+      }
 
       // Cryptographically secure token (32 bytes = 64 hex chars)
       const resetToken = crypto.randomBytes(32).toString('hex');
@@ -374,6 +815,15 @@ const resetPassword = async (req, res, next) => {
 
     const resetRecord = resetRes.rows[0];
 
+    // Disallow password reset on official demo accounts
+    const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+    if (resetRecord.username && DEMO_USERNAMES.includes(resetRecord.username.toLowerCase())) {
+      return res.status(403).json({
+        success: false,
+        error: 'Password reset is disabled for official demo accounts.'
+      });
+    }
+
     // Hash the new password securely
     const newPasswordHash = await hashPassword(newPassword);
 
@@ -406,6 +856,15 @@ const resetPassword = async (req, res, next) => {
  */
 const changePassword = async (req, res, next) => {
   try {
+    const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+    const isDemo = req.user.is_demo_session || DEMO_USERNAMES.includes((req.user.username || '').toLowerCase());
+    if (isDemo) {
+      return res.status(403).json({
+        success: false,
+        error: 'Password cannot be modified on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const { currentPassword, newPassword } = req.body;
 
@@ -427,7 +886,7 @@ const changePassword = async (req, res, next) => {
     // Verify current password
     const isMatch = await comparePassword(currentPassword, user.password_hash);
     if (!isMatch) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         error: 'Current password is incorrect.'
       });
@@ -467,7 +926,11 @@ const changePassword = async (req, res, next) => {
 
 module.exports = {
   register,
+  verifyRegisterOtp,
+  resendRegisterOtp,
   login,
+  verifyLoginOtp,
+  resendLoginOtp,
   logout,
   getMe,
   forgotPassword,

@@ -23,6 +23,10 @@ router.use(protect);
 router.get('/conversations', messageController.getConversations);
 router.get('/unread-count', messageController.getUnreadMessagesCount);
 
+// Specific message actions (declared before /:username parameter)
+router.put('/msg/:id/edit', messageController.editMessage);
+router.delete('/msg/:id', messageController.deleteMessage);
+
 // Parameterized routes
 router.get('/:username', messageController.getMessages);
 router.post('/:username', messageController.sendMessage);

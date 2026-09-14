@@ -28,18 +28,18 @@ const toggleLike = async (req, res, next) => {
       });
     }
 
-    // 1. Verify post exists
+    // 1. Verify post exists and is active
     const postCheck = await query(
       `SELECT p.id, p.user_id, COALESCE(u.notif_likes, true) AS notif_likes 
        FROM posts p 
        JOIN users u ON p.user_id = u.id 
-       WHERE p.id = $1 LIMIT 1`,
+       WHERE p.id = $1 AND p.is_active = TRUE LIMIT 1`,
       [postId]
     );
     if (postCheck.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Post does not exist.'
+        error: 'Post does not exist or has been removed.'
       });
     }
 
@@ -186,19 +186,19 @@ const addComment = async (req, res, next) => {
       });
     }
 
-    // 1. Verify post exists and fetch author's privacy permissions and notification settings
+    // 1. Verify post exists, is active, and fetch author's privacy permissions and notification settings
     const postCheck = await query(
       `SELECT p.id, p.user_id, u.allow_comments_from, COALESCE(u.notif_comments, true) AS notif_comments 
        FROM posts p 
        JOIN users u ON p.user_id = u.id 
-       WHERE p.id = $1 LIMIT 1`,
+       WHERE p.id = $1 AND p.is_active = TRUE LIMIT 1`,
       [postId]
     );
 
     if (postCheck.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Post does not exist.'
+        error: 'Post does not exist or has been removed.'
       });
     }
 

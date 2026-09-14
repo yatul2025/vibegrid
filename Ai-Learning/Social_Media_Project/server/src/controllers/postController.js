@@ -13,6 +13,7 @@
 const path = require('path');
 const fs = require('fs');
 const { query } = require('../config/db');
+const { saveUploadedMedia, deleteUploadedMedia } = require('../utils/mediaStorage');
 
 /**
  * Create a new photo post
@@ -43,8 +44,8 @@ const createPost = async (req, res, next) => {
       cleanCaption = caption.trim().slice(0, 2200);
     }
 
-    // 3. Construct public image URL
-    const imageUrl = `/uploads/posts/${req.file.filename}`;
+    // 3. Persist file in database & local storage (serverless-safe)
+    const { url: imageUrl } = await saveUploadedMedia(req.file, 'posts', userId);
 
     // 4. Insert post into PostgreSQL
     const insertQuery = `
@@ -151,13 +152,14 @@ const getFeedPosts = async (req, res, next) => {
         END AS is_saved
       FROM posts p
       JOIN users u ON p.user_id = u.id
-      WHERE (
-        u.is_private = FALSE
-        OR ($1::int IS NOT NULL AND (
-          p.user_id = $1::int
-          OR EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = $1::int AND f.following_id = p.user_id)
-        ))
-      )
+      WHERE p.is_active = TRUE
+        AND (
+          u.is_private = FALSE
+          OR ($1::int IS NOT NULL AND (
+            p.user_id = $1::int
+            OR EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = $1::int AND f.following_id = p.user_id)
+          ))
+        )
       ORDER BY p.created_at DESC
       LIMIT 50
     `;
@@ -230,6 +232,8 @@ const getUserPosts = async (req, res, next) => {
         p.image_url,
         p.caption,
         p.created_at,
+        p.is_active,
+        p.moderation_reason,
         u.username,
         u.avatar_url,
         (SELECT COUNT(*)::int FROM likes l WHERE l.post_id = p.id) AS likes_count,
@@ -247,6 +251,7 @@ const getUserPosts = async (req, res, next) => {
       FROM posts p
       JOIN users u ON p.user_id = u.id
       WHERE LOWER(u.username) = $1
+        AND (p.is_active = TRUE OR ($2::int IS NOT NULL AND p.user_id = $2::int))
       ORDER BY p.created_at DESC
     `;
     const result = await query(userPostsQuery, [cleanUsername, currentUserId]);
@@ -304,15 +309,10 @@ const deletePost = async (req, res, next) => {
     // 2. Delete database record (cascades to likes and comments)
     await query('DELETE FROM posts WHERE id = $1', [postId]);
 
-    // 3. Attempt to delete physical file from disk
+    // 3. Remove media file from storage (DB & local cache)
     if (post.image_url && post.image_url.startsWith('/uploads/posts/')) {
       const filename = path.basename(post.image_url);
-      const filePath = path.join(__dirname, '../../uploads/posts', filename);
-      if (fs.existsSync(filePath)) {
-        fs.unlink(filePath, (err) => {
-          if (err) console.warn('[File Deletion Warning]', err.message);
-        });
-      }
+      deleteUploadedMedia(filename, 'posts').catch(() => {});
     }
 
     res.status(200).json({
@@ -357,6 +357,7 @@ const getExplorePosts = async (req, res, next) => {
         END AS is_saved
       FROM posts p
       JOIN users u ON p.user_id = u.id
+      WHERE p.is_active = TRUE AND u.is_private = FALSE
       ORDER BY likes_count DESC, p.created_at DESC
       LIMIT 60
     `;
@@ -391,12 +392,12 @@ const toggleSavePost = async (req, res, next) => {
       });
     }
 
-    // 1. Verify post exists
-    const postCheck = await query('SELECT id FROM posts WHERE id = $1 LIMIT 1', [postId]);
+    // 1. Verify post exists and is active
+    const postCheck = await query('SELECT id FROM posts WHERE id = $1 AND is_active = TRUE LIMIT 1', [postId]);
     if (postCheck.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Post not found.'
+        error: 'Post not found or has been removed.'
       });
     }
 
@@ -457,7 +458,7 @@ const getSavedPosts = async (req, res, next) => {
       FROM saved_posts sp
       JOIN posts p ON sp.post_id = p.id
       JOIN users u ON p.user_id = u.id
-      WHERE sp.user_id = $1
+      WHERE sp.user_id = $1 AND p.is_active = TRUE
       ORDER BY sp.created_at DESC
     `;
     const result = await query(savedQuery, [userId]);
@@ -475,6 +476,62 @@ const getSavedPosts = async (req, res, next) => {
   }
 };
 
+/**
+ * Moderate a post (toggle active/inactive status and set moderation reason)
+ * Route: PATCH /api/posts/:id/moderate
+ */
+const moderatePost = async (req, res, next) => {
+  try {
+    const postId = parseInt(req.params.id, 10);
+    const callerId = req.user.id;
+    const { isActive = false, reason = 'Prohibited or adult content' } = req.body;
+
+    if (isNaN(postId)) {
+      return res.status(400).json({ success: false, error: 'Invalid post ID.' });
+    }
+
+    // Check caller authorization: User IDs 1..4 or test=1 or admin
+    const userRes = await query('SELECT id, COALESCE(test, 0) AS test FROM users WHERE id = $1 LIMIT 1', [callerId]);
+    const isAuthorized = [1, 2, 3, 4].includes(Number(callerId)) || Number(userRes.rows[0]?.test) === 1;
+
+    if (!isAuthorized) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized. Only administrators and moderators can moderate posts.'
+      });
+    }
+
+    // Check post exists
+    const postCheck = await query('SELECT id, user_id, is_active FROM posts WHERE id = $1 LIMIT 1', [postId]);
+    if (postCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Post not found.' });
+    }
+
+    const activeBool = Boolean(isActive);
+    const deactivatedAt = activeBool ? null : new Date();
+    const modReason = activeBool ? null : (reason ? String(reason).trim().substring(0, 100) : 'Prohibited or adult content');
+
+    const updateRes = await query(
+      `UPDATE posts 
+       SET is_active = $1, moderation_reason = $2, deactivated_at = $3 
+       WHERE id = $4 
+       RETURNING id, user_id, is_active, moderation_reason, deactivated_at, created_at`,
+      [activeBool, modReason, deactivatedAt, postId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: activeBool ? 'Post has been restored and is now active.' : 'Post has been deactivated and hidden from all feeds.',
+      data: {
+        post: updateRes.rows[0]
+      }
+    });
+  } catch (error) {
+    console.error('[Moderate Post Error]', error);
+    next(error);
+  }
+};
+
 module.exports = {
   createPost,
   getFeedPosts,
@@ -482,6 +539,7 @@ module.exports = {
   deletePost,
   getExplorePosts,
   toggleSavePost,
-  getSavedPosts
+  getSavedPosts,
+  moderatePost
 };
 

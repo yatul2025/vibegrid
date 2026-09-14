@@ -71,10 +71,18 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Login handler
-  const login = async (identifier, password) => {
+  const login = async (identifier, password, isDemoAccess = false) => {
     setError(null);
     try {
-      const res = await apiClient.post('/auth/login', { identifier, password });
+      const res = await apiClient.post('/auth/login', { identifier, password, isDemoAccess });
+      if (res.success && res.data?.step === 'otp_required') {
+        return {
+          step: 'otp_required',
+          loginToken: res.data.loginToken,
+          maskedEmail: res.data.maskedEmail,
+          debugOtp: res.data.debugOtp
+        };
+      }
       if (res.success && res.data?.user) {
         setUser(res.data.user);
         try {
@@ -89,11 +97,51 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Register handler
+  // Verify Login OTP handler (2FA)
+  const verifyLoginOtp = async (loginToken, otpCode) => {
+    setError(null);
+    try {
+      const res = await apiClient.post('/auth/verify-login-otp', { loginToken, otpCode });
+      if (res.success && res.data?.user) {
+        setUser(res.data.user);
+        try {
+          localStorage.setItem('vibegrid_user', JSON.stringify(res.data.user));
+        } catch {}
+        return { success: true, user: res.data.user };
+      }
+      throw new Error(res.error || 'Verification failed.');
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  };
+
+  // Resend Login OTP handler
+  const resendLoginOtp = async (loginToken) => {
+    try {
+      const res = await apiClient.post('/auth/resend-login-otp', { loginToken });
+      if (res.success) {
+        return res.data;
+      }
+      throw new Error(res.error || 'Failed to resend OTP.');
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  // Register handler (Step 1)
   const register = async (formData) => {
     setError(null);
     try {
       const res = await apiClient.post('/auth/register', formData);
+      if (res.success && res.data?.step === 'otp_required') {
+        return {
+          step: 'otp_required',
+          registerToken: res.data.registerToken,
+          maskedEmail: res.data.maskedEmail,
+          debugOtp: res.data.debugOtp
+        };
+      }
       if (res.success && res.data?.user) {
         setUser(res.data.user);
         try {
@@ -104,6 +152,38 @@ export const AuthProvider = ({ children }) => {
       throw new Error(res.error || 'Registration failed.');
     } catch (err) {
       setError(err.message);
+      throw err;
+    }
+  };
+
+  // Verify Register OTP handler (Step 2)
+  const verifyRegisterOtp = async (registerToken, otpCode) => {
+    setError(null);
+    try {
+      const res = await apiClient.post('/auth/verify-register-otp', { registerToken, otpCode });
+      if (res.success && res.data?.user) {
+        setUser(res.data.user);
+        try {
+          localStorage.setItem('vibegrid_user', JSON.stringify(res.data.user));
+        } catch {}
+        return { success: true, user: res.data.user };
+      }
+      throw new Error(res.error || 'Registration verification failed.');
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  };
+
+  // Resend Register OTP handler
+  const resendRegisterOtp = async (registerToken) => {
+    try {
+      const res = await apiClient.post('/auth/resend-register-otp', { registerToken });
+      if (res.success) {
+        return res.data;
+      }
+      throw new Error(res.error || 'Failed to resend verification code.');
+    } catch (err) {
       throw err;
     }
   };
@@ -142,7 +222,11 @@ export const AuthProvider = ({ children }) => {
     error,
     isAuthenticated: !!user,
     login,
+    verifyLoginOtp,
+    resendLoginOtp,
     register,
+    verifyRegisterOtp,
+    resendRegisterOtp,
     logout,
     checkAuth,
     updateUser

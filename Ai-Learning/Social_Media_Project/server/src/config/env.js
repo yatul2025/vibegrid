@@ -28,6 +28,10 @@ const config = {
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
     name: process.env.DB_NAME || 'vibegrid_db'
+  },
+  email: {
+    user: (process.env.EMAIL_USER || '').trim(),
+    pass: (process.env.EMAIL_PASS || '').replace(/\s+/g, '')
   }
 };
 

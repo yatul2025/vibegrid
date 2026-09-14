@@ -13,6 +13,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
+import ConfirmModal from './ConfirmModal';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 
 function formatTimeAgo(dateString) {
@@ -43,6 +44,8 @@ export default function CommentsModal({
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState(null);
   const commentsEndRef = useRef(null);
 
@@ -106,19 +109,27 @@ export default function CommentsModal({
     }
   };
 
-  // Delete a comment
-  const handleDeleteComment = async (commentId) => {
-    if (!window.confirm('Delete this comment?')) return;
+  // Delete a comment - Opens modern confirm modal
+  const handleDeleteComment = (commentId) => {
+    setCommentToDelete(commentId);
+  };
+
+  const handleConfirmDeleteComment = async () => {
+    if (!commentToDelete) return;
     try {
-      const res = await apiClient.delete(`/posts/comments/${commentId}`);
+      setIsDeleting(true);
+      const res = await apiClient.delete(`/posts/comments/${commentToDelete}`);
       if (res.success) {
-        setComments((prev) => prev.filter((c) => c.id !== commentId));
+        setComments((prev) => prev.filter((c) => c.id !== commentToDelete));
         if (onCommentCountChange) {
           onCommentCountChange(post.id, res.data.comments_count);
         }
+        setCommentToDelete(null);
       }
     } catch (err) {
       alert(err.message || 'Error deleting comment.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -289,6 +300,19 @@ export default function CommentsModal({
           </div>
         </div>
       </div>
+
+      {/* Modern Confirm Comment Deletion */}
+      <ConfirmModal
+        isOpen={!!commentToDelete}
+        title="Delete Comment?"
+        description="Are you sure you want to delete this comment? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDeleteComment}
+        onClose={() => setCommentToDelete(null)}
+      />
     </div>
   );
 }

@@ -13,6 +13,8 @@ const config = require('../config/env');
 const { query } = require('../config/db');
 const { COOKIE_NAME } = require('../utils/jwt');
 
+const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+
 const protect = async (req, res, next) => {
   try {
     // 1. Extract token from HTTP-Only cookie
@@ -45,8 +47,8 @@ const protect = async (req, res, next) => {
     // 3. Fetch current user from PostgreSQL database to ensure account still exists
     const userResult = await query(
       `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
-              date_of_birth, is_email_verified, is_phone_verified, is_private, is_deactivated, 
-              token_version, created_at 
+              date_of_birth, gender, is_email_verified, is_phone_verified, is_private, is_deactivated, 
+              COALESCE(test, 0) AS test, token_version, created_at 
        FROM users 
        WHERE id = $1 
        LIMIT 1`,
@@ -107,8 +109,9 @@ const protect = async (req, res, next) => {
       user.sessionId = decoded.sessionId;
     }
 
-    // 6. Exclude token_version from req.user payload
+    // 6. Exclude token_version from req.user payload and attach demo session flag
     delete user.token_version;
+    user.is_demo_session = !!decoded.isDemoAccess || DEMO_USERNAMES.includes((user.username || '').toLowerCase());
     req.user = user;
     next();
   } catch (error) {
@@ -147,6 +150,7 @@ const optionalAuth = async (req, res, next) => {
             user.sessionId = decoded.sessionId;
           }
           delete user.token_version;
+          user.is_demo_session = !!decoded.isDemoAccess || DEMO_USERNAMES.includes((user.username || '').toLowerCase());
           req.user = user;
         }
       }

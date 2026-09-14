@@ -17,7 +17,11 @@ import apiClient from '../api/client';
 import CommentsModal from '../components/CommentsModal';
 import FollowListModal from '../components/FollowListModal';
 import HashtagFeedModal from '../components/HashtagFeedModal';
+import ConfirmModal from '../components/ConfirmModal';
+import PasswordToggleButton from '../components/PasswordToggleIcon';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
+
+const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
 export default function ProfilePage({
   targetUsername,
@@ -27,6 +31,12 @@ export default function ProfilePage({
   onOpenSettings
 }) {
   const { user: currentUser, updateUser, logout } = useAuth();
+
+  const isDemoUser = Boolean(
+    currentUser?.is_demo_session ||
+    DEMO_USERNAMES.includes((currentUser?.username || '').toLowerCase()) ||
+    DEMO_USERNAMES.includes((targetUsername || '').toLowerCase())
+  );
 
   // Determine which username to display (defaults to logged-in user)
   const usernameToFetch = targetUsername || currentUser?.username;
@@ -56,6 +66,7 @@ export default function ProfilePage({
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [avatarError, setAvatarError] = useState(null);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
   const fileInputRef = useRef(null);
 
   // Email Management State (Phase 3)
@@ -209,7 +220,7 @@ export default function ProfilePage({
         setEditBio(res.data.profile.bio || '');
         setEditWebsite(res.data.profile.website || '');
         setEditLocation(res.data.profile.location || '');
-        setEditDob(res.data.profile.date_of_birth ? res.data.profile.date_of_birth.split('T')[0] : '');
+        setEditDob(res.data.profile.date_of_birth ? String(res.data.profile.date_of_birth).split('T')[0] : '');
       } else {
         setError(res.error || 'Failed to load profile.');
       }
@@ -261,21 +272,29 @@ export default function ProfilePage({
     }
   }, [usernameToFetch, currentUser?.username]);
 
-  // Handle post deletion from profile
-  const handleDeletePost = async (postId) => {
-    if (!window.confirm('Are you sure you want to delete this post?')) return;
-    try {
-      const res = await apiClient.delete(`/posts/${postId}`);
-      if (res.success) {
-        setUserPosts((prev) => prev.filter((p) => p.id !== postId));
-        setStats((prev) => ({ ...prev, posts: Math.max(0, prev.posts - 1) }));
-        setSelectedPost(null);
-      } else {
-        alert(res.error || 'Failed to delete post.');
+  // Handle post deletion from profile - Opens modern confirmation modal
+  const handleDeletePost = (postId) => {
+    setConfirmAction({
+      title: 'Delete Post?',
+      description: 'Are you sure you want to permanently delete this post? This action cannot be undone.',
+      confirmText: 'Delete',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          const res = await apiClient.delete(`/posts/${postId}`);
+          if (res.success) {
+            setUserPosts((prev) => prev.filter((p) => p.id !== postId));
+            setStats((prev) => ({ ...prev, posts: Math.max(0, prev.posts - 1) }));
+            setSelectedPost(null);
+            setConfirmAction(null);
+          } else {
+            alert(res.error || 'Failed to delete post.');
+          }
+        } catch (err) {
+          alert(err.message || 'Error deleting post.');
+        }
       }
-    } catch (err) {
-      alert(err.message || 'Error deleting post.');
-    }
+    });
   };
 
   // Handle like toggle inside profile post modal
@@ -403,6 +422,10 @@ export default function ProfilePage({
   // Handle Profile Update (Username, Full Name, Bio, Website, Location, DOB)
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    if (isDemoUser) {
+      setProfileMsg({ type: 'error', text: '🔒 Profile details cannot be modified on official demo accounts.' });
+      return;
+    }
     setSavingProfile(true);
     setProfileMsg(null);
 
@@ -415,6 +438,12 @@ export default function ProfilePage({
 
     if (!cleanUsername || cleanUsername.length < 3 || cleanUsername.length > 30) {
       setProfileMsg({ type: 'error', text: 'Username must be between 3 and 30 characters.' });
+      setSavingProfile(false);
+      return;
+    }
+
+    if (currentUser?.is_demo_session && cleanUsername !== currentUser.username.toLowerCase()) {
+      setProfileMsg({ type: 'error', text: 'Username cannot be modified in demo access mode. Please log in using your account password.' });
       setSavingProfile(false);
       return;
     }
@@ -473,7 +502,7 @@ export default function ProfilePage({
         setEditBio(updated.bio || '');
         setEditWebsite(updated.website || '');
         setEditLocation(updated.location || '');
-        setEditDob(updated.date_of_birth ? updated.date_of_birth.split('T')[0] : '');
+        setEditDob(updated.date_of_birth ? String(updated.date_of_birth).split('T')[0] : '');
 
         // Sync with global AuthContext
         updateUser(updated);
@@ -495,26 +524,38 @@ export default function ProfilePage({
     }
   };
 
-  // Handle Avatar Removal (Revert to default)
-  const handleRemoveAvatar = async () => {
-    if (!window.confirm('Are you sure you want to remove your profile picture?')) return;
-    try {
-      setRemovingAvatar(true);
-      setAvatarError(null);
-      const res = await apiClient.delete('/users/avatar');
-      if (res.success && res.data?.user) {
-        setProfile((prev) => ({ ...prev, avatar_url: res.data.user.avatar_url }));
-        setAvatarPreview(null);
-        updateUser({ avatar_url: res.data.user.avatar_url });
-        setProfileMsg({ type: 'success', text: 'Profile picture removed.' });
-      } else {
-        setAvatarError(res.error || 'Failed to remove avatar.');
-      }
-    } catch (err) {
-      setAvatarError(err.message || 'Error removing avatar.');
-    } finally {
-      setRemovingAvatar(false);
+  // Handle Avatar Removal (Revert to default) - Opens modern confirmation modal
+  const handleRemoveAvatar = () => {
+    if (isDemoUser) {
+      setAvatarError('🔒 Profile photo cannot be removed on official demo accounts.');
+      return;
     }
+    setConfirmAction({
+      title: 'Remove Profile Picture?',
+      description: 'Your profile picture will be removed and reset to your default gender avatar.',
+      confirmText: 'Remove Photo',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          setRemovingAvatar(true);
+          setAvatarError(null);
+          const res = await apiClient.delete('/users/avatar');
+          if (res.success && res.data?.user) {
+            setProfile((prev) => ({ ...prev, avatar_url: res.data.user.avatar_url }));
+            setAvatarPreview(null);
+            updateUser({ avatar_url: res.data.user.avatar_url });
+            setProfileMsg({ type: 'success', text: 'Profile picture removed.' });
+            setConfirmAction(null);
+          } else {
+            setAvatarError(res.error || 'Failed to remove avatar.');
+          }
+        } catch (err) {
+          setAvatarError(err.message || 'Error removing avatar.');
+        } finally {
+          setRemovingAvatar(false);
+        }
+      }
+    });
   };
 
   // Handle Email OTP Request (Verify current email or change to new email)
@@ -743,6 +784,11 @@ export default function ProfilePage({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (isDemoUser) {
+      setAvatarError('🔒 Profile photo cannot be changed on official demo accounts.');
+      return;
+    }
+
     // Validate size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
       setAvatarError('Image is too large. Maximum allowed size is 2MB.');
@@ -906,38 +952,55 @@ export default function ProfilePage({
     }
   };
 
-  // Log out all other sessions
-  const handleLogoutOthers = async () => {
-    if (!window.confirm('Are you sure you want to log out of all other devices?')) return;
-    try {
-      setLoggingOutOthers(true);
-      const res = await apiClient.post('/users/security/sessions/logout-others');
-      if (res.success) {
-        setSessions((prev) => prev.filter((s) => s.is_current));
-        setProfileMsg({ type: 'success', text: res.message || 'Logged out of all other devices.' });
-      } else {
-        setProfileMsg({ type: 'error', text: res.error || 'Failed to log out of other devices.' });
+  // Log out all other sessions - Opens modern confirm modal
+  const handleLogoutOthers = () => {
+    setConfirmAction({
+      title: 'Log Out Other Sessions?',
+      description: 'Are you sure you want to log out of all other devices?',
+      confirmText: 'Log Out Others',
+      variant: 'warning',
+      onConfirm: async () => {
+        try {
+          setLoggingOutOthers(true);
+          const res = await apiClient.post('/users/security/sessions/logout-others');
+          if (res.success) {
+            setSessions((prev) => prev.filter((s) => s.is_current));
+            setProfileMsg({ type: 'success', text: res.message || 'Logged out of all other devices.' });
+            setConfirmAction(null);
+          } else {
+            setProfileMsg({ type: 'error', text: res.error || 'Failed to log out of other devices.' });
+          }
+        } catch (err) {
+          setProfileMsg({ type: 'error', text: err.message || 'Failed to log out of other devices.' });
+        } finally {
+          setLoggingOutOthers(false);
+        }
       }
-    } catch (err) {
-      setProfileMsg({ type: 'error', text: err.message || 'Failed to log out of other devices.' });
-    } finally {
-      setLoggingOutOthers(false);
-    }
+    });
   };
 
-  // Log out all devices (including current one)
-  const handleLogoutAll = async () => {
-    if (!window.confirm('Are you sure you want to log out of ALL devices including this one? You will need to log in again.')) return;
-    try {
-      setLoggingOutAll(true);
-      const res = await apiClient.post('/users/security/sessions/logout-all');
-      if (res.success) {
-        logout();
+  // Log out all devices (including current one) - Opens modern confirm modal
+  const handleLogoutAll = () => {
+    setConfirmAction({
+      title: 'Log Out All Devices?',
+      description: 'Are you sure you want to log out of ALL devices including this one? You will need to log in again.',
+      confirmText: 'Log Out All',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          setLoggingOutAll(true);
+          const res = await apiClient.post('/users/security/sessions/logout-all');
+          if (res.success) {
+            setConfirmAction(null);
+            logout();
+          }
+        } catch (err) {
+          setProfileMsg({ type: 'error', text: err.message || 'Failed to log out of all devices.' });
+        } finally {
+          setLoggingOutAll(false);
+        }
       }
-    } catch (err) {
-      setProfileMsg({ type: 'error', text: err.message || 'Failed to log out of all devices.' });
-      setLoggingOutAll(false);
-    }
+    });
   };
 
   // Load privacy settings when editing is opened
@@ -1166,14 +1229,20 @@ export default function ProfilePage({
             <button
               type="button"
               className="profile-avatar-camera-badge"
-              title="Change or remove profile picture"
-              onClick={() => setShowAvatarModal(true)}
-              disabled={uploadingAvatar || removingAvatar}
+              title={isDemoUser ? 'Profile photo is locked on demo accounts' : 'Change or remove profile picture'}
+              onClick={() => {
+                if (isDemoUser) {
+                  setAvatarError('🔒 Profile photo cannot be changed on official demo accounts.');
+                  return;
+                }
+                setShowAvatarModal(true);
+              }}
+              disabled={uploadingAvatar || removingAvatar || isDemoUser}
             >
               {uploadingAvatar || removingAvatar ? (
                 <span className="badge-spinner" />
               ) : (
-                <span className="badge-camera-icon">📷</span>
+                <span className="badge-camera-icon">{isDemoUser ? '🔒' : '📷'}</span>
               )}
             </button>
           )}
@@ -1203,9 +1272,17 @@ export default function ProfilePage({
                   <button
                     type="button"
                     className="btn-profile-primary"
-                    onClick={() => setIsEditing(!isEditing)}
+                    onClick={() => {
+                      if (isDemoUser) {
+                        setAvatarError('🔒 Profile editing is locked on official demo accounts.');
+                        return;
+                      }
+                      setIsEditing(!isEditing);
+                    }}
+                    disabled={isDemoUser}
+                    title={isDemoUser ? 'Official demo accounts are read-only' : undefined}
                   >
-                    ✏️ {isEditing ? 'Cancel' : 'Edit Profile'}
+                    {isDemoUser ? '🔒 Profile Locked' : (isEditing ? 'Cancel' : '✏️ Edit Profile')}
                   </button>
                   <button
                     type="button"
@@ -1353,43 +1430,62 @@ export default function ProfilePage({
           ) : (
             /* Inline Edit Profile Form */
             <form onSubmit={handleSaveProfile} className="profile-edit-form">
+              {isDemoUser && (
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  marginBottom: '16px',
+                  color: '#f87171',
+                  fontSize: '13px'
+                }}>
+                  🔒 Profile details are locked on official demo accounts.
+                </div>
+              )}
               <div className="edit-form-field">
                 <div className="field-header-row">
                   <label htmlFor="editUsername">Username</label>
-                  <span className="char-counter">@{editUsername}</span>
+                  <span className="char-counter">@{editUsername || ''}</span>
                 </div>
                 <input
                   type="text"
                   id="editUsername"
                   maxLength={30}
                   placeholder="username"
-                  value={editUsername}
+                  value={editUsername || ''}
                   onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30))}
                   required
+                  disabled={savingProfile || isDemoUser}
                 />
-                <span className="field-hint">3–30 characters, letters, numbers, and underscores only.</span>
+                <span className="field-hint" style={{ color: isDemoUser ? '#f87171' : undefined }}>
+                  {isDemoUser
+                    ? '🔒 Username cannot be modified on official demo accounts.'
+                    : '3–30 characters, letters, numbers, and underscores only.'}
+                </span>
               </div>
 
               <div className="edit-form-field">
                 <div className="field-header-row">
                   <label htmlFor="editFullName">Full Name</label>
-                  <span className="char-counter">{editFullName.length}/100</span>
+                  <span className="char-counter">{(editFullName || '').length}/100</span>
                 </div>
                 <input
                   type="text"
                   id="editFullName"
                   maxLength={100}
                   placeholder="Your full name"
-                  value={editFullName}
+                  value={editFullName || ''}
                   onChange={(e) => setEditFullName(e.target.value.slice(0, 100))}
+                  disabled={savingProfile || isDemoUser}
                 />
               </div>
 
               <div className="edit-form-field">
                 <div className="field-header-row">
                   <label htmlFor="editBio">Bio</label>
-                  <span className={`char-counter ${150 - editBio.length <= 15 ? 'warning' : ''}`}>
-                    {editBio.length}/150 ({Math.max(0, 150 - editBio.length)} left)
+                  <span className={`char-counter ${150 - (editBio || '').length <= 15 ? 'warning' : ''}`}>
+                    {(editBio || '').length}/150 ({Math.max(0, 150 - (editBio || '').length)} left)
                   </span>
                 </div>
                 <textarea
@@ -1397,7 +1493,8 @@ export default function ProfilePage({
                   maxLength={150}
                   rows={3}
                   placeholder="Share a short bio (max 150 characters)..."
-                  value={editBio}
+                  value={editBio || ''}
+                  disabled={savingProfile || isDemoUser}
                   onChange={(e) => {
                     const text = e.target.value;
                     // Strict clamp to 150 characters
@@ -1438,23 +1535,25 @@ export default function ProfilePage({
                     id="editWebsite"
                     maxLength={255}
                     placeholder="https://example.com"
-                    value={editWebsite}
+                    value={editWebsite || ''}
                     onChange={(e) => setEditWebsite(e.target.value)}
+                    disabled={savingProfile || isDemoUser}
                   />
                 </div>
 
                 <div className="edit-form-field" style={{ flex: 1 }}>
                   <div className="field-header-row">
                     <label htmlFor="editLocation">Location</label>
-                    <span className="char-counter">{editLocation.length}/100</span>
+                    <span className="char-counter">{(editLocation || '').length}/100</span>
                   </div>
                   <input
                     type="text"
                     id="editLocation"
                     maxLength={100}
                     placeholder="City, Country"
-                    value={editLocation}
+                    value={editLocation || ''}
                     onChange={(e) => setEditLocation(e.target.value.slice(0, 100))}
+                    disabled={savingProfile || isDemoUser}
                   />
                 </div>
               </div>
@@ -1466,9 +1565,10 @@ export default function ProfilePage({
                 <input
                   type="date"
                   id="editDob"
-                  value={editDob}
+                  value={editDob || ''}
                   max={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setEditDob(e.target.value)}
+                  disabled={savingProfile || isDemoUser}
                 />
               </div>
 
@@ -1491,20 +1591,20 @@ export default function ProfilePage({
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={savingProfile || editBio.length > 150 || editFullName.length > 100 || !editUsername.trim()}
+                  disabled={savingProfile || (editBio || '').length > 150 || (editFullName || '').length > 100 || !(editUsername || '').trim() || isDemoUser}
                 >
-                  {savingProfile ? 'Saving...' : 'Save Changes'}
+                  {isDemoUser ? '🔒 Profile Locked (Demo)' : (savingProfile ? 'Saving...' : 'Save Changes')}
                 </button>
                 <button
                   type="button"
                   className="btn-secondary"
                   onClick={() => {
-                    setEditUsername(profile.username || '');
-                    setEditFullName(profile.full_name || '');
-                    setEditBio(profile.bio || '');
-                    setEditWebsite(profile.website || '');
-                    setEditLocation(profile.location || '');
-                    setEditDob(profile.date_of_birth ? profile.date_of_birth.split('T')[0] : '');
+                    setEditUsername(profile?.username || '');
+                    setEditFullName(profile?.full_name || '');
+                    setEditBio(profile?.bio || '');
+                    setEditWebsite(profile?.website || '');
+                    setEditLocation(profile?.location || '');
+                    setEditDob(profile?.date_of_birth ? String(profile.date_of_birth).split('T')[0] : '');
                     setIsEditing(false);
                   }}
                 >
@@ -1815,15 +1915,10 @@ export default function ProfilePage({
                     required
                     autoFocus
                   />
-                  <button
-                    type="button"
-                    className="password-toggle-btn"
-                    onClick={() => setShowDeactivatePassword(!showDeactivatePassword)}
-                    tabIndex="-1"
-                    title={showDeactivatePassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showDeactivatePassword ? '👁️' : '👁️‍🗨️'}
-                  </button>
+                  <PasswordToggleButton
+                    isVisible={showDeactivatePassword}
+                    onToggle={() => setShowDeactivatePassword(!showDeactivatePassword)}
+                  />
                 </div>
               </div>
 
@@ -1899,15 +1994,10 @@ export default function ProfilePage({
                     disabled={deletingAccount}
                     required
                   />
-                  <button
-                    type="button"
-                    className="password-toggle-btn"
-                    onClick={() => setShowDeletePassword(!showDeletePassword)}
-                    tabIndex="-1"
-                    title={showDeletePassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showDeletePassword ? '👁️' : '👁️‍🗨️'}
-                  </button>
+                  <PasswordToggleButton
+                    isVisible={showDeletePassword}
+                    onToggle={() => setShowDeletePassword(!showDeletePassword)}
+                  />
                 </div>
               </div>
 
@@ -1961,22 +2051,33 @@ export default function ProfilePage({
                 type="button"
                 className="avatar-modal-btn btn-photo-upload"
                 onClick={() => {
+                  if (isDemoUser) {
+                    setAvatarError('🔒 Profile photo cannot be changed on official demo accounts.');
+                    setShowAvatarModal(false);
+                    return;
+                  }
                   setShowAvatarModal(false);
                   fileInputRef.current?.click();
                 }}
+                disabled={isDemoUser}
               >
                 <span>📸</span> Upload New Photo
               </button>
 
-              {profile.avatar_url && !profile.avatar_url.includes('default-avatar.png') && (
+              {profile.avatar_url && !profile.avatar_url.includes('default-') && (
                 <button
                   type="button"
                   className="avatar-modal-btn btn-photo-remove"
                   onClick={() => {
+                    if (isDemoUser) {
+                      setAvatarError('🔒 Profile photo cannot be removed on official demo accounts.');
+                      setShowAvatarModal(false);
+                      return;
+                    }
                     setShowAvatarModal(false);
                     handleRemoveAvatar();
                   }}
-                  disabled={removingAvatar}
+                  disabled={removingAvatar || isDemoUser}
                 >
                   <span>🗑️</span> Remove Current Photo
                 </button>
@@ -1992,6 +2093,21 @@ export default function ProfilePage({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modern Market-Level Confirmation Modal */}
+      {confirmAction && (
+        <ConfirmModal
+          isOpen={true}
+          title={confirmAction.title}
+          description={confirmAction.description}
+          confirmText={confirmAction.confirmText || 'Confirm'}
+          cancelText="Cancel"
+          variant={confirmAction.variant || 'danger'}
+          isLoading={confirmAction.isLoading || false}
+          onConfirm={confirmAction.onConfirm}
+          onClose={() => setConfirmAction(null)}
+        />
       )}
     </div>
   );

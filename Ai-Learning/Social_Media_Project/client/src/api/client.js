@@ -50,6 +50,19 @@ export const apiClient = {
     return handleResponse(res, endpoint);
   },
 
+  async patch(endpoint, body) {
+    const isFormData = body instanceof FormData;
+    const headers = isFormData ? {} : { 'Content-Type': 'application/json' };
+
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers,
+      body: isFormData ? body : JSON.stringify(body)
+    });
+    return handleResponse(res, endpoint);
+  },
+
   async delete(endpoint, body) {
     const isFormData = body instanceof FormData;
     const headers = body ? (isFormData ? {} : { 'Content-Type': 'application/json' }) : {};
@@ -76,8 +89,12 @@ async function handleResponse(res, endpoint = '') {
   if (!res.ok) {
     // If a protected session request returns 401 (excluding initial login/register credential checks),
     // broadcast session expiration event for immediate UI synchronization.
+    // NOTE: In-app password verifications (e.g., updating email, phone, or password in settings)
+    // should NOT invalidate the session if the user mistypes their password.
     const isAuthAttempt = endpoint === '/auth/login' || endpoint === '/auth/register';
-    if (res.status === 401 && !isAuthAttempt && typeof window !== 'undefined') {
+    const isPasswordError = Boolean(data?.error && /password/i.test(data.error));
+
+    if (res.status === 401 && !isAuthAttempt && !isPasswordError && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('vibegrid:session-expired', {
         detail: { endpoint, status: 401 }
       }));

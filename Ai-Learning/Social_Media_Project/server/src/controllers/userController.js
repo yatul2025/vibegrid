@@ -11,6 +11,18 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const { query } = require('../config/db');
 const { generateToken, setAuthCookie } = require('../utils/jwt');
+const { sendEmailChangeOtpEmail } = require('../utils/mailer');
+const { getDefaultAvatar, isDefaultAvatar } = require('../utils/avatar');
+const { saveUploadedMedia, deleteUploadedMedia } = require('../utils/mediaStorage');
+const path = require('path');
+
+const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
+
+const isDemoUser = (user) => {
+  if (!user) return false;
+  if (user.is_demo_session) return true;
+  return DEMO_USERNAMES.includes((user.username || '').toLowerCase());
+};
 
 /**
  * Fetch a user's public profile and social statistics
@@ -23,8 +35,8 @@ const getProfile = async (req, res, next) => {
 
     // 1. Fetch user record from PostgreSQL with extended profile fields
     const userResult = await query(
-      `SELECT id, username, email, phone_number, full_name, bio, avatar_url, website, location, date_of_birth, 
-              is_email_verified, is_phone_verified, is_private, is_deactivated, created_at 
+      `SELECT id, username, email, phone_number, full_name, bio, avatar_url, website, location, date_of_birth, gender, 
+              is_email_verified, is_phone_verified, is_private, is_deactivated, COALESCE(test, 0) AS test, created_at 
        FROM users 
        WHERE username = $1 
        LIMIT 1`,
@@ -51,7 +63,7 @@ const getProfile = async (req, res, next) => {
 
     // 2. Fetch statistics (Post count, Followers count, Following count)
     const [postsCountRes, followersCountRes, followingCountRes] = await Promise.all([
-      query('SELECT COUNT(*)::int as count FROM posts WHERE user_id = $1', [profile.id]),
+      query('SELECT COUNT(*)::int as count FROM posts WHERE user_id = $1 AND is_active = TRUE', [profile.id]),
       query('SELECT COUNT(*)::int as count FROM follows WHERE following_id = $1', [profile.id]),
       query('SELECT COUNT(*)::int as count FROM follows WHERE follower_id = $1', [profile.id])
     ]);
@@ -101,8 +113,15 @@ const getProfile = async (req, res, next) => {
  */
 const updateProfile = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Profile updates are disabled for demo accounts. Please create a personal account to customize your profile.'
+      });
+    }
+
     const userId = req.user.id;
-    const { fullName, bio, website, location, dateOfBirth, username } = req.body;
+    const { fullName, bio, website, location, dateOfBirth, username, gender } = req.body;
 
     // Check if username change requested
     let newUsername = req.user.username;
@@ -129,6 +148,17 @@ const updateProfile = async (req, res, next) => {
     const cleanLocation = location !== undefined && location !== null ? (location.trim().slice(0, 100) || null) : (req.user.location || null);
     const cleanDob = dateOfBirth !== undefined && dateOfBirth !== null ? (dateOfBirth.trim() || null) : (req.user.date_of_birth || null);
 
+    // Gender handling & default avatar update
+    const validGenders = ['male', 'female', 'other', 'unspecified'];
+    const cleanGender = (gender && validGenders.includes(gender.trim().toLowerCase()))
+      ? gender.trim().toLowerCase()
+      : (req.user.gender || 'unspecified');
+
+    let newAvatarUrl = req.user.avatar_url;
+    if (isDefaultAvatar(req.user.avatar_url)) {
+      newAvatarUrl = getDefaultAvatar(cleanGender);
+    }
+
     // Normalize website URL if provided (e.g., 'example.com' -> 'https://example.com')
     let formattedWebsite = null;
     if (website !== undefined && website !== null && website.trim() !== '') {
@@ -143,9 +173,9 @@ const updateProfile = async (req, res, next) => {
     // Parameterized update query
     const updateQuery = `
       UPDATE users 
-      SET username = $1, full_name = $2, bio = $3, website = $4, location = $5, date_of_birth = $6, updated_at = CURRENT_TIMESTAMP 
-      WHERE id = $7 
-      RETURNING id, username, email, full_name, bio, avatar_url, website, location, date_of_birth, token_version, created_at
+      SET username = $1, full_name = $2, bio = $3, website = $4, location = $5, date_of_birth = $6, gender = $7, avatar_url = $8, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = $9 
+      RETURNING id, username, email, full_name, bio, avatar_url, website, location, date_of_birth, gender, COALESCE(test, 0) AS test, token_version, created_at
     `;
     const result = await query(updateQuery, [
       newUsername,
@@ -154,6 +184,8 @@ const updateProfile = async (req, res, next) => {
       formattedWebsite,
       cleanLocation,
       cleanDob,
+      cleanGender,
+      newAvatarUrl,
       userId
     ]);
 
@@ -190,6 +222,13 @@ const updateProfile = async (req, res, next) => {
  */
 const uploadAvatar = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Profile photo cannot be changed on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
 
     if (!req.file) {
@@ -199,15 +238,15 @@ const uploadAvatar = async (req, res, next) => {
       });
     }
 
-    // Public URL path accessible by the frontend
-    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    // Persist file in database & local storage (serverless-safe)
+    const { url: avatarUrl } = await saveUploadedMedia(req.file, 'avatars', userId);
 
     // Update avatar in PostgreSQL
     const updateQuery = `
       UPDATE users 
       SET avatar_url = $1, updated_at = CURRENT_TIMESTAMP 
       WHERE id = $2 
-      RETURNING id, username, email, full_name, bio, avatar_url
+      RETURNING id, username, email, full_name, bio, avatar_url, gender
     `;
     const result = await query(updateQuery, [avatarUrl, userId]);
 
@@ -215,7 +254,8 @@ const uploadAvatar = async (req, res, next) => {
       success: true,
       message: 'Profile picture updated successfully!',
       data: {
-        user: result.rows[0]
+        user: result.rows[0],
+        avatar_url: avatarUrl
       }
     });
   } catch (error) {
@@ -328,31 +368,33 @@ const getSuggestedUsers = async (req, res, next) => {
  */
 const removeAvatar = async (req, res, next) => {
   try {
-    const userId = req.user.id;
-    const defaultAvatar = '/uploads/avatars/default-avatar.png';
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Profile photo cannot be removed on demo accounts.'
+      });
+    }
 
-    // Fetch existing avatar to check if an uploaded file should be removed
-    const userRes = await query('SELECT avatar_url FROM users WHERE id = $1', [userId]);
+    const userId = req.user.id;
+
+    // Fetch existing avatar & gender to check if an uploaded file should be removed and assign gender default avatar
+    const userRes = await query('SELECT avatar_url, gender FROM users WHERE id = $1', [userId]);
     const currentAvatar = userRes.rows[0]?.avatar_url;
+    const userGender = userRes.rows[0]?.gender || req.user?.gender || 'unspecified';
+    const defaultAvatar = getDefaultAvatar(userGender);
 
     const result = await query(
       `UPDATE users 
        SET avatar_url = $1, updated_at = CURRENT_TIMESTAMP 
        WHERE id = $2 
-       RETURNING id, username, email, full_name, bio, avatar_url, website, location, date_of_birth`,
+       RETURNING id, username, email, full_name, bio, avatar_url, website, location, date_of_birth, gender`,
       [defaultAvatar, userId]
     );
 
-    // Delete local disk file if it exists and is an uploaded avatar
+    // Delete old avatar from media storage (DB & local cache) if it was an uploaded file
     if (currentAvatar && currentAvatar.startsWith('/uploads/avatars/avatar-')) {
-      const fs = require('fs');
-      const path = require('path');
-      const filePath = path.join(__dirname, '../../', currentAvatar);
-      fs.unlink(filePath, (err) => {
-        if (err && err.code !== 'ENOENT') {
-          console.warn('[Avatar Delete File Warning]', err.message);
-        }
-      });
+      const oldFilename = path.basename(currentAvatar);
+      deleteUploadedMedia(oldFilename, 'avatars').catch(() => {});
     }
 
     res.status(200).json({
@@ -374,6 +416,13 @@ const removeAvatar = async (req, res, next) => {
  */
 const sendEmailOtp = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Email address cannot be modified on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const { newEmail, currentPassword } = req.body;
 
@@ -403,15 +452,36 @@ const sendEmailOtp = async (req, res, next) => {
       }
 
       // 2. Re-authenticate: Check current password before allowing email change
-      const userRes = await query('SELECT password_hash FROM users WHERE id = $1 LIMIT 1', [userId]);
+      const userRes = await query('SELECT password_hash, COALESCE(test, 0) AS test FROM users WHERE id = $1 LIMIT 1', [userId]);
       if (userRes.rows.length === 0) {
         return res.status(404).json({ success: false, error: 'User account not found.' });
       }
       const isPasswordValid = await bcrypt.compare(currentPassword, userRes.rows[0].password_hash);
       if (!isPasswordValid) {
-        return res.status(401).json({
+        return res.status(400).json({
           success: false,
           error: 'Incorrect current password. Password is required to authorize an email change.'
+        });
+      }
+
+      // Test profiles (IDs 1, 2, 3, 4 or test=1) bypass OTP - update directly after password verification
+      const isTestProfile = [1, 2, 3, 4].includes(Number(userId)) || Number(userRes.rows[0].test) === 1;
+      if (isTestProfile) {
+        const updateRes = await query(
+          `UPDATE users 
+           SET email = $1, is_email_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $2 
+           RETURNING id, username, email, full_name, bio, avatar_url, website, location, 
+                     date_of_birth, gender, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
+          [cleanNewEmail, userId]
+        );
+        return res.status(200).json({
+          success: true,
+          updatedDirectly: true,
+          message: 'Email address updated successfully!',
+          data: {
+            user: updateRes.rows[0]
+          }
         });
       }
 
@@ -424,6 +494,28 @@ const sendEmailOtp = async (req, res, next) => {
           error: 'Your email address is already verified.'
         });
       }
+
+      const testRes = await query('SELECT COALESCE(test, 0) AS test FROM users WHERE id = $1 LIMIT 1', [userId]);
+      const isTestProfile = [1, 2, 3, 4].includes(Number(userId)) || Number(testRes.rows[0]?.test) === 1;
+      if (isTestProfile) {
+        const updateRes = await query(
+          `UPDATE users 
+           SET is_email_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $1 
+           RETURNING id, username, email, full_name, bio, avatar_url, website, location, 
+                     date_of_birth, gender, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
+          [userId]
+        );
+        return res.status(200).json({
+          success: true,
+          updatedDirectly: true,
+          message: 'Email address verified successfully!',
+          data: {
+            user: updateRes.rows[0]
+          }
+        });
+      }
+
       targetEmail = req.user.email.toLowerCase();
     }
 
@@ -458,6 +550,9 @@ const sendEmailOtp = async (req, res, next) => {
       [userId, type, targetEmail, otpCode, expiresAt]
     );
 
+    // 7. Dispatch real verification email via Gmail SMTP
+    await sendEmailChangeOtpEmail(targetEmail, otpCode);
+
     console.log(`\n========================================`);
     console.log(`[VIBEGRID EMAIL OTP ASSISTANCE]`);
     console.log(`User: @${req.user.username} (ID: ${userId})`);
@@ -489,6 +584,13 @@ const sendEmailOtp = async (req, res, next) => {
  */
 const verifyEmailOtp = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user) && req.body.newEmail) {
+      return res.status(403).json({
+        success: false,
+        error: 'Email address cannot be modified on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const { otp, newEmail } = req.body;
     const cleanOtp = String(otp).trim();
@@ -568,7 +670,7 @@ const verifyEmailOtp = async (req, res, next) => {
          SET email = $1, is_email_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
          WHERE id = $2 
          RETURNING id, username, email, full_name, bio, avatar_url, website, location, 
-                   date_of_birth, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
+                   date_of_birth, gender, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
         [targetEmail, userId]
       );
       updatedUser = updateRes.rows[0];
@@ -579,7 +681,7 @@ const verifyEmailOtp = async (req, res, next) => {
          SET is_email_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
          WHERE id = $1 
          RETURNING id, username, email, full_name, bio, avatar_url, website, location, 
-                   date_of_birth, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
+                   date_of_birth, gender, is_email_verified, is_phone_verified, is_private, token_version, created_at`,
         [userId]
       );
       updatedUser = updateRes.rows[0];
@@ -613,6 +715,13 @@ const verifyEmailOtp = async (req, res, next) => {
  */
 const sendPhoneOtp = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Phone number cannot be modified on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const { phoneNumber, currentPassword } = req.body;
     const cleanPhone = String(phoneNumber).trim().replace(/[\s\-()]/g, '');
@@ -638,15 +747,36 @@ const sendPhoneOtp = async (req, res, next) => {
     }
 
     // 3. Re-authenticate: Check current password before dispatching OTP
-    const userRes = await query('SELECT password_hash FROM users WHERE id = $1 LIMIT 1', [userId]);
+    const userRes = await query('SELECT password_hash, COALESCE(test, 0) AS test FROM users WHERE id = $1 LIMIT 1', [userId]);
     if (userRes.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'User account not found.' });
     }
     const isPasswordValid = await bcrypt.compare(currentPassword, userRes.rows[0].password_hash);
     if (!isPasswordValid) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         error: 'Incorrect current password. Password is required to authorize phone verification.'
+      });
+    }
+
+    // Test profiles (IDs 1, 2, 3, 4 or test=1) bypass OTP - update directly after password verification
+    const isTestProfile = [1, 2, 3, 4].includes(Number(userId)) || Number(userRes.rows[0].test) === 1;
+    if (isTestProfile) {
+      const updateRes = await query(
+        `UPDATE users 
+         SET phone_number = $1, is_phone_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $2 
+         RETURNING id, username, email, phone_number, full_name, bio, avatar_url, website, 
+                   location, date_of_birth, gender, is_email_verified, is_phone_verified, is_private, created_at`,
+        [cleanPhone, userId]
+      );
+      return res.status(200).json({
+        success: true,
+        updatedDirectly: true,
+        message: 'Phone number updated successfully!',
+        data: {
+          user: updateRes.rows[0]
+        }
       });
     }
 
@@ -711,6 +841,13 @@ const sendPhoneOtp = async (req, res, next) => {
  */
 const verifyPhoneOtp = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Phone number cannot be modified on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const { phoneNumber, otp } = req.body;
     const cleanPhone = String(phoneNumber).trim().replace(/[\s\-()]/g, '');
@@ -785,7 +922,7 @@ const verifyPhoneOtp = async (req, res, next) => {
        SET phone_number = $1, is_phone_verified = TRUE, updated_at = CURRENT_TIMESTAMP 
        WHERE id = $2 
        RETURNING id, username, email, phone_number, full_name, bio, avatar_url, website, 
-                 location, date_of_birth, is_email_verified, is_phone_verified, is_private, created_at`,
+                 location, date_of_birth, gender, is_email_verified, is_phone_verified, is_private, created_at`,
       [cleanPhone, userId]
     );
 
@@ -808,6 +945,13 @@ const verifyPhoneOtp = async (req, res, next) => {
  */
 const removePhoneNumber = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Phone number cannot be modified on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const { currentPassword } = req.body;
 
@@ -818,7 +962,7 @@ const removePhoneNumber = async (req, res, next) => {
     }
     const isPasswordValid = await bcrypt.compare(currentPassword, userRes.rows[0].password_hash);
     if (!isPasswordValid) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         error: 'Incorrect password. Password is required to authorize phone number removal.'
       });
@@ -830,7 +974,7 @@ const removePhoneNumber = async (req, res, next) => {
        SET phone_number = NULL, is_phone_verified = FALSE, updated_at = CURRENT_TIMESTAMP 
        WHERE id = $1 
        RETURNING id, username, email, phone_number, full_name, bio, avatar_url, website, 
-                 location, date_of_birth, is_email_verified, is_phone_verified, is_private, created_at`,
+                 location, date_of_birth, gender, is_email_verified, is_phone_verified, is_private, created_at`,
       [userId]
     );
 
@@ -859,6 +1003,13 @@ const removePhoneNumber = async (req, res, next) => {
  */
 const changePassword = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Password cannot be modified on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const { currentPassword, newPassword, logoutOtherDevices = true } = req.body;
 
@@ -976,6 +1127,13 @@ const getActiveSessions = async (req, res, next) => {
  */
 const revokeSession = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Managing login sessions is disabled on official demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const sessionIdToRevoke = parseInt(req.params.id, 10);
 
@@ -1022,6 +1180,13 @@ const revokeSession = async (req, res, next) => {
  */
 const logoutOtherSessions = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Managing login sessions is disabled on official demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const currentSessionId = req.user.sessionId;
 
@@ -1056,6 +1221,13 @@ const logoutOtherSessions = async (req, res, next) => {
  */
 const logoutAllSessions = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Managing login sessions is disabled on official demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const { clearAuthCookie } = require('../utils/jwt');
 
@@ -1089,7 +1261,8 @@ const getPrivacySettings = async (req, res, next) => {
     const userId = req.user.id;
     const result = await query(
       `SELECT is_private, allow_messages_from, allow_comments_from, allow_mentions_from,
-              allow_tags_from, show_online_status, show_read_receipts, story_visibility
+              allow_tags_from, allow_calls_from, allow_group_add_from,
+              show_online_status, show_read_receipts, story_visibility
        FROM users
        WHERE id = $1
        LIMIT 1`,
@@ -1118,6 +1291,13 @@ const getPrivacySettings = async (req, res, next) => {
  */
 const updatePrivacySettings = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Privacy settings cannot be modified on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const {
       is_private,
@@ -1125,6 +1305,8 @@ const updatePrivacySettings = async (req, res, next) => {
       allow_comments_from,
       allow_mentions_from,
       allow_tags_from,
+      allow_calls_from,
+      allow_group_add_from,
       show_online_status,
       show_read_receipts,
       story_visibility
@@ -1133,7 +1315,8 @@ const updatePrivacySettings = async (req, res, next) => {
     // Fetch existing settings
     const currentRes = await query(
       `SELECT is_private, allow_messages_from, allow_comments_from, allow_mentions_from,
-              allow_tags_from, show_online_status, show_read_receipts, story_visibility
+              allow_tags_from, allow_calls_from, allow_group_add_from,
+              show_online_status, show_read_receipts, story_visibility
        FROM users
        WHERE id = $1
        LIMIT 1`,
@@ -1151,6 +1334,8 @@ const updatePrivacySettings = async (req, res, next) => {
     const updatedComments = allow_comments_from || current.allow_comments_from;
     const updatedMentions = allow_mentions_from || current.allow_mentions_from;
     const updatedTags = allow_tags_from || current.allow_tags_from;
+    const updatedCalls = allow_calls_from || current.allow_calls_from;
+    const updatedGroupAdd = allow_group_add_from || current.allow_group_add_from;
     const updatedOnline = show_online_status !== undefined ? show_online_status : current.show_online_status;
     const updatedReceipts = show_read_receipts !== undefined ? show_read_receipts : current.show_read_receipts;
     const updatedStories = story_visibility || current.story_visibility;
@@ -1162,19 +1347,24 @@ const updatePrivacySettings = async (req, res, next) => {
            allow_comments_from = $3,
            allow_mentions_from = $4,
            allow_tags_from = $5,
-           show_online_status = $6,
-           show_read_receipts = $7,
-           story_visibility = $8,
+           allow_calls_from = $6,
+           allow_group_add_from = $7,
+           show_online_status = $8,
+           show_read_receipts = $9,
+           story_visibility = $10,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9
+       WHERE id = $11
        RETURNING is_private, allow_messages_from, allow_comments_from, allow_mentions_from,
-                 allow_tags_from, show_online_status, show_read_receipts, story_visibility`,
+                 allow_tags_from, allow_calls_from, allow_group_add_from,
+                 show_online_status, show_read_receipts, story_visibility`,
       [
         updatedPrivate,
         updatedMessages,
         updatedComments,
         updatedMentions,
         updatedTags,
+        updatedCalls,
+        updatedGroupAdd,
         updatedOnline,
         updatedReceipts,
         updatedStories,
@@ -1233,6 +1423,13 @@ const getNotificationSettings = async (req, res, next) => {
  */
 const updateNotificationSettings = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Notification preferences cannot be modified on demo accounts.'
+      });
+    }
+
     const userId = req.user.id;
     const {
       notif_likes,
@@ -1320,6 +1517,13 @@ const updateNotificationSettings = async (req, res, next) => {
  */
 const deactivateAccount = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Demo accounts cannot be deactivated.'
+      });
+    }
+
     const userId = req.user.id;
     const { password, reason } = req.body;
 
@@ -1336,7 +1540,7 @@ const deactivateAccount = async (req, res, next) => {
     const { comparePassword } = require('../utils/password');
     const isValid = await comparePassword(password, userRes.rows[0].password_hash);
     if (!isValid) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         error: 'Incorrect password. Account was not deactivated.'
       });
@@ -1376,6 +1580,13 @@ const deactivateAccount = async (req, res, next) => {
  */
 const deleteAccount = async (req, res, next) => {
   try {
+    if (isDemoUser(req.user)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Demo accounts cannot be deleted.'
+      });
+    }
+
     const userId = req.user.id;
     const { password, confirmation } = req.body;
 
@@ -1403,7 +1614,7 @@ const deleteAccount = async (req, res, next) => {
     const { comparePassword } = require('../utils/password');
     const isValid = await comparePassword(password, user.password_hash);
     if (!isValid) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         error: 'Incorrect password. Account was not deleted.'
       });

@@ -1,0 +1,228 @@
+/**
+ * client/src/components/VoiceRecorder.jsx
+ * =======================================
+ * Audio Voice Note Recorder Component
+ * 
+ * Uses HTML5 MediaRecorder to capture microphone audio, tracks recording duration,
+ * and passes the recorded Blob for client-side E2EE encryption and upload.
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
+
+export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    let stream = null;
+
+    async function startRecording() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // Safely determine supported audio container / codec for browser compatibility (iOS Safari vs Chrome)
+        let mimeType = 'audio/webm';
+        if (typeof MediaRecorder.isTypeSupported === 'function') {
+          if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+            mimeType = 'audio/webm;codecs=opus';
+          } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+            mimeType = 'audio/webm';
+          } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+            mimeType = 'audio/mp4';
+          } else if (MediaRecorder.isTypeSupported('audio/aac')) {
+            mimeType = 'audio/aac';
+          } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+            mimeType = 'audio/ogg';
+          }
+        }
+
+        const options = mimeType ? { mimeType } : undefined;
+        let mediaRecorder;
+        try {
+          mediaRecorder = options ? new MediaRecorder(stream, options) : new MediaRecorder(stream);
+        } catch (e) {
+          mediaRecorder = new MediaRecorder(stream);
+        }
+
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          const finalMime = mediaRecorder.mimeType || mimeType || 'audio/webm';
+          const audioBlob = new Blob(audioChunksRef.current, { type: finalMime });
+          if (onAudioRecorded && audioBlob.size > 0) {
+            onAudioRecorded(audioBlob, recordSeconds, finalMime);
+          }
+          // Clean up microphone stream
+          stream.getTracks().forEach((track) => track.stop());
+        };
+
+        mediaRecorder.start(200);
+        setIsRecording(true);
+
+        timerRef.current = setInterval(() => {
+          setRecordSeconds((prev) => prev + 1);
+        }, 1000);
+      } catch (err) {
+        console.error('Microphone access denied:', err);
+        alert('Could not access microphone for voice note.');
+        if (onCancel) onCancel();
+      }
+    }
+
+    startRecording();
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {}
+      }
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
+
+  const handleStopAndSend = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (timerRef.current) clearInterval(timerRef.current);
+    setIsRecording(false);
+  };
+
+  const handleCancel = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    audioChunksRef.current = [];
+    if (onCancel) onCancel();
+  };
+
+  const formatTimer = (totalSecs) => {
+    const mins = Math.floor(totalSecs / 60).toString().padStart(2, '0');
+    const secs = (totalSecs % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
+  };
+
+  return (
+    <div className="voice-recorder-bar">
+      <div className="voice-recorder-status">
+        <span className="rec-pulse-dot"></span>
+        <span className="rec-timer-label">{formatTimer(recordSeconds)}</span>
+        <span className="rec-hint">Recording voice note...</span>
+      </div>
+
+      <div className="voice-recorder-actions">
+        <button
+          type="button"
+          className="btn-rec-action btn-rec-cancel"
+          onClick={handleCancel}
+          title="Cancel Recording"
+        >
+          🗑️
+        </button>
+
+        <button
+          type="button"
+          className="btn-rec-action btn-rec-send"
+          onClick={handleStopAndSend}
+          title="Send Voice Note"
+        >
+          ➤
+        </button>
+      </div>
+
+      <style>{`
+        .voice-recorder-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          width: 100%;
+          padding: 8px 16px;
+          background: rgba(239, 68, 68, 0.08);
+          border: 1px solid rgba(239, 68, 68, 0.25);
+          border-radius: 24px;
+          animation: fadeIn 0.2s ease-in;
+        }
+
+        .voice-recorder-status {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .rec-pulse-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: #ef4444;
+          animation: recPulse 1.2s infinite ease-in-out;
+        }
+
+        @keyframes recPulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.4); opacity: 0.4; }
+        }
+
+        .rec-timer-label {
+          font-family: monospace;
+          font-weight: 700;
+          font-size: 0.95rem;
+          color: #ef4444;
+        }
+
+        .rec-hint {
+          font-size: 0.8rem;
+          color: var(--text-secondary, #64748b);
+        }
+
+        .voice-recorder-actions {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .btn-rec-action {
+          width: 34px;
+          height: 34px;
+          border-radius: 50%;
+          border: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          font-size: 14px;
+          transition: transform 0.15s ease;
+        }
+
+        .btn-rec-cancel {
+          background: var(--bg-hover, #e2e8f0);
+          color: #64748b;
+        }
+
+        .btn-rec-send {
+          background: #6366f1;
+          color: #ffffff;
+        }
+
+        .btn-rec-action:hover {
+          transform: scale(1.1);
+        }
+      `}</style>
+    </div>
+  );
+}

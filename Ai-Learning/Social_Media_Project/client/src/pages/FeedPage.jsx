@@ -21,6 +21,8 @@ import CreateStoryModal from '../components/CreateStoryModal';
 import StoryViewerModal from '../components/StoryViewerModal';
 import HashtagFeedModal from '../components/HashtagFeedModal';
 import FeedSidebar from '../components/FeedSidebar';
+import ConfirmModal from '../components/ConfirmModal';
+import HidePostModal from '../components/HidePostModal';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 
 // Relative time formatting helper (e.g., "Just now", "5m ago", "2h ago")
@@ -47,6 +49,9 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [moderatingId, setModeratingId] = useState(null);
+  const [postToDelete, setPostToDelete] = useState(null);
+  const [postToHide, setPostToHide] = useState(null);
 
   // Engagement States
   const [activeCommentPost, setActiveCommentPost] = useState(null);
@@ -246,20 +251,25 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
     }
   };
 
-  // Handle post deletion (Author only)
-  const handleDeletePost = async (postId) => {
-    if (!window.confirm('Are you sure you want to delete this post? This cannot be undone.')) {
-      return;
-    }
+  // Handle post deletion (Author only) - Opens modern confirmation modal
+  const handleDeletePost = (postId) => {
+    setPostToDelete(postId);
+  };
+
+  const handleConfirmDeletePost = async () => {
+    if (!postToDelete) return;
 
     try {
-      setDeletingId(postId);
-      const res = await apiClient.delete(`/posts/${postId}`);
+      setDeletingId(postToDelete);
+      const res = await apiClient.delete(`/posts/${postToDelete}`);
       if (res.success) {
-        setPosts((prev) => prev.filter((p) => p.id !== postId));
-        if (activeCommentPost && activeCommentPost.id === postId) {
+        setPosts((prev) => prev.filter((p) => p.id !== postToDelete));
+        if (activeCommentPost && activeCommentPost.id === postToDelete) {
           setActiveCommentPost(null);
         }
+        setPostToDelete(null);
+        setReactionToast({ customText: '🗑️ Post deleted successfully' });
+        setTimeout(() => setReactionToast(null), 3000);
       } else {
         alert(res.error || 'Failed to delete post.');
       }
@@ -267,6 +277,38 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
       alert(err.message || 'Error deleting post.');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  // Handle hiding a post via content moderation (Admin / Test accounts) - Opens modern bottom-sheet
+  const handleModeratePost = (postId) => {
+    setPostToHide(postId);
+  };
+
+  const handleConfirmHidePost = async (reason) => {
+    if (!postToHide) return;
+
+    try {
+      setModeratingId(postToHide);
+      const res = await apiClient.patch(`/posts/${postToHide}/moderate`, {
+        isActive: false,
+        reason: reason || 'Adult content'
+      });
+      if (res.success) {
+        setPosts((prev) => prev.filter((p) => p.id !== postToHide));
+        if (activeCommentPost && activeCommentPost.id === postToHide) {
+          setActiveCommentPost(null);
+        }
+        setPostToHide(null);
+        setReactionToast({ customText: '🛡️ Post hidden from feeds successfully!' });
+        setTimeout(() => setReactionToast(null), 3000);
+      } else {
+        alert(res.error || 'Failed to hide post.');
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to hide post.');
+    } finally {
+      setModeratingId(null);
     }
   };
 
@@ -590,18 +632,46 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     </div>
                   </div>
 
-                {/* Delete button (Author only) */}
-                {user && user.id === post.user_id && (
-                  <button
-                    type="button"
-                    className="post-delete-btn"
-                    onClick={() => handleDeletePost(post.id)}
-                    disabled={deletingId === post.id}
-                    title="Delete post"
-                  >
-                    {deletingId === post.id ? '⏳' : '🗑️'}
-                  </button>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {/* Moderate / Hide post button (Admins & Test Profiles) */}
+                  {user && ([1, 2, 3, 4].includes(Number(user.id)) || Number(user.test) === 1) && (
+                    <button
+                      type="button"
+                      className="post-moderate-btn"
+                      onClick={() => handleModeratePost(post.id)}
+                      disabled={moderatingId === post.id}
+                      title="Hide Post (Content Moderation)"
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.12)',
+                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        color: '#ef4444',
+                        borderRadius: '6px',
+                        padding: '4px 8px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      {moderatingId === post.id ? '⏳' : '🛡️ Hide Post'}
+                    </button>
+                  )}
+
+                  {/* Delete button (Author only) */}
+                  {user && user.id === post.user_id && (
+                    <button
+                      type="button"
+                      className="post-delete-btn"
+                      onClick={() => handleDeletePost(post.id)}
+                      disabled={deletingId === post.id}
+                      title="Delete post"
+                    >
+                      {deletingId === post.id ? '⏳' : '🗑️'}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Card Media: Photo with Double-Tap Support */}
@@ -797,6 +867,27 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
         onClose={() => setActiveHashtag(null)}
         onNavigateToProfile={onNavigateToProfile}
         onHashtagClick={(tag) => setActiveHashtag(tag)}
+      />
+
+      {/* Modern Confirm Post Deletion Modal */}
+      <ConfirmModal
+        isOpen={!!postToDelete}
+        title="Delete Post?"
+        description="Are you sure you want to delete this post? This action is permanent and cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={deletingId === postToDelete}
+        onConfirm={handleConfirmDeletePost}
+        onClose={() => setPostToDelete(null)}
+      />
+
+      {/* Modern Content Moderation / Hide Post Sheet */}
+      <HidePostModal
+        isOpen={!!postToHide}
+        isLoading={moderatingId === postToHide}
+        onConfirm={handleConfirmHidePost}
+        onClose={() => setPostToHide(null)}
       />
     </div>
   );

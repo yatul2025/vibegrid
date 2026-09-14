@@ -15,11 +15,13 @@ CREATE TABLE IF NOT EXISTS users (
     website VARCHAR(255),
     location VARCHAR(100),
     date_of_birth DATE,
+    gender VARCHAR(20) DEFAULT 'unspecified',
     phone_number VARCHAR(20) UNIQUE,
     is_email_verified BOOLEAN DEFAULT TRUE,
     is_phone_verified BOOLEAN DEFAULT FALSE,
     is_deactivated BOOLEAN DEFAULT FALSE,
     deactivated_at TIMESTAMP WITH TIME ZONE,
+    test INTEGER DEFAULT 0,
     -- Privacy Settings
     is_private BOOLEAN DEFAULT FALSE,
     allow_messages_from VARCHAR(20) DEFAULT 'everyone',
@@ -49,10 +51,14 @@ CREATE TABLE IF NOT EXISTS posts (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     image_url TEXT NOT NULL,
     caption TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    moderation_reason VARCHAR(100) DEFAULT NULL,
+    deactivated_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_is_active ON posts(is_active);
 
 -- 3. Likes Table (Compound Unique key prevents duplicate likes)
 CREATE TABLE IF NOT EXISTS likes (
@@ -110,14 +116,35 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created
 -- 8. Messages Table (Direct Messaging & Private Chat)
 CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
+    conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
     sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sender_device_id VARCHAR(64),
     content TEXT NOT NULL,
+    ciphertext TEXT,
+    iv_nonce TEXT,
+    message_type VARCHAR(20) DEFAULT 'text',
+    reply_to_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
     is_read BOOLEAN DEFAULT FALSE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    is_forwarded BOOLEAN DEFAULT FALSE,
+    edited_at TIMESTAMP WITH TIME ZONE,
+    expires_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(sender_id, recipient_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_recipient_unread ON messages(recipient_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_messages_reply_to ON messages(reply_to_id);
+
+-- 8b. Message Deletions Table (Per-user "Delete for me")
+CREATE TABLE IF NOT EXISTS message_deletions (
+    id SERIAL PRIMARY KEY,
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    deleted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(message_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_message_deletions_user ON message_deletions(user_id, message_id);
 
 -- 9. Saved Posts Table (Phase 12 - Bookmarks & Private Collections)
 CREATE TABLE IF NOT EXISTS saved_posts (
@@ -190,4 +217,30 @@ CREATE TABLE IF NOT EXISTS account_verifications (
 );
 CREATE INDEX IF NOT EXISTS idx_account_verifications_user_id ON account_verifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_account_verifications_target ON account_verifications(type, target_value);
+
+-- 14. Media Files Table (Serverless & Cloud Upload Storage)
+CREATE TABLE IF NOT EXISTS media_files (
+    id VARCHAR(255) PRIMARY KEY,
+    folder VARCHAR(50) NOT NULL,
+    mime_type VARCHAR(100) NOT NULL,
+    data BYTEA NOT NULL,
+    size INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_media_files_folder ON media_files(folder);
+
+-- 15. WebRTC Call Signals (Serverless Real-Time Fallback)
+CREATE TABLE IF NOT EXISTS call_signals (
+    id SERIAL PRIMARY KEY,
+    call_id UUID NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
+    from_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    to_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    signal_type VARCHAR(30) NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_call_signals_poll ON call_signals(call_id, to_user_id, id);
+CREATE INDEX IF NOT EXISTS idx_call_signals_created ON call_signals(created_at);
+
+
 

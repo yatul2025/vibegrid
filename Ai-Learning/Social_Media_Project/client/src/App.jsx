@@ -10,6 +10,10 @@ import CreatePostModal from './components/CreatePostModal';
 import NotificationsModal from './components/NotificationsModal';
 import MessagesPage from './pages/MessagesPage';
 import SettingsPage from './pages/SettingsPage';
+import ErrorBoundary from './components/ErrorBoundary';
+import CallModal from './components/CallModal';
+import socketService from './services/socketService';
+import e2eeService from './services/crypto/e2eeService';
 
 function AppContent() {
   const { user, loading, logout } = useAuth();
@@ -29,6 +33,19 @@ function AppContent() {
     return localStorage.getItem('vibegrid_theme') || 'light';
   });
   const [settingsSection, setSettingsSection] = useState('profile');
+
+  // "System Status" is strictly visible ONLY to user IDs 1, 2, 3, 4 (test profiles with test = 1). All other users cannot see it.
+  const isTestUser = Boolean(
+    user && [1, 2, 3, 4].includes(Number(user.id)) && (Number(user.test) === 1 || user.test === undefined || user.test === 1)
+  );
+
+  // If user is on 'status' tab but is not a test user, redirect to 'feed'
+  useEffect(() => {
+    if (currentTab === 'status' && !isTestUser && !loading) {
+      setCurrentTab('feed');
+      sessionStorage.setItem('vibegrid_active_tab', 'feed');
+    }
+  }, [currentTab, isTestUser, loading]);
 
   // Open Settings helper
   const openSettings = (section = 'profile') => {
@@ -76,6 +93,11 @@ function AppContent() {
         }
         return prev;
       });
+
+      // Connect real-time socket and initialize E2EE crypto identity
+      socketService.connect();
+      e2eeService.initDeviceKeys(user.id);
+
       fetchUnreadCount();
       fetchUnreadMessagesCount();
       const notifTimer = setInterval(fetchUnreadCount, 20000);
@@ -85,6 +107,7 @@ function AppContent() {
         clearInterval(msgTimer);
       };
     } else {
+      socketService.disconnect();
       setCurrentTab('auth');
       try {
         sessionStorage.removeItem('vibegrid_active_tab');
@@ -310,12 +333,14 @@ function AppContent() {
             </>
           )}
 
-          <button
-            className={`nav-tab-btn ${currentTab === 'status' ? 'active' : ''}`}
-            onClick={() => setCurrentTab('status')}
-          >
-            📊 System Status
-          </button>
+          {isTestUser && (
+            <button
+              className={`nav-tab-btn ${currentTab === 'status' ? 'active' : ''}`}
+              onClick={() => setCurrentTab('status')}
+            >
+              📊 System Status
+            </button>
+          )}
 
           {!user && (
             <button
@@ -411,54 +436,66 @@ function AppContent() {
 
       {/* Main Content Area */}
       <main className={`main-content ${user ? 'has-bottom-nav' : ''}`}>
-        {currentTab === 'status' && <StatusDashboard />}
-        {currentTab === 'auth' && <AuthPage />}
-        {currentTab === 'feed' && (
-          <FeedPage
-            key={feedRefreshKey}
-            onOpenCreatePost={() => setIsCreatePostOpen(true)}
-            onNavigateToProfile={(username) => navigateToProfile(username)}
-          />
-        )}
-        {currentTab === 'explore' && (
-          <ExplorePage
-            onNavigateToProfile={(username) => navigateToProfile(username)}
-          />
-        )}
-        {currentTab === 'messages' && (
-          <MessagesPage
-            initialTargetUsername={directMessageTarget}
-            onNavigateToProfile={(username) => navigateToProfile(username)}
-            onUnreadCountChange={fetchUnreadMessagesCount}
-          />
-        )}
-        {currentTab === 'profile' && (
-          user ? (
-            <ProfilePage
-              key={viewedUsername || user.username}
-              targetUsername={viewedUsername}
+        <ErrorBoundary>
+          {currentTab === 'status' && (
+            isTestUser ? (
+              <StatusDashboard />
+            ) : (
+              <FeedPage
+                key={feedRefreshKey}
+                onOpenCreatePost={() => setIsCreatePostOpen(true)}
+                onNavigateToProfile={(username) => navigateToProfile(username)}
+              />
+            )
+          )}
+          {currentTab === 'auth' && <AuthPage />}
+          {currentTab === 'feed' && (
+            <FeedPage
+              key={feedRefreshKey}
               onOpenCreatePost={() => setIsCreatePostOpen(true)}
               onNavigateToProfile={(username) => navigateToProfile(username)}
-              onOpenDirectMessage={(username) => {
-                setDirectMessageTarget(username);
-                setCurrentTab('messages');
-              }}
-              onOpenSettings={openSettings}
             />
-          ) : (
-            <AuthPage />
-          )
-        )}
-        {currentTab === 'settings' && (
-          user ? (
-            <SettingsPage
-              initialSection={settingsSection}
+          )}
+          {currentTab === 'explore' && (
+            <ExplorePage
               onNavigateToProfile={(username) => navigateToProfile(username)}
             />
-          ) : (
-            <AuthPage />
-          )
-        )}
+          )}
+          {currentTab === 'messages' && (
+            <MessagesPage
+              initialTargetUsername={directMessageTarget}
+              onNavigateToProfile={(username) => navigateToProfile(username)}
+              onUnreadCountChange={fetchUnreadMessagesCount}
+            />
+          )}
+          {currentTab === 'profile' && (
+            user ? (
+              <ProfilePage
+                key={viewedUsername || user.username}
+                targetUsername={viewedUsername}
+                onOpenCreatePost={() => setIsCreatePostOpen(true)}
+                onNavigateToProfile={(username) => navigateToProfile(username)}
+                onOpenDirectMessage={(username) => {
+                  setDirectMessageTarget(username);
+                  setCurrentTab('messages');
+                }}
+                onOpenSettings={openSettings}
+              />
+            ) : (
+              <AuthPage />
+            )
+          )}
+          {currentTab === 'settings' && (
+            user ? (
+              <SettingsPage
+                initialSection={settingsSection}
+                onNavigateToProfile={(username) => navigateToProfile(username)}
+              />
+            ) : (
+              <AuthPage />
+            )
+          )}
+        </ErrorBoundary>
       </main>
 
       {/* Mobile Bottom Navigation Bar (Visible on mobile <= 768px when logged in) */}
@@ -496,15 +533,17 @@ function AppContent() {
             <span className="mobile-nav-create-icon">➕</span>
           </button>
 
-          <button
-            type="button"
-            className={`mobile-nav-item ${currentTab === 'status' ? 'active' : ''}`}
-            onClick={() => setCurrentTab('status')}
-            title="System Status"
-          >
-            <span className="mobile-nav-icon">📊</span>
-            <span className="mobile-nav-label">Status</span>
-          </button>
+          {isTestUser && (
+            <button
+              type="button"
+              className={`mobile-nav-item ${currentTab === 'status' ? 'active' : ''}`}
+              onClick={() => setCurrentTab('status')}
+              title="System Status"
+            >
+              <span className="mobile-nav-icon">📊</span>
+              <span className="mobile-nav-label">Status</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -544,6 +583,9 @@ function AppContent() {
           }
         }}
       />
+
+      {/* Global WebRTC 1-to-1 Audio/Video Call Modal */}
+      {user && <CallModal />}
     </div>
   );
 }

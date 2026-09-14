@@ -20,6 +20,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
+import ConfirmModal from './ConfirmModal';
 
 function formatTimeAgo(dateString) {
   if (!dateString) return '';
@@ -53,6 +54,7 @@ export default function StoryViewerModal({
   const [isPaused, setIsPaused] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Interactive reply & reactions states
   const [replyText, setReplyText] = useState('');
@@ -286,15 +288,21 @@ export default function StoryViewerModal({
     }
   };
 
-  // Delete current story
-  const handleDeleteStory = async () => {
+  // Open story delete confirmation modal
+  const handleDeleteClick = () => {
+    setIsPaused(true);
+    setShowDeleteModal(true);
+  };
+
+  // Confirm story deletion
+  const handleConfirmDeleteStory = async () => {
     if (!currentStory) return;
-    if (!window.confirm('Are you sure you want to delete this story?')) return;
 
     try {
       setDeleting(true);
       const res = await apiClient.delete(`/stories/${currentStory.id}`);
       if (res.success) {
+        setShowDeleteModal(false);
         if (onStoryDeleted) {
           onStoryDeleted(currentStory.id);
         }
@@ -303,20 +311,26 @@ export default function StoryViewerModal({
             setStoryIndex((prev) => Math.max(0, prev - 1));
           }
           setAnimKey((k) => k + 1);
+          setIsPaused(false);
         } else {
           if (creatorIndex < creators.length - 1) {
             setCreatorIndex((prev) => prev);
             setStoryIndex(0);
             setAnimKey((k) => k + 1);
+            setIsPaused(false);
           } else {
             onClose();
           }
         }
       } else {
-        alert(res.error || 'Failed to delete story.');
+        showToast(res.error || 'Failed to delete story.');
+        setShowDeleteModal(false);
+        setIsPaused(false);
       }
     } catch (err) {
-      alert(err.message || 'Error deleting story.');
+      showToast(err.message || 'Error deleting story.');
+      setShowDeleteModal(false);
+      setIsPaused(false);
     } finally {
       setDeleting(false);
     }
@@ -396,7 +410,14 @@ export default function StoryViewerModal({
         </div>
 
         {/* 2. Story Header (Creator Details & Controls) */}
-        <div className="story-header-row">
+        <div
+          className="story-header-row"
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="story-author-meta">
             <div className="story-viewer-avatar-wrap">
               <img
@@ -412,26 +433,43 @@ export default function StoryViewerModal({
             <div className="story-header-names">
               <div className="story-username-line">
                 <span className="story-header-username">{currentCreator.username}</span>
-                <button
-                  type="button"
-                  className={`story-cf-pill-btn ${closeFriendIds.has(currentCreator.userId) ? 'active' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onToggleCloseFriend && currentCreator) {
-                      onToggleCloseFriend(currentCreator.userId, currentCreator.username);
-                      triggerParticles('⭐');
-                    }
-                  }}
-                  title={closeFriendIds.has(currentCreator.userId) ? 'In Close Friends (Click to remove)' : 'Add to Close Friends'}
-                >
-                  ★ {closeFriendIds.has(currentCreator.userId) ? 'Close Friends' : 'Add to Close Friends'}
-                </button>
+                {!isMyStory && (
+                  <button
+                    type="button"
+                    className={`story-cf-pill-btn ${closeFriendIds.has(currentCreator.userId) ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onToggleCloseFriend && currentCreator) {
+                        onToggleCloseFriend(currentCreator.userId, currentCreator.username);
+                        triggerParticles('⭐');
+                      }
+                    }}
+                    title={closeFriendIds.has(currentCreator.userId) ? 'In Close Friends (Click to remove)' : 'Add to Close Friends'}
+                  >
+                    ★ {closeFriendIds.has(currentCreator.userId) ? 'Close Friends' : 'Add to Close Friends'}
+                  </button>
+                )}
               </div>
               <span className="story-header-time">{formatTimeAgo(currentStory.createdAt)}</span>
             </div>
           </div>
 
           <div className="story-header-actions">
+            {/* Play / Pause Toggle Button */}
+            <button
+              type="button"
+              className="story-action-btn pause-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPaused((prev) => !prev);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              title={pausedEffective ? 'Resume (Space)' : 'Pause (Space)'}
+            >
+              {pausedEffective ? '▶' : '❚❚'}
+            </button>
+
             {/* Delete button for story owner */}
             {isMyStory && (
               <button
@@ -439,17 +477,16 @@ export default function StoryViewerModal({
                 className="story-action-btn delete-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDeleteStory();
+                  handleDeleteClick();
                 }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
                 title="Delete this story"
                 disabled={deleting}
               >
                 🗑️
               </button>
             )}
-
-            {/* Pause indicator */}
-            {pausedEffective && <span className="story-paused-badge">{isTyping ? 'Replying' : 'Paused'}</span>}
 
             {/* Close button */}
             <button
@@ -459,12 +496,21 @@ export default function StoryViewerModal({
                 e.stopPropagation();
                 onClose();
               }}
-              title="Close viewer"
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              title="Close viewer (Esc)"
             >
               ✕
             </button>
           </div>
         </div>
+
+        {/* Floating Paused Notification (Non-shifting overlay) */}
+        {pausedEffective && (
+          <div className="story-paused-indicator-banner">
+            <span>{isTyping ? '💬 Replying' : '⏸️ Paused'}</span>
+          </div>
+        )}
 
         {/* 3. Story Media Display */}
         <div className="story-media-wrapper">
@@ -593,6 +639,23 @@ export default function StoryViewerModal({
             {isCurrentStoryLiked ? '❤️' : '🤍'}
           </button>
         </div>
+
+        {/* Market-level Story Delete Confirmation Modal */}
+        <ConfirmModal
+          isOpen={showDeleteModal}
+          onClose={() => {
+            setShowDeleteModal(false);
+            setIsPaused(false);
+          }}
+          onConfirm={handleConfirmDeleteStory}
+          title="Delete Story?"
+          message="Are you sure you want to delete this story? It will be removed permanently."
+          confirmText="Delete"
+          cancelText="Cancel"
+          confirmVariant="danger"
+          icon="🗑️"
+          loading={deleting}
+        />
       </div>
     </div>
   );

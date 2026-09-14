@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="maleBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="maleSkin" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbd38d"/>
+      <stop offset="100%" stop-color="#f6ad55"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="60" fill="url(#maleBg)"/>
+  <path d="M38 46 C38 28, 82 28, 82 46 C82 48, 80 50, 78 50 C76 34, 44 34, 42 50 Z" fill="#1e293b"/>
+  <circle cx="60" cy="48" r="20" fill="url(#maleSkin)"/>
+  <path d="M38 44 C38 26, 82 26, 82 44 C78 36, 68 34, 60 34 C50 34, 42 38, 38 44 Z" fill="#1e293b"/>
+  <path d="M40 40 C44 35, 52 32, 60 33 C68 34, 76 37, 80 43 C74 38, 64 36, 56 36 C48 36, 42 38, 40 40 Z" fill="#0f172a"/>
+  <circle cx="39" cy="49" r="4" fill="#f6ad55"/>
+  <circle cx="81" cy="49" r="4" fill="#f6ad55"/>
+  <path d="M52 65 L68 65 L68 76 L52 76 Z" fill="#f6ad55"/>
+  <path d="M22 108 C22 84, 40 76, 60 76 C80 76, 98 84, 98 108 Z" fill="#f8fafc"/>
+  <path d="M50 76 L60 88 L70 76 Z" fill="#e2e8f0"/>
+</svg>

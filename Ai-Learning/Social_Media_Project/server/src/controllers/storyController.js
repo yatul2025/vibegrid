@@ -12,6 +12,7 @@
 const path = require('path');
 const fs = require('fs');
 const db = require('../config/db');
+const { saveUploadedMedia, deleteUploadedMedia } = require('../utils/mediaStorage');
 
 /**
  * @desc    Publish a new story (Expires in 24 hours)
@@ -29,7 +30,8 @@ const createStory = async (req, res, next) => {
       });
     }
 
-    const mediaUrl = `/uploads/stories/${req.file.filename}`;
+    // Persist file in database & local storage (serverless-safe)
+    const { url: mediaUrl } = await saveUploadedMedia(req.file, 'stories', userId);
 
     // Parameterized INSERT with PostgreSQL INTERVAL '24 hours'
     const insertQuery = `
@@ -188,15 +190,10 @@ const deleteStory = async (req, res, next) => {
     // Delete record from database
     await db.query('DELETE FROM stories WHERE id = $1', [storyId]);
 
-    // Asynchronously remove media file from disk
+    // Remove media file from storage (DB & local cache)
     if (story.media_url && story.media_url.startsWith('/uploads/stories/')) {
       const filename = path.basename(story.media_url);
-      const filePath = path.join(__dirname, '../../uploads/stories', filename);
-      fs.unlink(filePath, (err) => {
-        if (err && err.code !== 'ENOENT') {
-          console.error('[Story Cleanup] Failed to unlink file:', err.message);
-        }
-      });
+      deleteUploadedMedia(filename, 'stories').catch(() => {});
     }
 
     res.status(200).json({

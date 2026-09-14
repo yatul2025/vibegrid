@@ -1,104 +1,74 @@
 /**
  * src/middlewares/uploadMiddleware.js
  * ===================================
- * Multer File Upload Configuration & Security
+ * Multer File Upload Configuration & Security (Serverless-Safe Memory Storage)
  * 
- * Security Measures:
- * 1. File Type Whitelist: Accepts ONLY images (jpeg, png, webp).
- * 2. File Size Limit: Enforces strict max size (2MB for avatars, 5MB for posts).
- * 3. Safe Filenames: Randomizes filenames using timestamp and crypto bytes to prevent directory traversal and file collisions.
+ * Security & Reliability Measures:
+ * 1. File Type Whitelist: Accepts ONLY image formats (jpeg, png, webp, gif).
+ * 2. In-Memory Storage: Eliminates local filesystem write dependencies, preventing
+ *    EROFS (Read-only file system) errors on Vercel Serverless Functions.
+ * 3. File Size Limits: Enforces max file sizes (5MB for avatars, 10MB for posts & stories).
  */
 
 const multer = require('multer');
-const path = require('path');
-const crypto = require('crypto');
-const fs = require('fs');
-
-// Ensure upload directories exist
-const avatarsDir = path.join(__dirname, '../../uploads/avatars');
-const postsDir = path.join(__dirname, '../../uploads/posts');
-const storiesDir = path.join(__dirname, '../../uploads/stories');
-
-if (!fs.existsSync(avatarsDir)) fs.mkdirSync(avatarsDir, { recursive: true });
-if (!fs.existsSync(postsDir)) fs.mkdirSync(postsDir, { recursive: true });
-if (!fs.existsSync(storiesDir)) fs.mkdirSync(storiesDir, { recursive: true });
 
 // Allowed image MIME types
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/gif'
+];
 
 /**
  * File filter to reject non-image files
  */
 const fileFilter = (req, file, cb) => {
-  if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+  if (file && file.mimetype && ALLOWED_MIME_TYPES.includes(file.mimetype.toLowerCase())) {
     cb(null, true);
   } else {
-    const error = new Error('Invalid file type. Only JPEG, PNG, and WebP images are allowed.');
+    const error = new Error('Invalid file type. Only JPEG, PNG, WebP, and GIF images are allowed.');
     error.status = 400;
     cb(error, false);
   }
 };
 
-// 1. Avatar Upload Storage Configuration
-const avatarStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, avatarsDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const randomHex = crypto.randomBytes(4).toString('hex');
-    const userId = req.user ? req.user.id : 'unknown';
-    cb(null, `avatar-${userId}-${Date.now()}-${randomHex}${ext}`);
-  }
-});
+// Memory storage keeps the incoming file in memory buffer (req.file.buffer)
+// so it can be streamed or saved to PostgreSQL / cloud storage without disk writes
+const storage = multer.memoryStorage();
 
-// 2. Avatar Multer Instance (Max 2MB)
+// 1. Avatar Multer Instance (Max 5MB)
 const uploadAvatar = multer({
-  storage: avatarStorage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter
 });
 
-// 3. Post Multer Instance (Max 5MB) — Prepared for Phase 5
-const postStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, postsDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const randomHex = crypto.randomBytes(6).toString('hex');
-    const userId = req.user ? req.user.id : 'unknown';
-    cb(null, `post-${userId}-${Date.now()}-${randomHex}${ext}`);
-  }
-});
-
+// 2. Post Multer Instance (Max 10MB)
 const uploadPost = multer({
-  storage: postStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter
 });
 
-// 4. Story Multer Instance (Max 5MB)
-const storyStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, storiesDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const randomHex = crypto.randomBytes(6).toString('hex');
-    const userId = req.user ? req.user.id : 'unknown';
-    cb(null, `story-${userId}-${Date.now()}-${randomHex}${ext}`);
-  }
-});
-
+// 3. Story Multer Instance (Max 10MB)
 const uploadStory = multer({
-  storage: storyStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter
+});
+
+// 4. Encrypted Media Multer Instance (Max 25MB, accepts binary ciphertext)
+const uploadEncryptedMedia = multer({
+  storage,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit
+  fileFilter: (req, file, cb) => cb(null, true)
 });
 
 module.exports = {
   uploadAvatar,
   uploadPost,
-  uploadStory
+  uploadStory,
+  uploadEncryptedMedia
 };

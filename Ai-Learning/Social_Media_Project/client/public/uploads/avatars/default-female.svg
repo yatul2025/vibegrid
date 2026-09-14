@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="femaleBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ec4899"/>
+      <stop offset="100%" stop-color="#be185d"/>
+    </linearGradient>
+    <linearGradient id="femaleSkin" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fed7aa"/>
+      <stop offset="100%" stop-color="#fdba74"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="60" fill="url(#femaleBg)"/>
+  <path d="M34 46 C32 68, 30 84, 38 96 C42 86, 44 76, 44 65 L76 65 C76 76, 78 86, 82 96 C90 84, 88 68, 86 46 C86 24, 34 24, 34 46 Z" fill="#331811"/>
+  <circle cx="60" cy="48" r="19" fill="url(#femaleSkin)"/>
+  <path d="M36 44 C38 28, 82 28, 84 44 C82 34, 70 32, 60 32 C48 32, 38 36, 36 44 Z" fill="#451a03"/>
+  <path d="M41 38 C48 34, 55 34, 60 36 C68 34, 75 35, 79 40 C73 37, 65 37, 60 38 C54 36, 47 36, 41 38 Z" fill="#291207"/>
+  <circle cx="40" cy="50" r="3.5" fill="#fdba74"/>
+  <circle cx="80" cy="50" r="3.5" fill="#fdba74"/>
+  <path d="M54 64 L66 64 L66 76 L54 76 Z" fill="#fdba74"/>
+  <path d="M22 108 C22 84, 40 76, 60 76 C80 76, 98 84, 98 108 Z" fill="#fdf2f8"/>
+  <path d="M50 76 Q60 88 70 76 Z" fill="#fbcfe8"/>
+</svg>

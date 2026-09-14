@@ -170,6 +170,10 @@ const testConnection = async () => {
         );
         CREATE INDEX IF NOT EXISTS idx_account_verifications_user_id ON account_verifications(user_id);
         CREATE INDEX IF NOT EXISTS idx_account_verifications_target ON account_verifications(type, target_value);
+
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS test INTEGER DEFAULT 0;
+        UPDATE users SET test = 1 WHERE id IN (1, 2, 3, 4);
+        UPDATE users SET test = 0 WHERE id NOT IN (1, 2, 3, 4);
       `);
     } catch (tblErr) {
       console.warn('[DB] Table init check warning:', tblErr.message);

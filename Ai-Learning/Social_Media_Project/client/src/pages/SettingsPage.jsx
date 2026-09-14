@@ -19,6 +19,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
+import { getDefaultAvatar, isDefaultAvatar } from '../utils/avatar';
+import ConfirmModal from '../components/ConfirmModal';
+import PasswordToggleButton from '../components/PasswordToggleIcon';
+
+const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
 export default function SettingsPage({ initialSection = 'profile', onNavigateToProfile }) {
   const { user: currentUser, updateUser, logout } = useAuth();
@@ -30,26 +35,55 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   // Global message banner for settings
   const [feedbackMsg, setFeedbackMsg] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
 
   // Profile data & form states (initialized with currentUser to prevent flash of empty/undefined data)
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profile, setProfile] = useState(currentUser || null);
+
+  const isDemoUser = Boolean(
+    currentUser?.is_demo_session ||
+    DEMO_USERNAMES.includes((currentUser?.username || '').toLowerCase()) ||
+    DEMO_USERNAMES.includes((profile?.username || '').toLowerCase())
+  );
+
   const [editUsername, setEditUsername] = useState(currentUser?.username || '');
   const [editFullName, setEditFullName] = useState(currentUser?.full_name || '');
   const [editBio, setEditBio] = useState(currentUser?.bio || '');
   const [editWebsite, setEditWebsite] = useState(currentUser?.website || '');
   const [editLocation, setEditLocation] = useState(currentUser?.location || '');
-  const [editDateOfBirth, setEditDateOfBirth] = useState(currentUser?.date_of_birth ? currentUser.date_of_birth.substring(0, 10) : '');
+  const [editDateOfBirth, setEditDateOfBirth] = useState(
+    currentUser?.date_of_birth ? String(currentUser.date_of_birth).substring(0, 10) : ''
+  );
+  const [editGender, setEditGender] = useState(currentUser?.gender || 'unspecified');
   const [savingProfile, setSavingProfile] = useState(false);
 
+  // Maximum allowed date of birth (must be at least 18 years old)
+  const maxDobDate = (() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 18);
+    return d.toISOString().split('T')[0];
+  })();
+
   // Avatar Upload States
-  const [avatarPreview, setAvatarPreview] = useState(currentUser?.avatar_url || '/uploads/avatars/default-avatar.png');
+  const [avatarPreview, setAvatarPreview] = useState(
+    currentUser?.avatar_url || getDefaultAvatar(currentUser?.gender)
+  );
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const fileInputRef = useRef(null);
 
+  const handleGenderChange = (newGender) => {
+    setEditGender(newGender);
+    if (isDefaultAvatar(avatarPreview)) {
+      setAvatarPreview(getDefaultAvatar(newGender));
+    }
+  };
+
   // Email Management States
   const [newEmail, setNewEmail] = useState('');
+  const [emailPassword, setEmailPassword] = useState('');
+  const [showEmailPassword, setShowEmailPassword] = useState(false);
   const [emailOtp, setEmailOtp] = useState('');
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [sendingEmailOtp, setSendingEmailOtp] = useState(false);
@@ -58,6 +92,8 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   // Phone Management States
   const [newPhone, setNewPhone] = useState('');
+  const [phonePassword, setPhonePassword] = useState('');
+  const [showPhonePassword, setShowPhonePassword] = useState(false);
   const [phoneOtp, setPhoneOtp] = useState('');
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [sendingPhoneOtp, setSendingPhoneOtp] = useState(false);
@@ -85,6 +121,8 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   const [privacySettings, setPrivacySettings] = useState({
     is_private: false,
     allow_messages_from: 'everyone',
+    allow_calls_from: 'everyone',
+    allow_group_add_from: 'everyone',
     allow_comments_from: 'everyone',
     allow_mentions_from: 'everyone',
     allow_tags_from: 'everyone',
@@ -185,8 +223,9 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
           setEditBio(u.bio || currentUser.bio || '');
           setEditWebsite(u.website || currentUser.website || '');
           setEditLocation(u.location || currentUser.location || '');
-          setEditDateOfBirth(u.date_of_birth ? u.date_of_birth.substring(0, 10) : '');
-          setAvatarPreview(u.avatar_url || currentUser.avatar_url || '/uploads/avatars/default-avatar.png');
+          setEditDateOfBirth(u.date_of_birth ? String(u.date_of_birth).substring(0, 10) : '');
+          setEditGender(u.gender || currentUser.gender || 'unspecified');
+          setAvatarPreview(u.avatar_url || currentUser.avatar_url || getDefaultAvatar(u.gender || currentUser.gender));
         }
       } catch (err) {
         setFeedbackMsg({ type: 'error', text: err.message || 'Failed to load profile details.' });
@@ -199,7 +238,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   // Load section-specific data when tab changes
   useEffect(() => {
-    if (activeSection === 'security') {
+    if (activeSection === 'security' && !isDemoUser) {
       fetchSessions();
     } else if (activeSection === 'privacy') {
       fetchPrivacySettings();
@@ -216,6 +255,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   const handleAvatarFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Profile photo cannot be changed on official demo accounts.' });
+      return;
+    }
     if (!file.type.startsWith('image/')) {
       setFeedbackMsg({ type: 'error', text: 'Please choose an image file (JPG, PNG, GIF, WebP).' });
       return;
@@ -232,6 +275,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   const handleUploadAvatar = async () => {
     if (!avatarFile) return;
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Profile photo cannot be changed on official demo accounts.' });
+      return;
+    }
     try {
       setAvatarUploading(true);
       const formData = new FormData();
@@ -253,6 +300,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   };
 
   const handleRemoveAvatar = async () => {
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Profile photo cannot be removed on official demo accounts.' });
+      return;
+    }
     try {
       setAvatarUploading(true);
       const res = await apiClient.delete('/users/avatar');
@@ -274,6 +325,29 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Profile details cannot be modified on official demo accounts.' });
+      return;
+    }
+
+    if (editDateOfBirth) {
+      const dob = new Date(editDateOfBirth);
+      if (isNaN(dob.getTime())) {
+        setFeedbackMsg({ type: 'error', text: 'Please provide a valid date of birth.' });
+        return;
+      }
+      const today = new Date();
+      let age = today.getFullYear() - dob.getFullYear();
+      const monthDiff = today.getMonth() - dob.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+        age--;
+      }
+      if (age < 18) {
+        setFeedbackMsg({ type: 'error', text: 'You must be at least 18 years old.' });
+        return;
+      }
+    }
+
     try {
       setSavingProfile(true);
       const res = await apiClient.put('/users/profile', {
@@ -282,11 +356,15 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
         bio: editBio.trim(),
         website: editWebsite.trim(),
         location: editLocation.trim(),
-        date_of_birth: editDateOfBirth || null
+        date_of_birth: editDateOfBirth || null,
+        gender: editGender || 'unspecified'
       });
 
       if (res.success && res.data?.user) {
         setProfile(res.data.user);
+        if (res.data.user.avatar_url) {
+          setAvatarPreview(res.data.user.avatar_url);
+        }
         updateUser(res.data.user);
         setFeedbackMsg({ type: 'success', text: 'Profile details saved successfully!' });
       } else {
@@ -301,14 +379,30 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
 
   // 2. Email Management Handlers
   const handleSendEmailOtp = async () => {
+    if (newEmail.trim() && !emailPassword) {
+      setFeedbackMsg({ type: 'error', text: 'Please enter your current password to authorize changing your email address.' });
+      return;
+    }
     try {
       setSendingEmailOtp(true);
-      const payload = newEmail.trim() ? { newEmail: newEmail.trim() } : {};
+      const payload = newEmail.trim() 
+        ? { newEmail: newEmail.trim(), currentPassword: emailPassword } 
+        : {};
       const res = await apiClient.post('/users/email/send-otp', payload);
       if (res.success) {
-        setEmailOtpSent(true);
-        setOtpCountdown(60);
-        setFeedbackMsg({ type: 'success', text: res.message || 'Verification code sent to your email.' });
+        if (res.updatedDirectly && res.data?.user) {
+          setProfile((prev) => ({ ...prev, ...res.data.user }));
+          updateUser(res.data.user);
+          setEmailOtpSent(false);
+          setEmailOtp('');
+          setNewEmail('');
+          setEmailPassword('');
+          setFeedbackMsg({ type: 'success', text: res.message || 'Email address updated successfully!' });
+        } else {
+          setEmailOtpSent(true);
+          setOtpCountdown(60);
+          setFeedbackMsg({ type: 'success', text: res.message || 'Verification code sent to your email.' });
+        }
       } else {
         setFeedbackMsg({ type: 'error', text: res.error || 'Failed to send verification code.' });
       }
@@ -336,6 +430,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
         setEmailOtpSent(false);
         setEmailOtp('');
         setNewEmail('');
+        setEmailPassword('');
         setFeedbackMsg({ type: 'success', text: res.message || 'Email verified successfully!' });
       } else {
         setFeedbackMsg({ type: 'error', text: res.error || 'Verification failed.' });
@@ -353,13 +448,30 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
       setFeedbackMsg({ type: 'error', text: 'Please enter a phone number in international format (+1...)' });
       return;
     }
+    if (!phonePassword) {
+      setFeedbackMsg({ type: 'error', text: 'Please enter your current password to authorize linking a phone number.' });
+      return;
+    }
     try {
       setSendingPhoneOtp(true);
-      const res = await apiClient.post('/users/phone/send-otp', { phoneNumber: newPhone.trim() });
+      const res = await apiClient.post('/users/phone/send-otp', {
+        phoneNumber: newPhone.trim(),
+        currentPassword: phonePassword
+      });
       if (res.success) {
-        setPhoneOtpSent(true);
-        setPhoneOtpCountdown(60);
-        setFeedbackMsg({ type: 'success', text: res.message || 'Verification code sent to your phone.' });
+        if (res.updatedDirectly && res.data?.user) {
+          setProfile((prev) => ({ ...prev, ...res.data.user }));
+          updateUser(res.data.user);
+          setPhoneOtpSent(false);
+          setPhoneOtp('');
+          setNewPhone('');
+          setPhonePassword('');
+          setFeedbackMsg({ type: 'success', text: res.message || 'Phone number linked successfully!' });
+        } else {
+          setPhoneOtpSent(true);
+          setPhoneOtpCountdown(60);
+          setFeedbackMsg({ type: 'success', text: res.message || 'Verification code sent to your phone.' });
+        }
       } else {
         setFeedbackMsg({ type: 'error', text: res.error || 'Failed to send verification code.' });
       }
@@ -387,6 +499,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
         setPhoneOtpSent(false);
         setPhoneOtp('');
         setNewPhone('');
+        setPhonePassword('');
         setFeedbackMsg({ type: 'success', text: res.message || 'Phone number linked successfully!' });
       } else {
         setFeedbackMsg({ type: 'error', text: res.error || 'Phone verification failed.' });
@@ -398,26 +511,38 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
     }
   };
 
-  const handleRemovePhone = async () => {
-    if (!window.confirm('Are you sure you want to remove your linked phone number?')) return;
-    try {
-      setRemovingPhone(true);
-      const res = await apiClient.delete('/users/phone');
-      if (res.success && res.data?.user) {
-        setProfile((prev) => ({ ...prev, ...res.data.user }));
-        updateUser(res.data.user);
-        setNewPhone('');
-        setPhoneOtpSent(false);
-        setPhoneOtp('');
-        setFeedbackMsg({ type: 'success', text: 'Phone number removed from your account.' });
-      } else {
-        setFeedbackMsg({ type: 'error', text: res.error || 'Failed to remove phone number.' });
-      }
-    } catch (err) {
-      setFeedbackMsg({ type: 'error', text: err.message || 'Failed to remove phone number.' });
-    } finally {
-      setRemovingPhone(false);
+  const handleRemovePhone = () => {
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Phone modification is locked on official demo accounts.' });
+      return;
     }
+    setConfirmAction({
+      title: 'Unlink Phone Number?',
+      description: 'Are you sure you want to remove your linked phone number from your account?',
+      confirmText: 'Unlink Phone',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          setRemovingPhone(true);
+          const res = await apiClient.delete('/users/phone');
+          if (res.success && res.data?.user) {
+            setProfile((prev) => ({ ...prev, ...res.data.user }));
+            updateUser(res.data.user);
+            setNewPhone('');
+            setPhoneOtpSent(false);
+            setPhoneOtp('');
+            setFeedbackMsg({ type: 'success', text: 'Phone number removed from your account.' });
+            setConfirmAction(null);
+          } else {
+            setFeedbackMsg({ type: 'error', text: res.error || 'Failed to remove phone number.' });
+          }
+        } catch (err) {
+          setFeedbackMsg({ type: 'error', text: err.message || 'Failed to remove phone number.' });
+        } finally {
+          setRemovingPhone(false);
+        }
+      }
+    });
   };
 
   // 4. Password Change & Sessions Handlers
@@ -503,36 +628,52 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
     }
   };
 
-  const handleLogoutOthers = async () => {
-    if (!window.confirm('Log out of all other devices except this current session?')) return;
-    try {
-      setLoggingOutOthers(true);
-      const res = await apiClient.post('/users/security/sessions/logout-others');
-      if (res.success) {
-        setFeedbackMsg({ type: 'success', text: res.message || 'Logged out of all other devices.' });
-        fetchSessions();
-      } else {
-        setFeedbackMsg({ type: 'error', text: res.error || 'Failed to log out of other devices.' });
+  const handleLogoutOthers = () => {
+    setConfirmAction({
+      title: 'Log Out Other Sessions?',
+      description: 'Log out of all other devices except this current session?',
+      confirmText: 'Log Out Others',
+      variant: 'warning',
+      onConfirm: async () => {
+        try {
+          setLoggingOutOthers(true);
+          const res = await apiClient.post('/users/security/sessions/logout-others');
+          if (res.success) {
+            setFeedbackMsg({ type: 'success', text: res.message || 'Logged out of all other devices.' });
+            fetchSessions();
+            setConfirmAction(null);
+          } else {
+            setFeedbackMsg({ type: 'error', text: res.error || 'Failed to log out of other devices.' });
+          }
+        } catch (err) {
+          setFeedbackMsg({ type: 'error', text: err.message || 'Failed to log out of other devices.' });
+        } finally {
+          setLoggingOutOthers(false);
+        }
       }
-    } catch (err) {
-      setFeedbackMsg({ type: 'error', text: err.message || 'Failed to log out of other devices.' });
-    } finally {
-      setLoggingOutOthers(false);
-    }
+    });
   };
 
-  const handleLogoutAll = async () => {
-    if (!window.confirm('Are you sure you want to log out of ALL devices including this one?')) return;
-    try {
-      setLoggingOutAll(true);
-      const res = await apiClient.post('/users/security/sessions/logout-all');
-      if (res.success) {
-        await logout();
+  const handleLogoutAll = () => {
+    setConfirmAction({
+      title: 'Log Out All Devices?',
+      description: 'Are you sure you want to log out of ALL devices including this one? You will need to log in again.',
+      confirmText: 'Log Out All',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          setLoggingOutAll(true);
+          const res = await apiClient.post('/users/security/sessions/logout-all');
+          if (res.success) {
+            setConfirmAction(null);
+            await logout();
+          }
+        } catch (err) {
+          setFeedbackMsg({ type: 'error', text: err.message || 'Failed to log out of all devices.' });
+          setLoggingOutAll(false);
+        }
       }
-    } catch (err) {
-      setFeedbackMsg({ type: 'error', text: err.message || 'Failed to log out of all devices.' });
-      setLoggingOutAll(false);
-    }
+    });
   };
 
   // 5. Privacy Settings Handlers
@@ -551,6 +692,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   };
 
   const handleUpdatePrivacy = async (updatedFields) => {
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Privacy settings are locked for official demo accounts.' });
+      return;
+    }
     const newSettings = { ...privacySettings, ...updatedFields };
     setPrivacySettings(newSettings);
     try {
@@ -589,6 +734,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
   };
 
   const handleUpdateNotification = async (updatedFields) => {
+    if (isDemoUser) {
+      setFeedbackMsg({ type: 'error', text: '🔒 Notification preferences are locked for official demo accounts.' });
+      return;
+    }
     const newSettings = { ...notificationSettings, ...updatedFields };
     setNotificationSettings(newSettings);
     try {
@@ -743,6 +892,31 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
           </div>
         )}
 
+        {/* Demo Mode Security Notice */}
+        {isDemoUser && (
+          <div className="settings-alert-banner warning" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            background: 'rgba(239, 68, 68, 0.12)',
+            border: '1px solid rgba(239, 68, 68, 0.35)',
+            color: '#f87171',
+            borderRadius: '10px',
+            padding: '12px 16px',
+            marginBottom: '16px'
+          }}>
+            <span style={{ fontSize: '20px' }}>🔒</span>
+            <div style={{ flex: 1 }}>
+              <strong style={{ color: '#fff', display: 'block', fontSize: '14px', marginBottom: '2px' }}>
+                Official Demo Account (Read-Only)
+              </strong>
+              <span>
+                You are currently browsing an official showcase demo account. Profile details, avatar photo, contact info, privacy controls, notification preferences, and credentials are locked in read-only mode.
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="settings-layout">
           {/* Left Navigation Sidebar (Desktop or Mobile Menu View) */}
           {(!isMobile || !mobileViewingSection) && (
@@ -786,7 +960,12 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                   >
                     <span className="settings-nav-icon">{cat.icon}</span>
                     <div className="settings-nav-info">
-                      <span className="settings-nav-label">{cat.label}</span>
+                      <span className="settings-nav-label">
+                        {cat.label}
+                        {isDemoUser && (
+                          <span style={{ fontSize: '11px', color: '#f87171', marginLeft: '6px' }}>🔒</span>
+                        )}
+                      </span>
                       <span className="settings-nav-desc">{cat.description}</span>
                     </div>
                     {isMobile && <span className="settings-nav-chevron">›</span>}
@@ -825,12 +1004,12 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                   <div className="settings-avatar-row">
                     <div className="settings-avatar-wrapper">
                       <img
-                        src={avatarPreview || profile?.avatar_url || currentUser?.avatar_url || '/uploads/avatars/default-avatar.png'}
+                        src={avatarPreview || profile?.avatar_url || currentUser?.avatar_url || getDefaultAvatar(editGender || profile?.gender || currentUser?.gender)}
                         alt="Profile Preview"
                         className="settings-avatar-img"
                         onError={(e) => {
                           e.target.onerror = null;
-                          e.target.src = '/uploads/avatars/default-avatar.png';
+                          e.target.src = getDefaultAvatar(editGender || profile?.gender || currentUser?.gender);
                         }}
                       />
                       {avatarUploading && (
@@ -852,7 +1031,8 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           type="button"
                           className="btn-primary btn-sm"
                           onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                          disabled={avatarUploading}
+                          disabled={avatarUploading || isDemoUser}
+                          title={isDemoUser ? 'Locked on official demo accounts' : undefined}
                         >
                           Change Photo
                         </button>
@@ -861,18 +1041,19 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="button"
                             className="btn-secondary btn-sm"
                             onClick={handleUploadAvatar}
-                            disabled={avatarUploading}
+                            disabled={avatarUploading || isDemoUser}
                           >
                             Save Photo
                           </button>
                         )}
-                        {profile?.avatar_url && !profile.avatar_url.includes('default-avatar.png') && (
+                        {profile?.avatar_url && !isDefaultAvatar(profile.avatar_url) && (
                           <button
                             type="button"
                             className="btn-secondary btn-sm"
                             style={{ color: 'var(--danger)' }}
                             onClick={handleRemoveAvatar}
-                            disabled={avatarUploading}
+                            disabled={avatarUploading || isDemoUser}
+                            title={isDemoUser ? 'Locked on official demo accounts' : undefined}
                           >
                             Remove
                           </button>
@@ -885,7 +1066,9 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                   {/* Profile Edit Form */}
                   <form onSubmit={handleSaveProfile} className="settings-form">
                     <div className="form-group">
-                      <label htmlFor="settingsUsername">Username</label>
+                      <label htmlFor="settingsUsername">
+                        Username {isDemoUser && <span style={{ fontSize: '11px', color: '#f87171' }}>🔒 (Locked in Demo Mode)</span>}
+                      </label>
                       <input
                         id="settingsUsername"
                         type="text"
@@ -894,8 +1077,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                         maxLength={30}
                         required
+                        disabled={savingProfile || isDemoUser}
                       />
-                      <span className="form-input-hint">Your unique @handle on VibeGrid (letters, numbers, underscore).</span>
+                      <span className="form-input-hint" style={{ color: isDemoUser ? '#f87171' : undefined }}>
+                        {isDemoUser
+                          ? '🔒 Username cannot be modified on official demo accounts.'
+                          : 'Your unique @handle on VibeGrid (letters, numbers, underscore).'}
+                      </span>
                     </div>
 
                     <div className="form-group">
@@ -908,23 +1096,25 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         onChange={(e) => setEditFullName(e.target.value)}
                         maxLength={100}
                         placeholder="Your full name"
+                        disabled={savingProfile || isDemoUser}
                       />
                     </div>
 
                     <div className="form-group">
                       <div className="form-label-with-counter">
                         <label htmlFor="settingsBio">Bio</label>
-                        <span className={`char-counter ${150 - editBio.length < 20 ? 'counter-warning' : ''}`}>
-                          {150 - editBio.length} left
+                        <span className={`char-counter ${150 - (editBio || '').length < 20 ? 'counter-warning' : ''}`}>
+                          {150 - (editBio || '').length} left
                         </span>
                       </div>
                       <textarea
                         id="settingsBio"
                         className="form-input form-textarea"
-                        value={editBio}
+                        value={editBio || ''}
                         onChange={(e) => setEditBio(e.target.value.slice(0, 150))}
                         placeholder="Tell the community about yourself..."
                         rows={3}
+                        disabled={savingProfile || isDemoUser}
                       />
                     </div>
 
@@ -934,9 +1124,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         id="settingsWebsite"
                         type="url"
                         className="form-input"
-                        value={editWebsite}
+                        value={editWebsite || ''}
                         onChange={(e) => setEditWebsite(e.target.value)}
                         placeholder="https://yourwebsite.com"
+                        disabled={savingProfile || isDemoUser}
                       />
                     </div>
 
@@ -947,20 +1138,42 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           id="settingsLocation"
                           type="text"
                           className="form-input"
-                          value={editLocation}
+                          value={editLocation || ''}
                           onChange={(e) => setEditLocation(e.target.value)}
                           placeholder="e.g. San Francisco, CA"
+                          disabled={savingProfile || isDemoUser}
                         />
                       </div>
                       <div className="form-group form-col">
-                        <label htmlFor="settingsDob">Date of Birth</label>
+                        <label htmlFor="settingsDob">Date of Birth (Must be 18+)</label>
                         <input
                           id="settingsDob"
                           type="date"
+                          max={maxDobDate}
                           className="form-input"
-                          value={editDateOfBirth}
+                          value={editDateOfBirth || ''}
                           onChange={(e) => setEditDateOfBirth(e.target.value)}
+                          disabled={savingProfile || isDemoUser}
                         />
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group form-col">
+                        <label htmlFor="settingsGender">Gender</label>
+                        <select
+                          id="settingsGender"
+                          className="form-input"
+                          value={editGender || 'unspecified'}
+                          onChange={(e) => handleGenderChange(e.target.value)}
+                          disabled={savingProfile || isDemoUser}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <option value="unspecified">Prefer not to say / Unspecified</option>
+                          <option value="male">Male 👨</option>
+                          <option value="female">Female 👩</option>
+                          <option value="other">Other 🧑</option>
+                        </select>
                       </div>
                     </div>
 
@@ -968,9 +1181,9 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <button
                         type="submit"
                         className="btn-primary"
-                        disabled={savingProfile || editBio.length > 150 || !editUsername.trim()}
+                        disabled={savingProfile || (editBio || '').length > 150 || !(editUsername || '').trim() || isDemoUser}
                       >
-                        {savingProfile ? 'Saving...' : 'Save Profile Changes'}
+                        {isDemoUser ? '🔒 Profile Locked (Demo)' : (savingProfile ? 'Saving...' : 'Save Profile Changes')}
                       </button>
                     </div>
                   </form>
@@ -1000,32 +1213,63 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     </div>
 
                     <div className="account-mgmt-current-val">
-                      <span className="account-mgmt-val-text">{profile?.email || 'No email registered'}</span>
+                      <span className="account-mgmt-val-text">
+                        <span style={{ fontSize: '1.05rem' }}>✉️</span>
+                        {profile?.email || 'No email registered'}
+                      </span>
                     </div>
 
-                    <div className="account-mgmt-field-row">
-                      <input
-                        type="email"
-                        className="form-input"
-                        placeholder="Enter new email address (e.g. user@example.com)"
-                        value={newEmail}
-                        onChange={(e) => setNewEmail(e.target.value)}
-                        disabled={sendingEmailOtp || verifyingEmailOtp}
-                      />
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        onClick={handleSendEmailOtp}
-                        disabled={sendingEmailOtp || verifyingEmailOtp || otpCountdown > 0}
-                      >
-                        {sendingEmailOtp
-                          ? 'Sending...'
-                          : otpCountdown > 0
-                          ? `Resend (${otpCountdown}s)`
-                          : emailOtpSent
-                          ? 'Resend OTP'
-                          : 'Send Code'}
-                      </button>
+                    {isDemoUser && (
+                      <span className="settings-subtext" style={{ color: '#f87171', display: 'block', marginBottom: '8px' }}>
+                        🔒 Email modification is locked on official demo accounts.
+                      </span>
+                    )}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div className="account-mgmt-field-row">
+                        <input
+                          type="email"
+                          className="form-input"
+                          placeholder="Enter new email address (e.g. user@example.com)"
+                          value={newEmail}
+                          onChange={(e) => setNewEmail(e.target.value)}
+                          disabled={sendingEmailOtp || verifyingEmailOtp || isDemoUser}
+                        />
+                      </div>
+
+                      {newEmail.trim() !== '' && (
+                        <div className="password-input-wrapper">
+                          <input
+                            type={showEmailPassword ? 'text' : 'password'}
+                            className="form-input"
+                            placeholder="Enter current password to authorize email change"
+                            value={emailPassword}
+                            onChange={(e) => setEmailPassword(e.target.value)}
+                            disabled={sendingEmailOtp || verifyingEmailOtp || isDemoUser}
+                          />
+                          <PasswordToggleButton
+                            isVisible={showEmailPassword}
+                            onToggle={() => setShowEmailPassword(!showEmailPassword)}
+                          />
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={handleSendEmailOtp}
+                          disabled={sendingEmailOtp || verifyingEmailOtp || otpCountdown > 0 || isDemoUser}
+                        >
+                          {sendingEmailOtp
+                            ? 'Sending...'
+                            : otpCountdown > 0
+                            ? `Resend (${otpCountdown}s)`
+                            : emailOtpSent
+                            ? 'Resend OTP'
+                            : 'Send Code'}
+                        </button>
+                      </div>
                     </div>
 
                     {emailOtpSent && (
@@ -1041,13 +1285,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             maxLength={6}
                             value={emailOtp}
                             onChange={(e) => setEmailOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                            disabled={verifyingEmailOtp}
+                            disabled={verifyingEmailOtp || isDemoUser}
                           />
                           <button
                             type="button"
                             className="btn-primary"
                             onClick={handleVerifyEmailOtp}
-                            disabled={verifyingEmailOtp || emailOtp.length !== 6}
+                            disabled={verifyingEmailOtp || emailOtp.length !== 6 || isDemoUser}
                           >
                             {verifyingEmailOtp ? 'Verifying...' : 'Verify & Save'}
                           </button>
@@ -1068,8 +1312,15 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <span className="account-mgmt-subtitle">Used for multi-factor security and account recovery</span>
                     </div>
 
+                    {isDemoUser && (
+                      <span className="settings-subtext" style={{ color: '#f87171', display: 'block', marginBottom: '8px' }}>
+                        🔒 Phone number modification is locked on official demo accounts.
+                      </span>
+                    )}
+
                     <div className="account-mgmt-current-val">
                       <span className="account-mgmt-val-text">
+                        <span style={{ fontSize: '1.05rem' }}>📞</span>
                         {profile?.phone_number ? profile.phone_number : 'No phone number linked'}
                       </span>
                       {profile?.phone_number && (
@@ -1077,36 +1328,59 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           type="button"
                           className="btn-text-danger"
                           onClick={handleRemovePhone}
-                          disabled={removingPhone}
+                          disabled={removingPhone || isDemoUser}
+                          title="Unlink phone number"
                         >
-                          {removingPhone ? 'Removing...' : 'Unlink Phone'}
+                          {removingPhone ? 'Removing...' : '✕ Unlink Phone'}
                         </button>
                       )}
                     </div>
 
-                    <div className="account-mgmt-field-row">
-                      <input
-                        type="tel"
-                        className="form-input"
-                        placeholder="Enter phone with country code (e.g. +14155552671)"
-                        value={newPhone}
-                        onChange={(e) => setNewPhone(e.target.value)}
-                        disabled={sendingPhoneOtp || verifyingPhoneOtp}
-                      />
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        onClick={handleSendPhoneOtp}
-                        disabled={sendingPhoneOtp || verifyingPhoneOtp || phoneOtpCountdown > 0 || !newPhone.trim()}
-                      >
-                        {sendingPhoneOtp
-                          ? 'Sending...'
-                          : phoneOtpCountdown > 0
-                          ? `Resend (${phoneOtpCountdown}s)`
-                          : phoneOtpSent
-                          ? 'Resend Code'
-                          : 'Send Code'}
-                      </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div className="account-mgmt-field-row">
+                        <input
+                          type="tel"
+                          className="form-input"
+                          placeholder="Enter phone with country code (e.g. +14155552671)"
+                          value={newPhone}
+                          onChange={(e) => setNewPhone(e.target.value)}
+                          disabled={sendingPhoneOtp || verifyingPhoneOtp || isDemoUser}
+                        />
+                      </div>
+
+                      {newPhone.trim() !== '' && (
+                        <div className="password-input-wrapper">
+                          <input
+                            type={showPhonePassword ? 'text' : 'password'}
+                            className="form-input"
+                            placeholder="Enter current password to authorize phone change"
+                            value={phonePassword}
+                            onChange={(e) => setPhonePassword(e.target.value)}
+                            disabled={sendingPhoneOtp || verifyingPhoneOtp || isDemoUser}
+                          />
+                          <PasswordToggleButton
+                            isVisible={showPhonePassword}
+                            onToggle={() => setShowPhonePassword(!showPhonePassword)}
+                          />
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={handleSendPhoneOtp}
+                          disabled={sendingPhoneOtp || verifyingPhoneOtp || phoneOtpCountdown > 0 || !newPhone.trim() || isDemoUser}
+                        >
+                          {sendingPhoneOtp
+                            ? 'Sending...'
+                            : phoneOtpCountdown > 0
+                            ? `Resend (${phoneOtpCountdown}s)`
+                            : phoneOtpSent
+                            ? 'Resend Code'
+                            : 'Send Code'}
+                        </button>
+                      </div>
                     </div>
 
                     {phoneOtpSent && (
@@ -1122,13 +1396,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             maxLength={6}
                             value={phoneOtp}
                             onChange={(e) => setPhoneOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                            disabled={verifyingPhoneOtp}
+                            disabled={verifyingPhoneOtp || isDemoUser}
                           />
                           <button
                             type="button"
                             className="btn-primary"
                             onClick={handleVerifyPhoneOtp}
-                            disabled={verifyingPhoneOtp || phoneOtp.length !== 6}
+                            disabled={verifyingPhoneOtp || phoneOtp.length !== 6 || isDemoUser}
                           >
                             {verifyingPhoneOtp ? 'Verifying...' : 'Verify Phone'}
                           </button>
@@ -1158,6 +1432,20 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <span className="account-mgmt-subtitle">Choose a strong password with at least 8 characters</span>
                     </div>
 
+                    {isDemoUser && (
+                      <div style={{
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        margin: '12px 0',
+                        color: '#f87171',
+                        fontSize: '13px'
+                      }}>
+                        🔒 Password modification is locked on official demo accounts.
+                      </div>
+                    )}
+
                     <form onSubmit={handleChangePassword} className="security-password-form">
                       <div className="form-group">
                         <label htmlFor="settingsCurrPass">Current Password</label>
@@ -1169,17 +1457,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             placeholder="Enter current password"
                             value={currentPassword}
                             onChange={(e) => setCurrentPassword(e.target.value)}
-                            disabled={changingPassword}
+                            disabled={changingPassword || isDemoUser}
                             required
                           />
-                          <button
-                            type="button"
-                            className="password-toggle-btn"
-                            onClick={() => setShowCurrentPass(!showCurrentPass)}
-                            tabIndex="-1"
-                          >
-                            {showCurrentPass ? '👁️' : '👁️‍🗨️'}
-                          </button>
+                          <PasswordToggleButton
+                            isVisible={showCurrentPass}
+                            onToggle={() => setShowCurrentPass(!showCurrentPass)}
+                          />
                         </div>
                       </div>
 
@@ -1193,17 +1477,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             placeholder="Enter new password (8+ chars)"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            disabled={changingPassword}
+                            disabled={changingPassword || isDemoUser}
                             required
                           />
-                          <button
-                            type="button"
-                            className="password-toggle-btn"
-                            onClick={() => setShowNewPass(!showNewPass)}
-                            tabIndex="-1"
-                          >
-                            {showNewPass ? '👁️' : '👁️‍🗨️'}
-                          </button>
+                          <PasswordToggleButton
+                            isVisible={showNewPass}
+                            onToggle={() => setShowNewPass(!showNewPass)}
+                          />
                         </div>
 
                         {newPassword.length > 0 && (
@@ -1236,17 +1516,13 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             placeholder="Confirm new password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            disabled={changingPassword}
+                            disabled={changingPassword || isDemoUser}
                             required
                           />
-                          <button
-                            type="button"
-                            className="password-toggle-btn"
-                            onClick={() => setShowConfirmPass(!showConfirmPass)}
-                            tabIndex="-1"
-                          >
-                            {showConfirmPass ? '👁️' : '👁️‍🗨️'}
-                          </button>
+                          <PasswordToggleButton
+                            isVisible={showConfirmPass}
+                            onToggle={() => setShowConfirmPass(!showConfirmPass)}
+                          />
                         </div>
                         {confirmPassword.length > 0 && newPassword !== confirmPassword && (
                           <span className="form-input-hint" style={{ color: 'var(--danger)' }}>
@@ -1259,7 +1535,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                         <button
                           type="submit"
                           className="btn-primary"
-                          disabled={changingPassword || !currentPassword || !newPassword || newPassword !== confirmPassword}
+                          disabled={changingPassword || !currentPassword || !newPassword || newPassword !== confirmPassword || isDemoUser}
                         >
                           {changingPassword ? 'Updating Password...' : 'Update Password'}
                         </button>
@@ -1267,76 +1543,78 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     </form>
                   </div>
 
-                  {/* Active Login Sessions Card */}
-                  <div className="account-mgmt-card" style={{ marginTop: '16px' }}>
-                    <div className="account-mgmt-header">
-                      <div className="account-mgmt-title">
-                        <span>Active Login Sessions</span>
-                        <span className="sessions-count-badge">{sessions.length} Active</span>
-                      </div>
-                      <span className="account-mgmt-subtitle">
-                        Devices where your account is currently signed in. Terminate unrecognized sessions.
-                      </span>
-                    </div>
-
-                    {loadingSessions ? (
-                      <div className="sessions-loading">
-                        <div className="spinner-small" />
-                        <span>Loading active sessions...</span>
-                      </div>
-                    ) : (
-                      <div className="sessions-list">
-                        {sessions.map((sess) => (
-                          <div key={sess.id} className={`session-item ${sess.is_current ? 'current-session' : ''}`}>
-                            <div className="session-icon">
-                              {sess.device === 'Mobile' ? '📱' : sess.device === 'Tablet' ? '📟' : '💻'}
-                            </div>
-                            <div className="session-details">
-                              <div className="session-header-row">
-                                <span className="session-device-name">
-                                  {sess.browser || 'Browser'} on {sess.os || 'Device'}
-                                </span>
-                                {sess.is_current && <span className="current-badge">This Device</span>}
-                              </div>
-                              <span className="session-meta">
-                                {sess.location || 'Local Network'} • Last active: {new Date(sess.last_active).toLocaleString()}
-                              </span>
-                            </div>
-                            {!sess.is_current && (
-                              <button
-                                type="button"
-                                className="session-revoke-btn"
-                                onClick={() => handleRevokeSession(sess.id)}
-                                disabled={revokingSessionId === sess.id}
-                              >
-                                {revokingSessionId === sess.id ? 'Revoking...' : 'Revoke'}
-                              </button>
-                            )}
-                          </div>
-                        ))}
-
-                        <div className="sessions-bulk-actions">
-                          <button
-                            type="button"
-                            className="btn-secondary btn-sm"
-                            onClick={handleLogoutOthers}
-                            disabled={loggingOutOthers || sessions.length <= 1}
-                          >
-                            {loggingOutOthers ? 'Logging out...' : 'Log Out of Other Devices'}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-secondary btn-sm"
-                            style={{ color: 'var(--danger)' }}
-                            onClick={handleLogoutAll}
-                            disabled={loggingOutAll}
-                          >
-                            {loggingOutAll ? 'Logging out...' : 'Log Out of All Devices'}
-                          </button>
+                  {/* Active Login Sessions Card (Hidden for demo profiles so visitors cannot terminate other users' sessions) */}
+                  {!isDemoUser && (
+                    <div className="account-mgmt-card" style={{ marginTop: '16px' }}>
+                      <div className="account-mgmt-header">
+                        <div className="account-mgmt-title">
+                          <span>Active Login Sessions</span>
+                          <span className="sessions-count-badge">{sessions.length} Active</span>
                         </div>
+                        <span className="account-mgmt-subtitle">
+                          Devices where your account is currently signed in. Terminate unrecognized sessions.
+                        </span>
                       </div>
-                    )}
-                  </div>
+
+                      {loadingSessions ? (
+                        <div className="sessions-loading">
+                          <div className="spinner-small" />
+                          <span>Loading active sessions...</span>
+                        </div>
+                      ) : (
+                        <div className="sessions-list">
+                          {sessions.map((sess) => (
+                            <div key={sess.id} className={`session-item ${sess.is_current ? 'current-session' : ''}`}>
+                              <div className="session-icon">
+                                {sess.device === 'Mobile' ? '📱' : sess.device === 'Tablet' ? '📟' : '💻'}
+                              </div>
+                              <div className="session-details">
+                                <div className="session-header-row">
+                                  <span className="session-device-name">
+                                    {sess.browser || 'Browser'} on {sess.os || 'Device'}
+                                  </span>
+                                  {sess.is_current && <span className="current-badge">This Device</span>}
+                                </div>
+                                <span className="session-meta">
+                                  {sess.location || 'Local Network'} • Last active: {new Date(sess.last_active).toLocaleString()}
+                                </span>
+                              </div>
+                              {!sess.is_current && (
+                                <button
+                                  type="button"
+                                  className="session-revoke-btn"
+                                  onClick={() => handleRevokeSession(sess.id)}
+                                  disabled={revokingSessionId === sess.id}
+                                >
+                                  {revokingSessionId === sess.id ? 'Revoking...' : 'Revoke'}
+                                </button>
+                              )}
+                            </div>
+                          ))}
+
+                          <div className="sessions-bulk-actions">
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              onClick={handleLogoutOthers}
+                              disabled={loggingOutOthers || sessions.length <= 1}
+                            >
+                              {loggingOutOthers ? 'Logging out...' : 'Log Out of Other Devices'}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm"
+                              style={{ color: 'var(--danger)' }}
+                              onClick={handleLogoutAll}
+                              disabled={loggingOutAll}
+                            >
+                              {loggingOutAll ? 'Logging out...' : 'Log Out of All Devices'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1350,6 +1628,20 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     <p>Control who can see your media, send you messages, comment, and see your activity.</p>
                   </div>
 
+                  {isDemoUser && (
+                    <div style={{
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      marginBottom: '16px',
+                      color: '#f87171',
+                      fontSize: '13px'
+                    }}>
+                      🔒 Privacy and permissions settings are locked on official demo accounts.
+                    </div>
+                  )}
+
                   <div className="account-mgmt-card">
                     {/* Private Account Toggle */}
                     <div className="privacy-toggle-row">
@@ -1362,7 +1654,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           type="checkbox"
                           checked={Boolean(privacySettings.is_private)}
                           onChange={(e) => handleUpdatePrivacy({ is_private: e.target.checked })}
-                          disabled={savingPrivacy}
+                          disabled={savingPrivacy || isDemoUser}
                         />
                         <span className="switch-slider" />
                       </label>
@@ -1385,7 +1677,45 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           className="privacy-select-input"
                           value={privacySettings.allow_messages_from || 'everyone'}
                           onChange={(e) => handleUpdatePrivacy({ allow_messages_from: e.target.value })}
-                          disabled={savingPrivacy}
+                          disabled={savingPrivacy || isDemoUser}
+                        >
+                          <option value="everyone">Everyone</option>
+                          <option value="following">People You Follow</option>
+                          <option value="nobody">Nobody</option>
+                        </select>
+                      </div>
+
+                      {/* Audio/Video Calls */}
+                      <div className="privacy-select-row">
+                        <div className="privacy-select-info">
+                          <label htmlFor="settingsCallFrom">Who can call you</label>
+                          <p>Controls who can initiate encrypted audio and video calls with you.</p>
+                        </div>
+                        <select
+                          id="settingsCallFrom"
+                          className="privacy-select-input"
+                          value={privacySettings.allow_calls_from || 'everyone'}
+                          onChange={(e) => handleUpdatePrivacy({ allow_calls_from: e.target.value })}
+                          disabled={savingPrivacy || isDemoUser}
+                        >
+                          <option value="everyone">Everyone</option>
+                          <option value="following">People You Follow</option>
+                          <option value="nobody">Nobody</option>
+                        </select>
+                      </div>
+
+                      {/* Group Chats */}
+                      <div className="privacy-select-row">
+                        <div className="privacy-select-info">
+                          <label htmlFor="settingsGroupFrom">Who can add you to group chats</label>
+                          <p>Controls who can add you to multi-party encrypted group chats.</p>
+                        </div>
+                        <select
+                          id="settingsGroupFrom"
+                          className="privacy-select-input"
+                          value={privacySettings.allow_group_add_from || 'everyone'}
+                          onChange={(e) => handleUpdatePrivacy({ allow_group_add_from: e.target.value })}
+                          disabled={savingPrivacy || isDemoUser}
                         >
                           <option value="everyone">Everyone</option>
                           <option value="following">People You Follow</option>
@@ -1404,7 +1734,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           className="privacy-select-input"
                           value={privacySettings.allow_comments_from || 'everyone'}
                           onChange={(e) => handleUpdatePrivacy({ allow_comments_from: e.target.value })}
-                          disabled={savingPrivacy}
+                          disabled={savingPrivacy || isDemoUser}
                         >
                           <option value="everyone">Everyone</option>
                           <option value="following">People You Follow</option>
@@ -1423,7 +1753,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           className="privacy-select-input"
                           value={privacySettings.allow_mentions_from || 'everyone'}
                           onChange={(e) => handleUpdatePrivacy({ allow_mentions_from: e.target.value })}
-                          disabled={savingPrivacy}
+                          disabled={savingPrivacy || isDemoUser}
                         >
                           <option value="everyone">Everyone</option>
                           <option value="following">People You Follow</option>
@@ -1442,7 +1772,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                           className="privacy-select-input"
                           value={privacySettings.story_visibility || 'everyone'}
                           onChange={(e) => handleUpdatePrivacy({ story_visibility: e.target.value })}
-                          disabled={savingPrivacy}
+                          disabled={savingPrivacy || isDemoUser}
                         >
                           <option value="everyone">Everyone</option>
                           <option value="following">People You Follow</option>
@@ -1467,7 +1797,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(privacySettings.show_online_status)}
                             onChange={(e) => handleUpdatePrivacy({ show_online_status: e.target.checked })}
-                            disabled={savingPrivacy}
+                            disabled={savingPrivacy || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1484,7 +1814,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(privacySettings.show_read_receipts)}
                             onChange={(e) => handleUpdatePrivacy({ show_read_receipts: e.target.checked })}
-                            disabled={savingPrivacy}
+                            disabled={savingPrivacy || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1504,6 +1834,20 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     <p>Customize the push alerts and activity notices you receive.</p>
                   </div>
 
+                  {isDemoUser && (
+                    <div style={{
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      marginBottom: '16px',
+                      color: '#f87171',
+                      fontSize: '13px'
+                    }}>
+                      🔒 Notification preferences are locked on official demo accounts.
+                    </div>
+                  )}
+
                   <div className="account-mgmt-card">
                     {/* Activity Group */}
                     <div className="privacy-group">
@@ -1520,7 +1864,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_likes)}
                             onChange={(e) => handleUpdateNotification({ notif_likes: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1537,7 +1881,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_comments)}
                             onChange={(e) => handleUpdateNotification({ notif_comments: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1554,7 +1898,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_follows)}
                             onChange={(e) => handleUpdateNotification({ notif_follows: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1571,7 +1915,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_messages)}
                             onChange={(e) => handleUpdateNotification({ notif_messages: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1588,7 +1932,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_mentions)}
                             onChange={(e) => handleUpdateNotification({ notif_mentions: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1605,7 +1949,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_tags)}
                             onChange={(e) => handleUpdateNotification({ notif_tags: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1622,7 +1966,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_stories)}
                             onChange={(e) => handleUpdateNotification({ notif_stories: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1646,7 +1990,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_security)}
                             onChange={(e) => handleUpdateNotification({ notif_security: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1663,7 +2007,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_email)}
                             onChange={(e) => handleUpdateNotification({ notif_email: e.target.checked })}
-                            disabled={savingNotif}
+                            disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
                         </label>
@@ -1684,6 +2028,20 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                   </div>
 
                   <div className="account-mgmt-card danger-zone-card">
+                    {isDemoUser && (
+                      <div style={{
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        marginBottom: '16px',
+                        color: '#f87171',
+                        fontSize: '13px'
+                      }}>
+                        🔒 Account deactivation and deletion are locked on official demo accounts.
+                      </div>
+                    )}
+
                     {/* Temporary Deactivation */}
                     <div className="danger-zone-body">
                       <div className="danger-zone-info">
@@ -1696,6 +2054,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <button
                         type="button"
                         className="btn-danger-outline"
+                        disabled={isDemoUser}
                         onClick={() => {
                           setDeactivatePassword('');
                           setDeactivateError('');
@@ -1721,6 +2080,7 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                       <button
                         type="button"
                         className="btn-danger-solid"
+                        disabled={isDemoUser}
                         style={{ fontSize: '0.82rem', padding: '8px 16px', whiteSpace: 'nowrap' }}
                         onClick={() => {
                           setDeletePassword('');
@@ -1793,14 +2153,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     required
                     autoFocus
                   />
-                  <button
-                    type="button"
-                    className="password-toggle-btn"
-                    onClick={() => setShowDeactivatePassword(!showDeactivatePassword)}
-                    tabIndex="-1"
-                  >
-                    {showDeactivatePassword ? '👁️' : '👁️‍🗨️'}
-                  </button>
+                  <PasswordToggleButton
+                    isVisible={showDeactivatePassword}
+                    onToggle={() => setShowDeactivatePassword(!showDeactivatePassword)}
+                  />
                 </div>
               </div>
 
@@ -1878,14 +2234,10 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
                     disabled={deletingAccount}
                     required
                   />
-                  <button
-                    type="button"
-                    className="password-toggle-btn"
-                    onClick={() => setShowDeletePassword(!showDeletePassword)}
-                    tabIndex="-1"
-                  >
-                    {showDeletePassword ? '👁️' : '👁️‍🗨️'}
-                  </button>
+                  <PasswordToggleButton
+                    isVisible={showDeletePassword}
+                    onToggle={() => setShowDeletePassword(!showDeletePassword)}
+                  />
                 </div>
               </div>
 
@@ -1914,6 +2266,21 @@ export default function SettingsPage({ initialSection = 'profile', onNavigateToP
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modern Market-Level Confirmation Modal */}
+      {confirmAction && (
+        <ConfirmModal
+          isOpen={true}
+          title={confirmAction.title}
+          description={confirmAction.description}
+          confirmText={confirmAction.confirmText || 'Confirm'}
+          cancelText="Cancel"
+          variant={confirmAction.variant || 'danger'}
+          isLoading={confirmAction.isLoading || false}
+          onConfirm={confirmAction.onConfirm}
+          onClose={() => setConfirmAction(null)}
+        />
       )}
     </div>
   );
