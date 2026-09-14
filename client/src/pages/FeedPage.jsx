@@ -60,6 +60,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
   const [inlineComments, setInlineComments] = useState({});
   const [submittingCommentPostId, setSubmittingCommentPostId] = useState(null);
   const [reactionToast, setReactionToast] = useState(null);
+  const [shareMenuPostId, setShareMenuPostId] = useState(null);
 
   // Close Friends State
   const [closeFriendIds, setCloseFriendIds] = useState(() => {
@@ -373,6 +374,81 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
       );
     } finally {
       setSubmittingCommentPostId(null);
+    }
+  };
+
+  const getShareUrl = (postId) => {
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://vibegrid.app';
+    return `${baseUrl}/?postId=${encodeURIComponent(postId)}`;
+  };
+
+  const getShareText = (post) => {
+    const rawText = post?.caption || 'Check out this post on VibeGrid';
+    const normalizedText = rawText.replace(/\s+/g, ' ').trim();
+    return normalizedText.length > 120 ? `${normalizedText.slice(0, 117)}...` : normalizedText;
+  };
+
+  const handleShareOption = (post, platform) => {
+    const shareUrl = getShareUrl(post.id);
+    const shareText = encodeURIComponent(`@${post.username} shared on VibeGrid: ${getShareText(post)}`);
+    const encodedUrl = encodeURIComponent(shareUrl);
+    const platformUrls = {
+      x: `https://twitter.com/intent/tweet?text=${shareText}&url=${encodedUrl}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`
+    };
+
+    const url = platformUrls[platform] || shareUrl;
+    window.open(url, '_blank', 'noopener,noreferrer,width=600,height=500');
+    setShareMenuPostId(null);
+    setReactionToast({ customText: `✅ Sharing to ${platform.toUpperCase()}` });
+    setTimeout(() => setReactionToast(null), 2200);
+  };
+
+  const handleSharePost = async (post) => {
+    const shareUrl = getShareUrl(post.id);
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `@${post.username} on VibeGrid`,
+          text: `@${post.username} on VibeGrid: ${getShareText(post)}`,
+          url: shareUrl
+        });
+        setReactionToast({ customText: '✅ Post shared' });
+        setTimeout(() => setReactionToast(null), 2000);
+        return;
+      } catch (error) {
+        if (error?.name === 'AbortError') {
+          return;
+        }
+      }
+    }
+
+    setShareMenuPostId((current) => (current === post.id ? null : post.id));
+  };
+
+  const handleCopyShareLink = async (post) => {
+    const shareUrl = getShareUrl(post.id);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const fallback = document.createElement('textarea');
+        fallback.value = shareUrl;
+        document.body.appendChild(fallback);
+        fallback.select();
+        document.execCommand('copy');
+        document.body.removeChild(fallback);
+      }
+      setShareMenuPostId(null);
+      setReactionToast({ customText: '🔗 Link copied to clipboard' });
+      setTimeout(() => setReactionToast(null), 2200);
+    } catch (error) {
+      console.error('Failed to copy shared link:', error);
+      setShareMenuPostId(null);
+      setReactionToast({ customText: '⚠️ Copy failed' });
+      setTimeout(() => setReactionToast(null), 2200);
     }
   };
 
@@ -723,6 +799,14 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                 <div className="actions-right">
                   <button
                     type="button"
+                    className="post-action-btn post-share-btn"
+                    onClick={() => handleSharePost(post)}
+                    title="Share this post"
+                  >
+                    ↗️
+                  </button>
+                  <button
+                    type="button"
                     className={`post-action-btn post-save-btn ${post.is_saved ? 'saved' : ''}`}
                     onClick={() => handleToggleSave(post.id)}
                     title={post.is_saved ? 'Remove from saved' : 'Save post'}
@@ -731,6 +815,23 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                   </button>
                 </div>
               </div>
+
+              {shareMenuPostId === post.id && (
+                <div className="post-share-menu" role="menu" aria-label="Share options">
+                  <button type="button" className="post-share-option" onClick={() => handleShareOption(post, 'x')}>
+                    𝕏 Share
+                  </button>
+                  <button type="button" className="post-share-option" onClick={() => handleShareOption(post, 'facebook')}>
+                    Facebook
+                  </button>
+                  <button type="button" className="post-share-option" onClick={() => handleShareOption(post, 'linkedin')}>
+                    LinkedIn
+                  </button>
+                  <button type="button" className="post-share-option" onClick={() => handleCopyShareLink(post)}>
+                    Copy Link
+                  </button>
+                </div>
+              )}
 
               {/* Card Caption */}
               {post.caption && (

@@ -3708,6 +3708,12 @@ body {
   gap: 16px;
 }
 
+.actions-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .post-action-btn {
   background: transparent;
   border: none;
@@ -3723,6 +3729,40 @@ body {
 
 .post-action-btn:hover {
   transform: scale(1.1);
+}
+
+.post-share-btn {
+  font-size: 1.2rem;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.post-share-btn:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.post-share-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px 12px;
+}
+
+.post-share-option {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.post-share-option:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.34);
 }
 
 .action-counter {
