@@ -23,6 +23,8 @@ const { query } = require('../config/db');
 const getConversations = async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const { archived } = req.query;
+    const showArchived = archived === 'true';
 
     const conversationsQuery = `
       WITH ranked_messages AS (
@@ -70,15 +72,20 @@ const getConversations = async (req, res, next) => {
         u.username AS partner_username,
         u.full_name AS partner_full_name,
         u.avatar_url AS partner_avatar_url,
-        COALESCE(uc.unread_count, 0) AS unread_count
+        COALESCE(uc.unread_count, 0) AS unread_count,
+        COALESCE(cm.is_pinned, FALSE) AS is_pinned,
+        (COALESCE(cm.is_muted, FALSE) AND (cm.muted_until IS NULL OR cm.muted_until > CURRENT_TIMESTAMP)) AS is_muted,
+        cm.muted_until,
+        COALESCE(cm.is_archived, FALSE) AS is_archived
       FROM ranked_messages rm
       JOIN users u ON rm.partner_id = u.id
       LEFT JOIN unread_counts uc ON rm.partner_id = uc.partner_id
-      WHERE rm.rn = 1
-      ORDER BY rm.created_at DESC;
+      LEFT JOIN conversation_members cm ON cm.conversation_id = rm.conversation_id AND cm.user_id = $1
+      WHERE rm.rn = 1 AND COALESCE(cm.is_archived, FALSE) = $2
+      ORDER BY COALESCE(cm.is_pinned, FALSE) DESC, rm.created_at DESC;
     `;
 
-    const result = await query(conversationsQuery, [userId]);
+    const result = await query(conversationsQuery, [userId, showArchived]);
 
     res.status(200).json({
       success: true,
@@ -104,7 +111,7 @@ const getMessages = async (req, res, next) => {
 
     // 1. Resolve partner user
     const partnerRes = await query(
-      'SELECT id, username, full_name, avatar_url, show_read_receipts, allow_messages_from FROM users WHERE LOWER(username) = $1 LIMIT 1',
+      'SELECT id, username, full_name, avatar_url, show_read_receipts, show_online_status, last_seen_at, allow_messages_from FROM users WHERE LOWER(username) = $1 LIMIT 1',
       [cleanUsername]
     );
 
@@ -116,13 +123,23 @@ const getMessages = async (req, res, next) => {
     }
 
     const partner = partnerRes.rows[0];
+    if (partner.show_online_status === false) {
+      partner.last_seen_at = null;
+    }
 
     // Find or create conversation for this 1to1 pair
     let conversationId = null;
     let ephemeralTimerSeconds = null;
 
     const convRes = await query(`
-      SELECT c.id, c.ephemeral_timer_seconds
+      SELECT 
+        c.id, 
+        c.ephemeral_timer_seconds, 
+        c.pinned_message_id,
+        cm1.is_muted,
+        cm1.muted_until,
+        cm1.is_pinned,
+        cm1.is_archived
       FROM conversations c
       JOIN conversation_members cm1 ON c.id = cm1.conversation_id AND cm1.user_id = $1
       JOIN conversation_members cm2 ON c.id = cm2.conversation_id AND cm2.user_id = $2
@@ -130,9 +147,33 @@ const getMessages = async (req, res, next) => {
       LIMIT 1
     `, [userId, partner.id]);
 
+    // Check block list status between the two users
+    const blockRes = await query(
+      `SELECT blocker_id, blocked_id FROM blocked_users 
+       WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)`,
+      [userId, partner.id]
+    );
+    const isBlocked = blockRes.rows.some((b) => Number(b.blocker_id) === Number(userId));
+    const isBlockedBy = blockRes.rows.some((b) => Number(b.blocker_id) === Number(partner.id));
+
+    let pinnedMessage = null;
+
     if (convRes.rows.length > 0) {
       conversationId = convRes.rows[0].id;
       ephemeralTimerSeconds = convRes.rows[0].ephemeral_timer_seconds;
+
+      if (convRes.rows[0].pinned_message_id) {
+        const pinRes = await query(
+          `SELECT m.id, m.content, m.sender_id, m.created_at, u.username AS sender_username
+           FROM messages m
+           JOIN users u ON m.sender_id = u.id
+           WHERE m.id = $1 AND m.is_deleted = FALSE LIMIT 1`,
+          [convRes.rows[0].pinned_message_id]
+        );
+        if (pinRes.rows.length > 0) {
+          pinnedMessage = pinRes.rows[0];
+        }
+      }
     } else {
       const newConv = await query(`INSERT INTO conversations (type) VALUES ('1to1') RETURNING id`);
       conversationId = newConv.rows[0].id;
@@ -159,6 +200,8 @@ const getMessages = async (req, res, next) => {
         m.is_deleted,
         m.is_forwarded,
         m.edited_at,
+        m.delivered_at,
+        m.read_at,
         m.created_at,
         (m.sender_id = $1) AS is_mine,
         rm.id AS reply_id,
@@ -167,7 +210,15 @@ const getMessages = async (req, res, next) => {
         rm.content AS reply_content,
         rm.ciphertext AS reply_ciphertext,
         rm.iv_nonce AS reply_iv_nonce,
-        rm.is_deleted AS reply_is_deleted
+        rm.is_deleted AS reply_is_deleted,
+        EXISTS(SELECT 1 FROM message_stars ms WHERE ms.message_id = m.id AND ms.user_id = $1) AS is_starred,
+        COALESCE(
+          (SELECT json_agg(json_build_object('id', mr.id, 'user_id', mr.user_id, 'username', mru.username, 'reaction', mr.reaction))
+           FROM message_reactions mr
+           JOIN users mru ON mr.user_id = mru.id
+           WHERE mr.message_id = m.id),
+          '[]'::json
+        ) AS reactions
       FROM messages m
       LEFT JOIN messages rm ON m.reply_to_id = rm.id
       LEFT JOIN users rmu ON rm.sender_id = rmu.id
@@ -180,9 +231,9 @@ const getMessages = async (req, res, next) => {
 
     const messagesRes = await query(messagesQuery, [userId, partner.id]);
 
-    // 3. Mark incoming messages as read
+    // 3. Mark incoming messages as read and update read_at
     await query(
-      'UPDATE messages SET is_read = TRUE WHERE sender_id = $1 AND recipient_id = $2 AND is_read = FALSE',
+      'UPDATE messages SET is_read = TRUE, read_at = COALESCE(read_at, CURRENT_TIMESTAMP) WHERE sender_id = $1 AND recipient_id = $2 AND is_read = FALSE',
       [partner.id, userId]
     );
 
@@ -224,11 +275,18 @@ const getMessages = async (req, res, next) => {
         is_read: (partner.show_read_receipts === false && msg.is_mine) ? false : msg.is_read,
         is_deleted: Boolean(msg.is_deleted),
         is_forwarded: Boolean(msg.is_forwarded),
+        is_starred: Boolean(msg.is_starred),
+        reactions: Array.isArray(msg.reactions) ? msg.reactions : [],
         edited_at: msg.edited_at,
+        delivered_at: msg.delivered_at,
+        read_at: msg.read_at,
         created_at: msg.created_at,
         is_mine: msg.is_mine
       };
     });
+
+    const cmRow = convRes.rows[0];
+    const isMuted = Boolean(cmRow?.is_muted && (!cmRow.muted_until || new Date(cmRow.muted_until) > new Date()));
 
     res.status(200).json({
       success: true,
@@ -236,6 +294,13 @@ const getMessages = async (req, res, next) => {
         partner,
         conversationId,
         ephemeralTimerSeconds,
+        pinnedMessage,
+        isMuted,
+        mutedUntil: cmRow?.muted_until || null,
+        isPinned: Boolean(cmRow?.is_pinned),
+        isArchived: Boolean(cmRow?.is_archived),
+        isBlocked,
+        isBlockedBy,
         messages: formattedMessages
       }
     });
@@ -300,10 +365,10 @@ const sendMessage = async (req, res, next) => {
       }
     }
 
-    // 3. Validate message content
-    const cleanContent = (content && typeof content === 'string')
-      ? content.trim().slice(0, 10000)
-      : (ciphertext ? '[Encrypted Message]' : '');
+    // 3. Validate message content (Zero-knowledge: if ciphertext is present, NEVER store plaintext)
+    const cleanContent = ciphertext
+      ? '[Encrypted Message]'
+      : ((content && typeof content === 'string') ? content.trim().slice(0, 10000) : '');
 
     if (!cleanContent && !ciphertext) {
       return res.status(400).json({
@@ -367,11 +432,21 @@ const sendMessage = async (req, res, next) => {
       }
     }
 
+    // Check if recipient is active in onlineUsers
+    let isRecipientOnline = false;
+    try {
+      const { onlineUsers } = require('../socket');
+      isRecipientOnline = Boolean(onlineUsers && onlineUsers.get(recipient.id) > 0);
+    } catch (e) {
+      // socket module fallback
+    }
+    const deliveredAt = isRecipientOnline ? new Date().toISOString() : null;
+
     // 4. Insert message
     const insertQuery = `
-      INSERT INTO messages (sender_id, recipient_id, conversation_id, content, ciphertext, iv_nonce, sender_device_id, reply_to_id, expires_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING id, sender_id, recipient_id, conversation_id, content, ciphertext, iv_nonce, sender_device_id, message_type, reply_to_id, is_read, is_deleted, is_forwarded, edited_at, created_at
+      INSERT INTO messages (sender_id, recipient_id, conversation_id, content, ciphertext, iv_nonce, sender_device_id, reply_to_id, expires_at, delivered_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING id, sender_id, recipient_id, conversation_id, content, ciphertext, iv_nonce, sender_device_id, message_type, reply_to_id, is_read, is_deleted, is_forwarded, edited_at, delivered_at, read_at, created_at
     `;
 
     const result = await query(insertQuery, [
@@ -383,7 +458,8 @@ const sendMessage = async (req, res, next) => {
       ivNonce || null,
       senderDeviceId || null,
       validatedReplyToId,
-      expiresAt
+      expiresAt,
+      deliveredAt
     ]);
 
     const newMessage = {
@@ -406,6 +482,14 @@ const sendMessage = async (req, res, next) => {
         io.to(`conv:${conversationId}`).emit('message:receive', {
           ...newMessage,
           is_mine: false
+        });
+      }
+      if (isRecipientOnline) {
+        io.to(`user:${senderId}`).emit('message:delivery_receipt', {
+          messageId: Number(result.rows[0].id),
+          conversationId,
+          recipientId: recipient.id,
+          deliveredAt
         });
       }
     }
@@ -459,9 +543,9 @@ const editMessage = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Call logs cannot be edited.' });
     }
 
-    const cleanContent = (content && typeof content === 'string')
-      ? content.trim().slice(0, 10000)
-      : '';
+    const cleanContent = ciphertext
+      ? '[Encrypted Message]'
+      : ((content && typeof content === 'string') ? content.trim().slice(0, 10000) : '');
 
     if (!cleanContent && !ciphertext) {
       return res.status(400).json({ success: false, error: 'Message content cannot be empty.' });
@@ -607,10 +691,20 @@ const markConversationAsRead = async (req, res, next) => {
     );
 
     if (userRes.rows.length > 0) {
+      const senderId = userRes.rows[0].id;
+      const readAt = new Date().toISOString();
       await query(
-        'UPDATE messages SET is_read = TRUE WHERE sender_id = $1 AND recipient_id = $2 AND is_read = FALSE',
-        [userRes.rows[0].id, userId]
+        'UPDATE messages SET is_read = TRUE, read_at = CURRENT_TIMESTAMP WHERE sender_id = $1 AND recipient_id = $2 AND is_read = FALSE',
+        [senderId, userId]
       );
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user:${senderId}`).emit('message:read_receipt', {
+          readerId: userId,
+          readAt
+        });
+      }
     }
 
     res.status(200).json({
@@ -652,6 +746,901 @@ const getUnreadMessagesCount = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Toggle emoji reaction on a message
+ * @route   POST /api/messages/msg/:id/reaction
+ * @access  Private (Authenticated)
+ */
+const toggleReaction = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const { reaction } = req.body;
+
+    if (!reaction || typeof reaction !== 'string') {
+      return res.status(400).json({ success: false, error: 'Reaction emoji required.' });
+    }
+
+    // Verify message exists and user is part of the conversation
+    const msgRes = await query(
+      `SELECT id, sender_id, recipient_id, conversation_id, is_deleted 
+       FROM messages WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+
+    if (msgRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Message not found.' });
+    }
+
+    const msg = msgRes.rows[0];
+    const isSender = Number(msg.sender_id) === Number(userId);
+    const isRecipient = Number(msg.recipient_id) === Number(userId);
+
+    if (!isSender && !isRecipient) {
+      return res.status(403).json({ success: false, error: 'Not authorized to react to this message.' });
+    }
+
+    // Check if existing reaction exists
+    const existing = await query(
+      'SELECT id, reaction FROM message_reactions WHERE message_id = $1 AND user_id = $2 LIMIT 1',
+      [id, userId]
+    );
+
+    let action = 'added';
+    if (existing.rows.length > 0) {
+      if (existing.rows[0].reaction === reaction) {
+        // Toggle off
+        await query('DELETE FROM message_reactions WHERE id = $1', [existing.rows[0].id]);
+        action = 'removed';
+      } else {
+        // Update reaction
+        await query('UPDATE message_reactions SET reaction = $1 WHERE id = $2', [reaction, existing.rows[0].id]);
+        action = 'updated';
+      }
+    } else {
+      await query(
+        'INSERT INTO message_reactions (message_id, user_id, reaction) VALUES ($1, $2, $3)',
+        [id, userId, reaction]
+      );
+    }
+
+    // Query aggregated reactions
+    const reactRes = await query(
+      `SELECT mr.id, mr.user_id, u.username, mr.reaction
+       FROM message_reactions mr
+       JOIN users u ON mr.user_id = u.id
+       WHERE mr.message_id = $1
+       ORDER BY mr.created_at ASC`,
+      [id]
+    );
+
+    const updatedReactions = reactRes.rows;
+
+    // Real-time Socket broadcast
+    const io = req.app.get('io');
+    if (io) {
+      const payload = {
+        messageId: Number(id),
+        conversationId: msg.conversation_id,
+        reactions: updatedReactions,
+        action,
+        userId
+      };
+      if (msg.recipient_id) {
+        io.to(`user:${msg.recipient_id}`).emit('message:reaction', payload);
+      }
+      if (msg.sender_id) {
+        io.to(`user:${msg.sender_id}`).emit('message:reaction', payload);
+      }
+      if (msg.conversation_id) {
+        io.to(`conv:${msg.conversation_id}`).emit('message:reaction', payload);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      action,
+      reactions: updatedReactions
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Forward a message to one or more target users
+ * @route   POST /api/messages/forward
+ * @access  Private (Authenticated)
+ */
+const forwardMessage = async (req, res, next) => {
+  try {
+    const senderId = req.user.id;
+    const { messageId, targetUsernames } = req.body;
+
+    if (!messageId || !Array.isArray(targetUsernames) || targetUsernames.length === 0) {
+      return res.status(400).json({ success: false, error: 'Message ID and target usernames required.' });
+    }
+
+    // Fetch original message
+    const msgRes = await query(
+      `SELECT id, sender_id, recipient_id, content, ciphertext, iv_nonce, sender_device_id, message_type, is_deleted 
+       FROM messages WHERE id = $1 LIMIT 1`,
+      [messageId]
+    );
+
+    if (msgRes.rows.length === 0 || msgRes.rows[0].is_deleted) {
+      return res.status(404).json({ success: false, error: 'Original message not found or deleted.' });
+    }
+
+    const orig = msgRes.rows[0];
+    const isSender = Number(orig.sender_id) === Number(senderId);
+    const isRecipient = Number(orig.recipient_id) === Number(senderId);
+
+    if (!isSender && !isRecipient) {
+      return res.status(403).json({ success: false, error: 'Not authorized to forward this message.' });
+    }
+
+    const io = req.app.get('io');
+    const forwardedMessages = [];
+
+    for (const rawUsername of targetUsernames) {
+      const cleanUsername = String(rawUsername).trim().toLowerCase();
+      if (!cleanUsername) continue;
+
+      const userRes = await query(
+        'SELECT id, username, full_name, avatar_url, allow_messages_from FROM users WHERE LOWER(username) = $1 LIMIT 1',
+        [cleanUsername]
+      );
+
+      if (userRes.rows.length === 0) continue;
+      const recipient = userRes.rows[0];
+
+      if (recipient.id === senderId) continue; // Don't forward to self
+
+      // Check privacy settings
+      if (recipient.allow_messages_from === 'nobody') continue;
+      if (recipient.allow_messages_from === 'following') {
+        const followCheck = await query(
+          'SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1',
+          [recipient.id, senderId]
+        );
+        if (followCheck.rows.length === 0) continue;
+      }
+
+      // Find or create 1to1 conversation
+      let conversationId = null;
+      let ephemeralSeconds = null;
+
+      const convRes = await query(`
+        SELECT c.id, c.ephemeral_timer_seconds
+        FROM conversations c
+        JOIN conversation_members cm1 ON c.id = cm1.conversation_id AND cm1.user_id = $1
+        JOIN conversation_members cm2 ON c.id = cm2.conversation_id AND cm2.user_id = $2
+        WHERE c.type = '1to1'
+        LIMIT 1
+      `, [senderId, recipient.id]);
+
+      if (convRes.rows.length > 0) {
+        conversationId = convRes.rows[0].id;
+        ephemeralSeconds = convRes.rows[0].ephemeral_timer_seconds;
+      } else {
+        const newConv = await query(`INSERT INTO conversations (type) VALUES ('1to1') RETURNING id`);
+        conversationId = newConv.rows[0].id;
+        await query(
+          `INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1, $2), ($1, $3) ON CONFLICT DO NOTHING`,
+          [conversationId, senderId, recipient.id]
+        );
+      }
+
+      const expiresAt = ephemeralSeconds ? new Date(Date.now() + ephemeralSeconds * 1000).toISOString() : null;
+
+      const insertRes = await query(`
+        INSERT INTO messages (sender_id, recipient_id, conversation_id, content, ciphertext, iv_nonce, sender_device_id, message_type, is_forwarded, expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9)
+        RETURNING id, sender_id, recipient_id, conversation_id, content, ciphertext, iv_nonce, sender_device_id, message_type, is_read, is_deleted, is_forwarded, edited_at, created_at
+      `, [
+        senderId,
+        recipient.id,
+        conversationId,
+        orig.content,
+        orig.ciphertext || null,
+        orig.iv_nonce || null,
+        orig.sender_device_id || null,
+        orig.message_type || 'text',
+        expiresAt
+      ]);
+
+      const newMsg = {
+        ...insertRes.rows[0],
+        is_mine: false,
+        reactions: []
+      };
+
+      forwardedMessages.push({ recipientUsername: recipient.username, messageId: newMsg.id });
+
+      // Update conversation timestamp
+      await query('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [conversationId]);
+
+      if (io) {
+        io.to(`user:${recipient.id}`).emit('message:receive', newMsg);
+        if (conversationId) {
+          io.to(`conv:${conversationId}`).emit('message:receive', newMsg);
+        }
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      forwardedCount: forwardedMessages.length,
+      data: forwardedMessages
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get detailed delivery & read timestamps for a message
+ * @route   GET /api/messages/msg/:id/info
+ * @access  Private (Authenticated)
+ */
+const getMessageInfo = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const msgRes = await query(`
+      SELECT 
+        m.id,
+        m.sender_id,
+        m.recipient_id,
+        m.created_at,
+        m.delivered_at,
+        m.read_at,
+        m.is_read,
+        u.username AS recipient_username,
+        u.full_name AS recipient_full_name,
+        u.avatar_url AS recipient_avatar_url
+      FROM messages m
+      JOIN users u ON m.recipient_id = u.id
+      WHERE m.id = $1 LIMIT 1
+    `, [id]);
+
+    if (msgRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Message not found.' });
+    }
+
+    const msg = msgRes.rows[0];
+    if (Number(msg.sender_id) !== Number(userId) && Number(msg.recipient_id) !== Number(userId)) {
+      return res.status(403).json({ success: false, error: 'Not authorized to view info for this message.' });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: msg.id,
+        createdAt: msg.created_at,
+        deliveredAt: msg.delivered_at || msg.created_at,
+        readAt: msg.is_read ? (msg.read_at || msg.created_at) : null,
+        isRead: msg.is_read,
+        recipient: {
+          username: msg.recipient_username,
+          fullName: msg.recipient_full_name,
+          avatarUrl: msg.recipient_avatar_url
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Star or unstar a message privately
+ * @route   POST /api/messages/msg/:id/star
+ * @access  Private (Authenticated)
+ */
+const toggleStarMessage = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    // Verify message exists and user is part of the conversation
+    const msgRes = await query(
+      `SELECT id, sender_id, recipient_id, is_deleted FROM messages WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+
+    if (msgRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Message not found.' });
+    }
+
+    const msg = msgRes.rows[0];
+    if (Number(msg.sender_id) !== Number(userId) && Number(msg.recipient_id) !== Number(userId)) {
+      return res.status(403).json({ success: false, error: 'Not authorized to star this message.' });
+    }
+
+    const starRes = await query(
+      `SELECT id FROM message_stars WHERE message_id = $1 AND user_id = $2 LIMIT 1`,
+      [id, userId]
+    );
+
+    let isStarred = false;
+    if (starRes.rows.length > 0) {
+      await query(`DELETE FROM message_stars WHERE id = $1`, [starRes.rows[0].id]);
+      isStarred = false;
+    } else {
+      await query(
+        `INSERT INTO message_stars (message_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [id, userId]
+      );
+      isStarred = true;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { messageId: Number(id), isStarred }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get all starred messages for the authenticated user
+ * @route   GET /api/messages/starred
+ * @access  Private (Authenticated)
+ */
+const getStarredMessages = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const starredRes = await query(`
+      SELECT 
+        m.id,
+        m.sender_id,
+        m.recipient_id,
+        m.conversation_id,
+        m.content,
+        m.ciphertext,
+        m.iv_nonce,
+        m.message_type,
+        m.created_at,
+        ms.created_at AS starred_at,
+        sender.username AS sender_username,
+        sender.avatar_url AS sender_avatar,
+        CASE WHEN m.sender_id = $1 THEN recip.username ELSE sender.username END AS partner_username
+      FROM message_stars ms
+      JOIN messages m ON ms.message_id = m.id
+      JOIN users sender ON m.sender_id = sender.id
+      JOIN users recip ON m.recipient_id = recip.id
+      WHERE ms.user_id = $1
+        AND m.is_deleted = FALSE
+        AND m.id NOT IN (SELECT message_id FROM message_deletions WHERE user_id = $1)
+      ORDER BY ms.created_at DESC
+    `, [userId]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        starredMessages: starredRes.rows
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Pin or unpin a message in a conversation
+ * @route   POST /api/messages/conv/:id/pin
+ * @access  Private (Authenticated)
+ */
+const togglePinMessage = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params; // conversationId
+    const { messageId } = req.body; // pass null or message id
+
+    // Verify user is a member of this conversation
+    const memberRes = await query(
+      `SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1`,
+      [id, userId]
+    );
+
+    if (memberRes.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not authorized for this conversation.' });
+    }
+
+    let targetPinId = null;
+    let pinnedMessage = null;
+
+    if (messageId) {
+      const msgCheck = await query(
+        `SELECT m.id, m.content, m.sender_id, m.created_at, u.username AS sender_username
+         FROM messages m
+         JOIN users u ON m.sender_id = u.id
+         WHERE m.id = $1 AND m.conversation_id = $2 AND m.is_deleted = FALSE LIMIT 1`,
+        [messageId, id]
+      );
+
+      if (msgCheck.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Message to pin not found.' });
+      }
+
+      targetPinId = msgCheck.rows[0].id;
+      pinnedMessage = msgCheck.rows[0];
+    }
+
+    await query(
+      `UPDATE conversations SET pinned_message_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      [targetPinId, id]
+    );
+
+    // Socket broadcast to room
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conv:${id}`).emit('message:pin', {
+        conversationId: id,
+        pinnedMessageId: targetPinId,
+        pinnedMessage
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        conversationId: id,
+        pinnedMessageId: targetPinId,
+        pinnedMessage
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Bulk delete messages (for_me or for_everyone)
+ * @route   POST /api/messages/bulk/delete
+ * @access  Private (Authenticated)
+ */
+const bulkDeleteMessages = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { messageIds, type = 'for_me' } = req.body;
+
+    if (!Array.isArray(messageIds) || messageIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'messageIds array is required.' });
+    }
+
+    const cleanIds = messageIds.map(Number).filter((id) => !isNaN(id) && id > 0);
+    if (cleanIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'Valid message IDs required.' });
+    }
+
+    const io = req.app.get('io');
+
+    if (type === 'for_everyone') {
+      // Must be sender of each message to delete for everyone
+      const msgsRes = await query(
+        `SELECT id, sender_id, recipient_id, conversation_id FROM messages WHERE id = ANY($1::int[]) AND is_deleted = FALSE`,
+        [cleanIds]
+      );
+
+      const unauthorized = msgsRes.rows.filter((m) => Number(m.sender_id) !== Number(userId));
+      if (unauthorized.length > 0) {
+        return res.status(403).json({
+          success: false,
+          error: 'You can only delete your own messages for everyone.'
+        });
+      }
+
+      await query(
+        `UPDATE messages SET is_deleted = TRUE, content = 'This message was deleted', ciphertext = NULL, iv_nonce = NULL WHERE id = ANY($1::int[])`,
+        [cleanIds]
+      );
+
+      if (io) {
+        msgsRes.rows.forEach((m) => {
+          const payload = { messageId: m.id, conversationId: m.conversation_id, forEveryone: true };
+          if (m.recipient_id) io.to(`user:${m.recipient_id}`).emit('message:delete', payload);
+          if (m.sender_id) io.to(`user:${m.sender_id}`).emit('message:delete', payload);
+          if (m.conversation_id) io.to(`conv:${m.conversation_id}`).emit('message:delete', payload);
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        deletedCount: cleanIds.length,
+        forEveryone: true
+      });
+    } else {
+      // Delete for me
+      for (const msgId of cleanIds) {
+        await query(
+          `INSERT INTO message_deletions (message_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [msgId, userId]
+        );
+      }
+
+      return res.status(200).json({
+        success: true,
+        deletedCount: cleanIds.length,
+        forEveryone: false
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Bulk star or unstar messages
+ * @route   POST /api/messages/bulk/star
+ * @access  Private (Authenticated)
+ */
+const bulkStarMessages = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { messageIds, isStarred = true } = req.body;
+
+    if (!Array.isArray(messageIds) || messageIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'messageIds array is required.' });
+    }
+
+    const cleanIds = messageIds.map(Number).filter((id) => !isNaN(id) && id > 0);
+
+    if (isStarred) {
+      for (const msgId of cleanIds) {
+        await query(
+          `INSERT INTO message_stars (message_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [msgId, userId]
+        );
+      }
+    } else {
+      await query(
+        `DELETE FROM message_stars WHERE user_id = $1 AND message_id = ANY($2::int[])`,
+        [userId, cleanIds]
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      modifiedCount: cleanIds.length,
+      isStarred
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Bulk forward multiple messages to target recipients
+ * @route   POST /api/messages/bulk/forward
+ * @access  Private (Authenticated)
+ */
+const bulkForwardMessages = async (req, res, next) => {
+  try {
+    const senderId = req.user.id;
+    const { messageIds, targetUsernames } = req.body;
+
+    if (!Array.isArray(messageIds) || messageIds.length === 0 || !Array.isArray(targetUsernames) || targetUsernames.length === 0) {
+      return res.status(400).json({ success: false, error: 'messageIds and targetUsernames arrays are required.' });
+    }
+
+    const cleanIds = messageIds.map(Number).filter((id) => !isNaN(id) && id > 0);
+
+    // Fetch messages in chronological order
+    const msgsRes = await query(
+      `SELECT id, sender_id, recipient_id, content, ciphertext, iv_nonce, sender_device_id, message_type 
+       FROM messages 
+       WHERE id = ANY($1::int[]) AND is_deleted = FALSE 
+       ORDER BY created_at ASC`,
+      [cleanIds]
+    );
+
+    if (msgsRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'No valid messages found to forward.' });
+    }
+
+    const io = req.app.get('io');
+    let totalForwarded = 0;
+
+    for (const rawUsername of targetUsernames) {
+      const cleanUsername = String(rawUsername).trim().toLowerCase();
+      if (!cleanUsername) continue;
+
+      const userRes = await query(
+        'SELECT id, username, allow_messages_from FROM users WHERE LOWER(username) = $1 LIMIT 1',
+        [cleanUsername]
+      );
+
+      if (userRes.rows.length === 0) continue;
+      const recipient = userRes.rows[0];
+      if (recipient.id === senderId) continue;
+
+      // Privacy check
+      if (recipient.allow_messages_from === 'nobody') continue;
+      if (recipient.allow_messages_from === 'following') {
+        const followCheck = await query(
+          'SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1',
+          [recipient.id, senderId]
+        );
+        if (followCheck.rows.length === 0) continue;
+      }
+
+      // Find or create conversation
+      let conversationId = null;
+      let ephemeralSeconds = null;
+
+      const convRes = await query(`
+        SELECT c.id, c.ephemeral_timer_seconds
+        FROM conversations c
+        JOIN conversation_members cm1 ON c.id = cm1.conversation_id AND cm1.user_id = $1
+        JOIN conversation_members cm2 ON c.id = cm2.conversation_id AND cm2.user_id = $2
+        WHERE c.type = '1to1'
+        LIMIT 1
+      `, [senderId, recipient.id]);
+
+      if (convRes.rows.length > 0) {
+        conversationId = convRes.rows[0].id;
+        ephemeralSeconds = convRes.rows[0].ephemeral_timer_seconds;
+      } else {
+        const newConv = await query(`INSERT INTO conversations (type) VALUES ('1to1') RETURNING id`);
+        conversationId = newConv.rows[0].id;
+        await query(
+          `INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1, $2), ($1, $3) ON CONFLICT DO NOTHING`,
+          [conversationId, senderId, recipient.id]
+        );
+      }
+
+      const expiresAt = ephemeralSeconds ? new Date(Date.now() + ephemeralSeconds * 1000).toISOString() : null;
+
+      for (const msg of msgsRes.rows) {
+        const insertRes = await query(`
+          INSERT INTO messages (sender_id, recipient_id, conversation_id, content, ciphertext, iv_nonce, sender_device_id, message_type, is_forwarded, expires_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9)
+          RETURNING id, sender_id, recipient_id, conversation_id, content, ciphertext, iv_nonce, sender_device_id, message_type, is_read, is_deleted, is_forwarded, edited_at, created_at
+        `, [
+          senderId,
+          recipient.id,
+          conversationId,
+          msg.content,
+          msg.ciphertext || null,
+          msg.iv_nonce || null,
+          msg.sender_device_id || null,
+          msg.message_type || 'text',
+          expiresAt
+        ]);
+
+        totalForwarded++;
+        const newMsg = {
+          ...insertRes.rows[0],
+          is_mine: false,
+          reactions: []
+        };
+
+        if (io) {
+          io.to(`user:${recipient.id}`).emit('message:receive', newMsg);
+          if (conversationId) {
+            io.to(`conv:${conversationId}`).emit('message:receive', newMsg);
+          }
+        }
+      }
+
+      await query('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [conversationId]);
+    }
+
+    res.status(201).json({
+      success: true,
+      forwardedCount: totalForwarded
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Toggle or update mute settings for a conversation for the current user
+ * @route   PUT /api/messages/conv/:id/mute
+ * @access  Private (Authenticated)
+ */
+const toggleMuteConversation = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params; // conversationId
+    const { isMuted, durationHours } = req.body;
+
+    let mutedUntil = null;
+    if (isMuted && durationHours && Number(durationHours) > 0) {
+      mutedUntil = new Date(Date.now() + Number(durationHours) * 3600 * 1000).toISOString();
+    }
+
+    const memberCheck = await query(
+      `SELECT 1 FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1`,
+      [id, userId]
+    );
+
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not authorized for this conversation.' });
+    }
+
+    await query(
+      `UPDATE conversation_members 
+       SET is_muted = $1, muted_until = $2 
+       WHERE conversation_id = $3 AND user_id = $4`,
+      [Boolean(isMuted), mutedUntil, id, userId]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        conversationId: id,
+        isMuted: Boolean(isMuted),
+        mutedUntil
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Pin or unpin a conversation in sidebar for the current user
+ * @route   PUT /api/messages/conv/:id/pin-conv
+ * @access  Private (Authenticated)
+ */
+const togglePinConversation = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params; // conversationId
+    const { isPinned } = req.body;
+
+    const memberCheck = await query(
+      `SELECT is_pinned FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1`,
+      [id, userId]
+    );
+
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not authorized for this conversation.' });
+    }
+
+    const newPinned = isPinned !== undefined ? Boolean(isPinned) : !memberCheck.rows[0].is_pinned;
+
+    await query(
+      `UPDATE conversation_members SET is_pinned = $1 WHERE conversation_id = $2 AND user_id = $3`,
+      [newPinned, id, userId]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        conversationId: id,
+        isPinned: newPinned
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Archive or unarchive a conversation for the current user
+ * @route   PUT /api/messages/conv/:id/archive
+ * @access  Private (Authenticated)
+ */
+const toggleArchiveConversation = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params; // conversationId
+    const { isArchived } = req.body;
+
+    const memberCheck = await query(
+      `SELECT is_archived FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1`,
+      [id, userId]
+    );
+
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not authorized for this conversation.' });
+    }
+
+    const newArchived = isArchived !== undefined ? Boolean(isArchived) : !memberCheck.rows[0].is_archived;
+
+    await query(
+      `UPDATE conversation_members SET is_archived = $1 WHERE conversation_id = $2 AND user_id = $3`,
+      [newArchived, id, userId]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        conversationId: id,
+        isArchived: newArchived
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Clear chat history for current user in a conversation
+ * @route   DELETE /api/messages/conv/:id/clear
+ * @access  Private (Authenticated)
+ */
+const clearConversationMessages = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params; // conversationId
+
+    const memberCheck = await query(
+      `SELECT 1 FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1`,
+      [id, userId]
+    );
+
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not authorized for this conversation.' });
+    }
+
+    // Insert delete-for-me records for all messages in this conversation not already deleted for user
+    await query(`
+      INSERT INTO message_deletions (user_id, message_id)
+      SELECT $1, m.id
+      FROM messages m
+      WHERE m.conversation_id = $2
+        AND m.id NOT IN (SELECT message_id FROM message_deletions WHERE user_id = $1)
+      ON CONFLICT DO NOTHING
+    `, [userId, id]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Conversation messages cleared successfully.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Submit a user, message, or conversation report
+ * @route   POST /api/messages/report
+ * @access  Private (Authenticated)
+ */
+const reportEntity = async (req, res, next) => {
+  try {
+    const reporterId = req.user.id;
+    const { reportedUserId, conversationId, messageId, reason, details } = req.body;
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ success: false, error: 'Report reason is required.' });
+    }
+
+    const insertRes = await query(`
+      INSERT INTO reports (reporter_id, reported_user_id, conversation_id, message_id, reason, details)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id, reporter_id, reported_user_id, conversation_id, message_id, reason, details, status, created_at
+    `, [
+      reporterId,
+      reportedUserId ? Number(reportedUserId) : null,
+      conversationId || null,
+      messageId ? Number(messageId) : null,
+      reason.trim(),
+      details ? details.trim() : null
+    ]);
+
+    res.status(201).json({
+      success: true,
+      data: {
+        report: insertRes.rows[0]
+      },
+      message: 'Report submitted successfully. Our team will review it.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getConversations,
   getMessages,
@@ -659,5 +1648,19 @@ module.exports = {
   editMessage,
   deleteMessage,
   markConversationAsRead,
-  getUnreadMessagesCount
+  getUnreadMessagesCount,
+  toggleReaction,
+  forwardMessage,
+  getMessageInfo,
+  toggleStarMessage,
+  getStarredMessages,
+  togglePinMessage,
+  bulkDeleteMessages,
+  bulkStarMessages,
+  bulkForwardMessages,
+  toggleMuteConversation,
+  togglePinConversation,
+  toggleArchiveConversation,
+  clearConversationMessages,
+  reportEntity
 };

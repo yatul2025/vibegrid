@@ -244,8 +244,164 @@ const replenishPreKeys = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    List all registered devices for the authenticated user
+ * @route   GET /api/e2ee/devices
+ * @access  Private (Authenticated)
+ */
+const getUserDevices = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const devicesRes = await query(
+      `SELECT id, device_id, registration_id, created_at, last_seen_at
+       FROM user_devices
+       WHERE user_id = $1
+       ORDER BY last_seen_at DESC`,
+      [userId]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        devices: devicesRes.rows
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Revoke/delete a registered cryptographic device
+ * @route   DELETE /api/e2ee/devices/:deviceId
+ * @access  Private (Authenticated)
+ */
+const revokeDevice = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { deviceId } = req.params;
+
+    const delRes = await query(
+      'DELETE FROM user_devices WHERE user_id = $1 AND device_id = $2 RETURNING id',
+      [userId, deviceId]
+    );
+
+    if (delRes.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Device not found or not owned by user.'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Device revoked successfully.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get prekey bundles for all active devices of a recipient
+ * @route   GET /api/e2ee/keys/devices/:userIdOrUsername
+ * @access  Private (Authenticated)
+ */
+const getAllDevicePreKeyBundles = async (req, res, next) => {
+  try {
+    const { userIdOrUsername } = req.params;
+
+    let targetUserId;
+    if (/^\d+$/.test(userIdOrUsername)) {
+      targetUserId = Number(userIdOrUsername);
+    } else {
+      const uRes = await query(
+        'SELECT id FROM users WHERE LOWER(username) = $1 LIMIT 1',
+        [userIdOrUsername.toLowerCase().trim()]
+      );
+      if (uRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'User not found.' });
+      }
+      targetUserId = uRes.rows[0].id;
+    }
+
+    const blockRes = await query(
+      'SELECT 1 FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1',
+      [req.user.id, targetUserId]
+    );
+    if (blockRes.rows.length > 0) {
+      return res.status(403).json({
+        success: false,
+        error: 'Cannot establish session with this user.'
+      });
+    }
+
+    const deviceRes = await query(
+      `SELECT id, device_id, identity_key_pub, signed_prekey_pub, 
+              signed_prekey_sig, signed_prekey_id, registration_id
+       FROM user_devices
+       WHERE user_id = $1
+       ORDER BY last_seen_at DESC`,
+      [targetUserId]
+    );
+
+    if (deviceRes.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'User has no registered E2EE devices.'
+      });
+    }
+
+    const bundles = [];
+    for (const device of deviceRes.rows) {
+      const opkRes = await query(
+        `UPDATE e2ee_prekeys
+         SET is_consumed = TRUE, consumed_at = CURRENT_TIMESTAMP
+         WHERE id = (
+           SELECT id FROM e2ee_prekeys
+           WHERE device_id = $1 AND is_consumed = FALSE
+           ORDER BY id ASC
+           LIMIT 1
+         )
+         RETURNING key_id, prekey_pub`,
+        [device.id]
+      );
+
+      const oneTimePreKey = opkRes.rows.length > 0 ? {
+        keyId: opkRes.rows[0].key_id,
+        publicKey: opkRes.rows[0].prekey_pub
+      } : null;
+
+      bundles.push({
+        deviceId: device.device_id,
+        registrationId: device.registration_id,
+        identityKey: device.identity_key_pub,
+        signedPreKey: {
+          keyId: device.signed_prekey_id,
+          publicKey: device.signed_prekey_pub,
+          signature: device.signed_prekey_sig
+        },
+        oneTimePreKey
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        userId: targetUserId,
+        devices: bundles
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   registerKeys,
   getPreKeyBundle,
-  replenishPreKeys
+  replenishPreKeys,
+  getUserDevices,
+  revokeDevice,
+  getAllDevicePreKeyBundles
 };
