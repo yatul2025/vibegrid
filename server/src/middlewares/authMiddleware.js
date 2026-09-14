@@ -17,8 +17,11 @@ const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_
 
 const protect = async (req, res, next) => {
   try {
-    // 1. Extract token from HTTP-Only cookie
-    const token = req.cookies ? req.cookies[COOKIE_NAME] : null;
+    // 1. Extract token from HTTP-Only cookie or Authorization header
+    let token = req.cookies ? req.cookies[COOKIE_NAME] : null;
+    if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
 
     if (!token) {
       return res.status(401).json({
@@ -44,7 +47,53 @@ const protect = async (req, res, next) => {
       });
     }
 
-    // 3. Fetch current user from PostgreSQL database to ensure account still exists
+    // 3. Dedicated Demo Mode Session Enforcement
+    const isDemoSession = Boolean(decoded.isDemoSession || decoded.sessionType === 'demo');
+    if (isDemoSession) {
+      req.isDemoSession = true;
+
+      // Reject all mutating actions from demo sessions
+      const mutatingMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
+      if (mutatingMethods.includes(req.method.toUpperCase())) {
+        return res.status(403).json({
+          success: false,
+          code: 'DEMO_RESTRICTED',
+          error: 'This action is restricted in Demo Mode. Please create an account or log in to continue.'
+        });
+      }
+
+      const userResult = await query(
+        `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
+                date_of_birth, gender, is_email_verified, is_phone_verified, is_private, is_deactivated, 
+                COALESCE(test, 0) AS test, created_at 
+         FROM users 
+         WHERE id = $1 
+         LIMIT 1`,
+        [decoded.id]
+      );
+
+      if (userResult.rows.length === 0) {
+        return res.status(401).json({
+          success: false,
+          error: 'Demo user account not found.'
+        });
+      }
+
+      const user = userResult.rows[0];
+      user.is_demo_session = true;
+      user.isDemoSession = true;
+      user.sessionType = 'demo';
+      user.permissions = decoded.permissions || {
+        read_demo_content: true,
+        write_actions: false,
+        direct_messaging_send: false,
+        account_modification: false
+      };
+      req.user = user;
+      return next();
+    }
+
+    // 4. Fetch current user from PostgreSQL database to ensure account still exists
     const userResult = await query(
       `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
               date_of_birth, gender, is_email_verified, is_phone_verified, is_private, is_deactivated, 
@@ -128,9 +177,29 @@ const protect = async (req, res, next) => {
  */
 const optionalAuth = async (req, res, next) => {
   try {
-    const token = req.cookies ? req.cookies[COOKIE_NAME] : null;
+    let token = req.cookies ? req.cookies[COOKIE_NAME] : null;
+    if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
     if (token) {
       const decoded = jwt.verify(token, config.jwtSecret);
+      if (decoded.isDemoSession || decoded.sessionType === 'demo') {
+        const userResult = await query(
+          'SELECT id, username, is_deactivated FROM users WHERE id = $1 LIMIT 1',
+          [decoded.id]
+        );
+        if (userResult.rows.length > 0 && !userResult.rows[0].is_deactivated) {
+          const user = userResult.rows[0];
+          user.is_demo_session = true;
+          user.isDemoSession = true;
+          user.sessionType = 'demo';
+          user.permissions = decoded.permissions;
+          req.isDemoSession = true;
+          req.user = user;
+        }
+        return next();
+      }
+
       const userResult = await query(
         'SELECT id, username, token_version, is_deactivated FROM users WHERE id = $1 LIMIT 1',
         [decoded.id]

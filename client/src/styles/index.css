@@ -8669,3 +8669,384 @@ body {
 .hide-custom-input:focus {
   border-color: #f59e0b;
 }
+
+/* ==========================================================================
+   Demo Mode Indicator & Join VibeGrid Auth Prompt Modal
+   ========================================================================== */
+
+/* Top Navbar Indicator Pill */
+.demo-mode-indicator-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(236, 72, 153, 0.12);
+  border: 1px solid rgba(236, 72, 153, 0.35);
+  padding: 6px 12px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-primary);
+  text-decoration: none;
+  font-family: inherit;
+  box-shadow: 0 2px 8px rgba(236, 72, 153, 0.15);
+}
+
+.demo-mode-indicator-pill:hover {
+  background: rgba(236, 72, 153, 0.2);
+  border-color: rgba(236, 72, 153, 0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(236, 72, 153, 0.25);
+}
+
+.demo-indicator-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ec4899;
+  box-shadow: 0 0 8px #ec4899;
+  animation: demoPulse 2s infinite;
+}
+
+@keyframes demoPulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 7px rgba(236, 72, 153, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(236, 72, 153, 0); }
+}
+
+.demo-indicator-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.demo-indicator-badge {
+  background: linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.demo-indicator-user {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Modal Backdrop */
+.auth-prompt-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  padding: 16px;
+  overflow-y: auto;
+  animation: promptFadeIn 0.18s ease-out;
+  cursor: pointer;
+}
+
+@keyframes promptFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modal Card */
+.auth-prompt-card {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  margin: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 24px 20px 18px;
+  text-align: center;
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  animation: promptScaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  cursor: default;
+}
+
+@keyframes promptScaleUp {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.auth-prompt-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+  z-index: 2;
+}
+
+.auth-prompt-close-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.auth-prompt-icon-wrapper {
+  margin: 0 auto 10px;
+  display: flex;
+  justify-content: center;
+}
+
+.auth-prompt-title {
+  font-size: 1.18rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+  margin: 4px 0;
+}
+
+.auth-prompt-subtitle {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 18px;
+  padding: 0 4px;
+}
+
+/* Modal Buttons */
+.auth-prompt-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-prompt-btn-primary {
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(220, 39, 67, 0.3);
+  font-family: inherit;
+}
+
+.auth-prompt-btn-primary:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(220, 39, 67, 0.4);
+}
+
+.auth-prompt-btn-secondary {
+  width: 100%;
+  padding: 9px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.auth-prompt-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--text-muted);
+}
+
+.auth-prompt-btn-tertiary {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: color 0.15s ease;
+  font-family: inherit;
+}
+
+.auth-prompt-btn-tertiary:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+/* Demo Explainer Specifics (Standard & Compact) */
+.demo-explainer-card {
+  max-width: 380px;
+  padding: 20px 18px 16px;
+}
+
+.demo-explainer-header {
+  margin-bottom: 12px;
+}
+
+.demo-badge-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+.demo-badge-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(236, 72, 153, 0.15);
+  color: #ec4899;
+  border: 1px solid rgba(236, 72, 153, 0.3);
+}
+
+.demo-features-list {
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-align: left;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.demo-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.demo-feature-item.allowed {
+  color: var(--text-primary);
+}
+
+.demo-feature-item.restricted {
+  color: var(--text-secondary);
+}
+
+.demo-feature-check {
+  color: #10b981;
+  font-weight: bold;
+  font-size: 0.88rem;
+}
+
+.demo-feature-lock {
+  font-size: 0.82rem;
+}
+
+.demo-switch-persona-section {
+  text-align: left;
+  margin-bottom: 14px;
+}
+
+.demo-switch-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.demo-personas-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.demo-persona-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.demo-persona-chip:hover:not(:disabled) {
+  border-color: #ec4899;
+  background: rgba(236, 72, 153, 0.08);
+}
+
+.demo-persona-chip.active {
+  background: rgba(236, 72, 153, 0.14);
+  border-color: #ec4899;
+  color: #ec4899;
+  cursor: default;
+}
+
+.persona-chip-icon {
+  font-size: 0.88rem;
+}
+
+.persona-chip-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.persona-chip-active-dot {
+  margin-left: auto;
+  font-weight: 900;
+  color: #ec4899;
+}
+
+.demo-footer-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.demo-exit-btn {
+  background: transparent;
+  border: none;
+  color: var(--danger, #ef4444);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+  transition: opacity 0.15s ease;
+  font-family: inherit;
+}
+
+.demo-exit-btn:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+.demo-footer-divider {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+

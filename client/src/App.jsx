@@ -14,9 +14,12 @@ import ErrorBoundary from './components/ErrorBoundary';
 import CallModal from './components/CallModal';
 import socketService from './services/socketService';
 import e2eeService from './services/crypto/e2eeService';
+import AuthPromptModal from './components/AuthPromptModal';
+import DemoModeIndicator from './components/DemoModeIndicator';
 
 function AppContent() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, isDemoMode, authModalState, closeAuthModal, guardDemoAction } = useAuth();
+  const [authPageTab, setAuthPageTab] = useState('login');
   const [currentTab, setCurrentTab] = useState(() => {
     return sessionStorage.getItem('vibegrid_active_tab') || 'feed';
   });
@@ -46,6 +49,25 @@ function AppContent() {
       sessionStorage.setItem('vibegrid_active_tab', 'feed');
     }
   }, [currentTab, isTestUser, loading]);
+
+  // Demo Mode -> Real Auth navigation handlers
+  const handleNavigateToSignup = async () => {
+    closeAuthModal();
+    if (isDemoMode) {
+      await logout();
+    }
+    setAuthPageTab('register');
+    setCurrentTab('auth');
+  };
+
+  const handleNavigateToLogin = async () => {
+    closeAuthModal();
+    if (isDemoMode) {
+      await logout();
+    }
+    setAuthPageTab('login');
+    setCurrentTab('auth');
+  };
 
   // Open Settings helper
   const openSettings = (section = 'profile') => {
@@ -94,9 +116,19 @@ function AppContent() {
         return prev;
       });
 
-      // Connect real-time socket and initialize E2EE crypto identity
-      socketService.connect();
-      e2eeService.initDeviceKeys(user.id);
+      // Connect real-time socket
+      try {
+        socketService.connect();
+      } catch (err) {
+        console.warn('Socket connect error:', err);
+      }
+
+      // Initialize E2EE crypto identity only for non-demo authenticated accounts
+      if (!isDemoMode && user?.id) {
+        e2eeService.initDeviceKeys(user.id).catch((err) => {
+          console.warn('E2EE initialization error:', err);
+        });
+      }
 
       fetchUnreadCount();
       fetchUnreadMessagesCount();
@@ -107,7 +139,9 @@ function AppContent() {
         clearInterval(msgTimer);
       };
     } else {
-      socketService.disconnect();
+      try {
+        socketService.disconnect();
+      } catch {}
       setCurrentTab('auth');
       try {
         sessionStorage.removeItem('vibegrid_active_tab');
@@ -248,6 +282,12 @@ function AppContent() {
               <span className="nav-brand-title">VibeGrid</span>
             </div>
 
+            {/* Demo Mode Indicator (Visible when in Demo Mode) */}
+            <DemoModeIndicator 
+              onNavigateToSignup={handleNavigateToSignup}
+              onNavigateToLogin={handleNavigateToLogin}
+            />
+
         {/* Desktop Navigation Links */}
         <nav className="nav-links desktop-only">
           {user && (
@@ -271,7 +311,10 @@ function AppContent() {
 
               <button
                 className="nav-tab-btn btn-create-nav"
-                onClick={() => setIsCreatePostOpen(true)}
+                onClick={() => {
+                  if (guardDemoAction('create_post')) return;
+                  setIsCreatePostOpen(true);
+                }}
                 title="Create and share a new post"
               >
                 ➕ Create
@@ -448,11 +491,14 @@ function AppContent() {
               />
             )
           )}
-          {currentTab === 'auth' && <AuthPage />}
+          {currentTab === 'auth' && <AuthPage initialTab={authPageTab} />}
           {currentTab === 'feed' && (
             <FeedPage
               key={feedRefreshKey}
-              onOpenCreatePost={() => setIsCreatePostOpen(true)}
+              onOpenCreatePost={() => {
+                if (guardDemoAction('create_post')) return;
+                setIsCreatePostOpen(true);
+              }}
               onNavigateToProfile={(username) => navigateToProfile(username)}
             />
           )}
@@ -473,7 +519,10 @@ function AppContent() {
               <ProfilePage
                 key={viewedUsername || user.username}
                 targetUsername={viewedUsername}
-                onOpenCreatePost={() => setIsCreatePostOpen(true)}
+                onOpenCreatePost={() => {
+                  if (guardDemoAction('create_post')) return;
+                  setIsCreatePostOpen(true);
+                }}
                 onNavigateToProfile={(username) => navigateToProfile(username)}
                 onOpenDirectMessage={(username) => {
                   setDirectMessageTarget(username);
@@ -482,7 +531,7 @@ function AppContent() {
                 onOpenSettings={openSettings}
               />
             ) : (
-              <AuthPage />
+              <AuthPage initialTab={authPageTab} />
             )
           )}
           {currentTab === 'settings' && (
@@ -492,7 +541,7 @@ function AppContent() {
                 onNavigateToProfile={(username) => navigateToProfile(username)}
               />
             ) : (
-              <AuthPage />
+              <AuthPage initialTab={authPageTab} />
             )
           )}
         </ErrorBoundary>
@@ -527,7 +576,10 @@ function AppContent() {
           <button
             type="button"
             className="mobile-nav-item mobile-nav-create-btn"
-            onClick={() => setIsCreatePostOpen(true)}
+            onClick={() => {
+              if (guardDemoAction('create_post')) return;
+              setIsCreatePostOpen(true);
+            }}
             title="Create Post"
           >
             <span className="mobile-nav-create-icon">➕</span>
@@ -586,14 +638,26 @@ function AppContent() {
 
       {/* Global WebRTC 1-to-1 Audio/Video Call Modal */}
       {user && <CallModal />}
+
+      {/* Global Join VibeGrid Auth Prompt Modal for Demo Mode */}
+      <AuthPromptModal
+        isOpen={authModalState.isOpen}
+        title={authModalState.title}
+        subtitle={authModalState.subtitle}
+        onClose={closeAuthModal}
+        onNavigateToSignup={handleNavigateToSignup}
+        onNavigateToLogin={handleNavigateToLogin}
+      />
     </div>
   );
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

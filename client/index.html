@@ -10,6 +10,20 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      window.addEventListener('error', function (e) {
+        var root = document.getElementById('root');
+        if (root && !root.hasChildNodes()) {
+          root.innerHTML = '<div style="color:#ef4444;background:#1e1e2e;padding:24px;margin:20px;border-radius:12px;font-family:sans-serif;border:1px solid #ef4444;"><h3>Startup Error</h3><pre style="white-space:pre-wrap;color:#f87171;">' + (e.error ? (e.error.stack || e.error.message) : e.message) + '</pre></div>';
+        }
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var root = document.getElementById('root');
+        if (root && !root.hasChildNodes()) {
+          root.innerHTML = '<div style="color:#ef4444;background:#1e1e2e;padding:24px;margin:20px;border-radius:12px;font-family:sans-serif;border:1px solid #ef4444;"><h3>Unhandled Promise Error</h3><pre style="white-space:pre-wrap;color:#f87171;">' + (e.reason ? (e.reason.stack || e.reason.message) : e.reason) + '</pre></div>';
+        }
+      });
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -227,7 +227,7 @@ export default function MessagesPage({
   onNavigateToProfile,
   onUnreadCountChange
 }) {
-  const { user } = useAuth();
+  const { user, guardDemoAction } = useAuth();
 
   // Conversations State
   const [conversations, setConversations] = useState([]);
@@ -810,6 +810,7 @@ export default function MessagesPage({
   // ==========================================================================
   const handleSendMessage = async (e) => {
     e.preventDefault();
+    if (guardDemoAction('message')) return;
     if (!messageInput.trim() || !activePartner || sending) return;
 
     const textToSend = messageInput.trim();
@@ -1164,6 +1165,7 @@ export default function MessagesPage({
   // 6. Send Encrypted Voice Note
   // ==========================================================================
   const handleSendVoiceNote = async (audioBlob, durationSeconds, recordedMimeType) => {
+    if (guardDemoAction('voice')) return;
     if (!audioBlob || !activePartner || sending) return;
 
     const activeReply = replyingTo;
@@ -1433,6 +1435,7 @@ export default function MessagesPage({
   // Toggle Star / Save message
   const handleToggleStar = async (msg) => {
     setContextMenu(null);
+    if (guardDemoAction('star')) return;
     const targetStarred = !msg.is_starred;
     // Optimistic update
     setMessages((prev) =>
@@ -1474,6 +1477,7 @@ export default function MessagesPage({
   // Toggle Pin Message
   const handleTogglePin = async (msg) => {
     setContextMenu(null);
+    if (guardDemoAction('pin')) return;
     if (!activeConversationId) return;
     const isCurrentlyPinned = Number(pinnedMessage?.id) === Number(msg.id);
     const targetPinId = isCurrentlyPinned ? null : msg.id;
@@ -1753,6 +1757,7 @@ export default function MessagesPage({
   // 8. Audio & Video WebRTC Call Triggers
   // ==========================================================================
   const initiateAudioCall = () => {
+    if (guardDemoAction('call')) return;
     if (!activePartner) return;
     window.dispatchEvent(
       new CustomEvent('vibegrid:initiate-call', {
@@ -1762,6 +1767,7 @@ export default function MessagesPage({
   };
 
   const initiateVideoCall = () => {
+    if (guardDemoAction('call')) return;
     if (!activePartner) return;
     window.dispatchEvent(
       new CustomEvent('vibegrid:initiate-call', {

@@ -694,6 +694,81 @@ const getMe = async (req, res) => {
 };
 
 /**
+ * Create a dedicated Demo Mode session
+ * Route: POST /api/auth/demo-session
+ */
+const createDemoSession = async (req, res, next) => {
+  try {
+    const rawPersona = req.body.persona || req.body.username || 'sophia_wander';
+    const persona = String(rawPersona).trim().toLowerCase();
+
+    if (!DEMO_USERNAMES.includes(persona)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid demo persona. Choose from: ${DEMO_USERNAMES.join(', ')}`
+      });
+    }
+
+    // Query user record from PostgreSQL
+    const userRes = await query(
+      `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
+              date_of_birth, gender, is_email_verified, is_phone_verified, is_private, 
+              COALESCE(test, 0) AS test, created_at 
+       FROM users 
+       WHERE LOWER(username) = LOWER($1) 
+       LIMIT 1`,
+      [persona]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `Demo profile @${persona} not found.`
+      });
+    }
+
+    const user = userRes.rows[0];
+
+    const demoPermissions = {
+      read_demo_content: true,
+      write_actions: false,
+      direct_messaging_send: false,
+      account_modification: false
+    };
+
+    const token = jwt.sign(
+      {
+        id: user.id,
+        username: user.username,
+        isDemoSession: true,
+        sessionType: 'demo',
+        permissions: demoPermissions
+      },
+      config.jwtSecret,
+      { expiresIn: '2h' }
+    );
+
+    setAuthCookie(res, token);
+
+    user.is_demo_session = true;
+    user.isDemoSession = true;
+    user.sessionType = 'demo';
+    user.permissions = demoPermissions;
+
+    return res.status(200).json({
+      success: true,
+      message: `Entered Demo Mode as @${user.username}`,
+      data: {
+        user
+      }
+    });
+  } catch (error) {
+    console.error('[Create Demo Session Error]', error);
+    next(error);
+  }
+};
+
+/**
  * Request password reset (Forgot Password)
  * Generates secure token + 6-digit OTP and logs/sends recovery instructions.
  * Generic timing-safe response prevents user account enumeration.
@@ -933,6 +1008,7 @@ module.exports = {
   resendLoginOtp,
   logout,
   getMe,
+  createDemoSession,
   forgotPassword,
   resetPassword,
   changePassword

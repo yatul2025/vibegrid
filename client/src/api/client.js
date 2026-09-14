@@ -100,6 +100,13 @@ async function handleResponse(res, endpoint = '') {
       }));
     }
 
+    // Broadcast DEMO_RESTRICTED events to automatically open the Join VibeGrid modal
+    if (res.status === 403 && data?.code === 'DEMO_RESTRICTED' && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('vibegrid:demo-restricted', {
+        detail: { endpoint, status: 403, error: data?.error }
+      }));
+    }
+
     const errorMessage = (data && data.error) || (data && data.message) || `HTTP error ${res.status}`;
     const error = new Error(errorMessage);
     error.status = res.status;

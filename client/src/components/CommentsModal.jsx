@@ -39,7 +39,7 @@ export default function CommentsModal({
   onNavigateToProfile,
   onHashtagClick
 }) {
-  const { user } = useAuth();
+  const { user, guardDemoAction } = useAuth();
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
@@ -80,6 +80,7 @@ export default function CommentsModal({
   // Submit new comment
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (guardDemoAction('comment')) return;
     if (!newComment.trim() || submitting) return;
 
     if (newComment.trim().length > 500) {
@@ -111,6 +112,7 @@ export default function CommentsModal({
 
   // Delete a comment - Opens modern confirm modal
   const handleDeleteComment = (commentId) => {
+    if (guardDemoAction('comment')) return;
     setCommentToDelete(commentId);
   };
 

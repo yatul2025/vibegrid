@@ -2,9 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../api/client';
 
-export default function AuthPage() {
-  const { user, login, verifyLoginOtp, resendLoginOtp, register, verifyRegisterOtp, resendRegisterOtp, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('login'); // 'login' | 'register'
+export default function AuthPage({ initialTab = 'login' }) {
+  const { user, login, verifyLoginOtp, resendLoginOtp, register, verifyRegisterOtp, resendRegisterOtp, logout, startDemoSession } = useAuth();
+  const [activeTab, setActiveTab] = useState(initialTab); // 'login' | 'register'
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // 2FA Login OTP states
   const [loginStep, setLoginStep] = useState('credentials'); // 'credentials' | 'otp'
@@ -231,7 +237,7 @@ export default function AuthPage() {
     setError(null);
     setLoading(true);
     try {
-      await login(username, 'Password123!', true);
+      await startDemoSession(username);
     } catch (err) {
       setError(err.message || 'Demo login failed.');
     } finally {

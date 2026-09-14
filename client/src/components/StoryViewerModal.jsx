@@ -47,7 +47,7 @@ export default function StoryViewerModal({
   onStoryDeleted,
   onStoryViewed
 }) {
-  const { user } = useAuth();
+  const { user, guardDemoAction } = useAuth();
   const [creatorIndex, setCreatorIndex] = useState(initialCreatorIndex);
   const [storyIndex, setStoryIndex] = useState(0);
   const [animKey, setAnimKey] = useState(0);
@@ -206,6 +206,7 @@ export default function StoryViewerModal({
   // Toggle Story Heart Like
   const handleToggleStoryLike = async (e) => {
     e?.stopPropagation();
+    if (guardDemoAction('like')) return;
     if (!user) {
       showToast('Please sign in to like stories');
       return;
@@ -241,6 +242,7 @@ export default function StoryViewerModal({
   const handleSendReply = async (e) => {
     e?.preventDefault();
     e?.stopPropagation();
+    if (guardDemoAction('message')) return;
 
     if (!replyText.trim() || sendingReply) return;
     if (!user) {
@@ -270,6 +272,7 @@ export default function StoryViewerModal({
   // Send Quick Emoji Reaction
   const handleReaction = async (emoji, e) => {
     e?.stopPropagation();
+    if (guardDemoAction('like')) return;
     if (!user) {
       showToast('Please sign in to react');
       return;
@@ -290,6 +293,7 @@ export default function StoryViewerModal({
 
   // Open story delete confirmation modal
   const handleDeleteClick = () => {
+    if (guardDemoAction('create_story')) return;
     setIsPaused(true);
     setShowDeleteModal(true);
   };

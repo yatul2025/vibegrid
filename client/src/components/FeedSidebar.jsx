@@ -25,7 +25,7 @@ function formatPostCount(count) {
 }
 
 export default function FeedSidebar({ onNavigateToProfile, onHashtagClick }) {
-  const { user } = useAuth();
+  const { user, guardDemoAction } = useAuth();
   const [suggestions, setSuggestions] = useState([]);
   const [trending, setTrending] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
@@ -84,6 +84,8 @@ export default function FeedSidebar({ onNavigateToProfile, onHashtagClick }) {
 
   // Handle Follow / Following Toggle
   const handleFollowToggle = async (targetUser) => {
+    if (guardDemoAction && guardDemoAction('follow')) return;
+
     if (!user) {
       alert('Please sign in to follow creators.');
       return;

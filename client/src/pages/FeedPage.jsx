@@ -44,7 +44,7 @@ function formatTimeAgo(dateString) {
 }
 
 export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
-  const { user } = useAuth();
+  const { user, guardDemoAction } = useAuth();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -142,6 +142,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
 
   // Optimistic Like / Unlike Toggle
   const handleToggleLike = async (postId) => {
+    if (guardDemoAction('like')) return;
     if (!user) {
       alert('Please sign in to like posts.');
       return;
@@ -195,6 +196,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
 
   // Optimistic Save / Unsave Toggle (Phase 12)
   const handleToggleSave = async (postId) => {
+    if (guardDemoAction('save')) return;
     if (!user) {
       alert('Please sign in to save posts.');
       return;
@@ -231,6 +233,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
 
   // Double-tap on image to like
   const handleImageDoubleClick = (post) => {
+    if (guardDemoAction('like')) return;
     // Show heart pop animation
     setAnimatingPostId(post.id);
     setTimeout(() => setAnimatingPostId(null), 800);
@@ -253,6 +256,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
 
   // Handle post deletion (Author only) - Opens modern confirmation modal
   const handleDeletePost = (postId) => {
+    if (guardDemoAction('create_post')) return;
     setPostToDelete(postId);
   };
 
@@ -314,6 +318,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
 
   // 1-Tap Quick Emoji Comment
   const handleQuickEmojiComment = async (postId, emoji) => {
+    if (guardDemoAction('comment')) return;
     if (!user) {
       alert('Please sign in to comment.');
       return;
@@ -345,6 +350,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
   // Inline Quick Comment Submit
   const handleInlineCommentSubmit = async (postId, e) => {
     e.preventDefault();
+    if (guardDemoAction('comment')) return;
     if (!user) {
       alert('Please sign in to comment.');
       return;
