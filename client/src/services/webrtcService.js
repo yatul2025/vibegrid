@@ -62,7 +62,8 @@ function toIceCandidate(input) {
   const init = { candidate: candidateStr };
   if (input.sdpMid !== undefined && input.sdpMid !== null) {
     init.sdpMid = String(input.sdpMid);
-  } else if (input.sdpMLineIndex !== undefined && input.sdpMLineIndex !== null) {
+  }
+  if (input.sdpMLineIndex !== undefined && input.sdpMLineIndex !== null) {
     init.sdpMLineIndex = Number(input.sdpMLineIndex);
   }
   if (input.usernameFragment) {
@@ -115,9 +116,34 @@ class WebRTCService {
       }
       return this.localStream;
     } catch (err) {
-      console.error('[WebRTC] Media device access error:', err);
-      if (this.onError) this.onError(err);
-      throw err;
+      console.warn('[WebRTC] Preferred getUserMedia failed, attempting fallback:', err.message);
+      try {
+        if (callType === 'video') {
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: true
+          });
+        } else {
+          this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
+        if (this.onLocalStream) {
+          this.onLocalStream(this.localStream);
+        }
+        return this.localStream;
+      } catch (err2) {
+        console.warn('[WebRTC] Video fallback failed, falling back to audio only:', err2.message);
+        try {
+          this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          if (this.onLocalStream) {
+            this.onLocalStream(this.localStream);
+          }
+          return this.localStream;
+        } catch (err3) {
+          console.error('[WebRTC] Complete media acquisition failure:', err3);
+          if (this.onError) this.onError(err3);
+          throw err3;
+        }
+      }
     }
   }
 
@@ -180,24 +206,27 @@ class WebRTCService {
     pc.ontrack = (event) => {
       console.log('[WebRTC] Remote track received:', event.track.kind, event.track.id);
 
-      if (!this.remoteStream) {
-        this.remoteStream = new MediaStream();
-      }
-
-      if (event.streams && event.streams[0]) {
-        event.streams[0].getTracks().forEach((track) => {
-          if (!this.remoteStream.getTracks().some((t) => t.id === track.id)) {
-            this.remoteStream.addTrack(track);
-          }
-        });
-      } else if (event.track) {
+      const incomingStream = (event.streams && event.streams[0]) ? event.streams[0] : null;
+      if (incomingStream) {
+        this.remoteStream = incomingStream;
+      } else {
+        if (!this.remoteStream) {
+          this.remoteStream = new MediaStream();
+        }
         if (!this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
           this.remoteStream.addTrack(event.track);
         }
       }
 
-      if (this.onRemoteStream) {
-        this.onRemoteStream(new MediaStream(this.remoteStream.getTracks()));
+      event.track.onunmute = () => {
+        console.log(`[WebRTC] Remote track unmuted and streaming:`, event.track.kind);
+        if (this.onRemoteStream && this.remoteStream) {
+          this.onRemoteStream(this.remoteStream);
+        }
+      };
+
+      if (this.onRemoteStream && this.remoteStream) {
+        this.onRemoteStream(this.remoteStream);
       }
       if (this.onConnectionStateChange) {
         this.onConnectionStateChange('connected');

@@ -353,20 +353,32 @@ export default function CallModal() {
     };
 
     // Global custom event for initiating a call from chat or profile
-    const handleCustomInitiateCall = (event) => {
+    const handleCustomInitiateCall = async (event) => {
       const { targetUser, callType } = event.detail;
+      const effectiveType = callType || 'audio';
       setCallData({
         peer: targetUser,
-        callType: callType || 'audio',
+        callType: effectiveType,
         isInitiator: true
       });
       setCallState('outgoing');
       setConnectionStatus('connecting');
       startRingtone();
 
+      // Pre-warm local media preview for caller
+      try {
+        await webrtcService.getLocalMedia(effectiveType);
+        if (localVideoRef.current && webrtcService.localStream) {
+          localVideoRef.current.srcObject = webrtcService.localStream;
+          localVideoRef.current.play().catch(() => {});
+        }
+      } catch (e) {
+        console.warn('Pre-warming camera preview:', e.message);
+      }
+
       socketService.emit('call:initiate', {
         targetUserId: targetUser.id,
-        callType: callType || 'audio'
+        callType: effectiveType
       }, (res) => {
         if (!res.success) {
           alert(res.error || 'Could not initiate call.');
@@ -419,13 +431,21 @@ export default function CallModal() {
           setHasRemoteVideo(true);
         }
 
-        if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== webrtcService.remoteStream) {
-          remoteVideoRef.current.srcObject = webrtcService.remoteStream;
+        if (remoteVideoRef.current) {
+          if (remoteVideoRef.current.srcObject !== webrtcService.remoteStream) {
+            remoteVideoRef.current.srcObject = webrtcService.remoteStream;
+          }
+          remoteVideoRef.current.muted = true;
           remoteVideoRef.current.play().catch((e) => console.debug('Video play error:', e));
         }
-        if (remoteAudioRef.current && remoteAudioRef.current.srcObject !== webrtcService.remoteStream) {
-          remoteAudioRef.current.srcObject = webrtcService.remoteStream;
-          remoteAudioRef.current.play().catch((e) => console.debug('Audio play error:', e));
+        if (remoteAudioRef.current) {
+          if (remoteAudioRef.current.srcObject !== webrtcService.remoteStream) {
+            remoteAudioRef.current.srcObject = webrtcService.remoteStream;
+          }
+          remoteAudioRef.current.muted = isSpeakerMuted;
+          if (!isSpeakerMuted) {
+            remoteAudioRef.current.play().catch((e) => console.debug('Audio play error:', e));
+          }
         }
       }
     };
@@ -447,11 +467,15 @@ export default function CallModal() {
 
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = stream;
+        remoteVideoRef.current.muted = true;
         remoteVideoRef.current.play().catch((e) => console.debug('Remote video play error:', e));
       }
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = stream;
-        remoteAudioRef.current.play().catch((e) => console.debug('Remote audio play error:', e));
+        remoteAudioRef.current.muted = isSpeakerMuted;
+        if (!isSpeakerMuted) {
+          remoteAudioRef.current.play().catch((e) => console.debug('Remote audio play error:', e));
+        }
       }
     };
 
@@ -485,6 +509,34 @@ export default function CallModal() {
       webrtcService.onConnectionStateChange = null;
     };
   }, [callState]);
+
+  // Synchronize media stream attachments across view swaps and track changes
+  useEffect(() => {
+    if (callState === 'connected') {
+      if (localVideoRef.current && webrtcService.localStream) {
+        if (localVideoRef.current.srcObject !== webrtcService.localStream) {
+          localVideoRef.current.srcObject = webrtcService.localStream;
+        }
+        localVideoRef.current.play().catch(() => {});
+      }
+      if (remoteVideoRef.current && webrtcService.remoteStream) {
+        if (remoteVideoRef.current.srcObject !== webrtcService.remoteStream) {
+          remoteVideoRef.current.srcObject = webrtcService.remoteStream;
+        }
+        remoteVideoRef.current.muted = true;
+        remoteVideoRef.current.play().catch(() => {});
+      }
+      if (remoteAudioRef.current && webrtcService.remoteStream) {
+        if (remoteAudioRef.current.srcObject !== webrtcService.remoteStream) {
+          remoteAudioRef.current.srcObject = webrtcService.remoteStream;
+        }
+        remoteAudioRef.current.muted = isSpeakerMuted;
+        if (!isSpeakerMuted) {
+          remoteAudioRef.current.play().catch(() => {});
+        }
+      }
+    }
+  }, [callState, isSwappedView, hasRemoteVideo, isSpeakerMuted]);
 
   // Duration Timer
   useEffect(() => {
@@ -638,18 +690,50 @@ export default function CallModal() {
   // Toggle Speaker / Output Mute
   const handleToggleSpeaker = () => {
     const nextMuted = !isSpeakerMuted;
+
+    // 1. Mute or pause the dedicated remote audio tag
     if (remoteAudioRef.current) {
       remoteAudioRef.current.muted = nextMuted;
+      if (nextMuted) {
+        remoteAudioRef.current.pause();
+      } else {
+        remoteAudioRef.current.play().catch(() => {});
+      }
     }
+
+    // 2. Ensure remote video element is always muted to eliminate audio leakage
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.muted = true;
+    }
+
+    // 3. Disable/enable audio tracks directly on the remote MediaStream
+    if (webrtcService.remoteStream) {
+      webrtcService.remoteStream.getAudioTracks().forEach((track) => {
+        track.enabled = !nextMuted;
+      });
+    }
+
     setIsSpeakerMuted(nextMuted);
   };
 
   // ==========================================================================
   // Action Handlers
   // ==========================================================================
-  const handleAcceptCall = () => {
+  const handleAcceptCall = async () => {
     stopRingtone();
     setCallState('connected');
+
+    // Pre-acquire callee media so local camera/mic is active immediately
+    try {
+      await webrtcService.getLocalMedia(callData?.callType || 'audio');
+      if (localVideoRef.current && webrtcService.localStream) {
+        localVideoRef.current.srcObject = webrtcService.localStream;
+        localVideoRef.current.play().catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Pre-acquiring callee media error:', e.message);
+    }
+
     socketService.emit('call:accept', {
       callId: callData.callId,
       callerId: callData.peer.id
@@ -860,6 +944,7 @@ export default function CallModal() {
                   ref={remoteVideoRef}
                   autoPlay
                   playsInline
+                  muted
                   className={`remote-video-elem ${hasRemoteVideo || isScreenSharing ? 'visible' : 'hidden'}`}
                 />
               ) : (
@@ -930,6 +1015,7 @@ export default function CallModal() {
                     ref={remoteVideoRef}
                     autoPlay
                     playsInline
+                    muted
                     className={`pip-video-elem ${!hasRemoteVideo ? 'hidden' : ''}`}
                   />
                 )}

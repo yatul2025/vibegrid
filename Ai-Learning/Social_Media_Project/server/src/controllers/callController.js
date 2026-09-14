@@ -452,11 +452,14 @@ const sendSignal = async (req, res, next) => {
     const io = req.app.get('io');
     if (io) {
       if (signalType === 'offer') {
-        io.to(`user:${toUserId}`).emit('signal:offer', { callerId: fromUserId, sdp: payload, callId });
+        const offerSdp = payload?.sdp || payload;
+        const offerCallType = payload?.callType || 'audio';
+        io.to(`user:${toUserId}`).emit('signal:offer', { callerId: fromUserId, sdp: offerSdp, callType: offerCallType, callId });
       } else if (signalType === 'answer') {
-        io.to(`user:${toUserId}`).emit('signal:answer', { sdp: payload, callId });
+        const answerSdp = payload?.sdp || payload;
+        io.to(`user:${toUserId}`).emit('signal:answer', { calleeId: fromUserId, sdp: answerSdp, callId });
       } else if (signalType === 'ice-candidate') {
-        io.to(`user:${toUserId}`).emit('signal:ice-candidate', { candidate: payload, callId });
+        io.to(`user:${toUserId}`).emit('signal:ice-candidate', { fromUserId, candidate: payload, callId });
       }
     }
 
