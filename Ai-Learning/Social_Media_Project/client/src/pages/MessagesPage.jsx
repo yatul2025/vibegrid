@@ -2114,7 +2114,7 @@ export default function MessagesPage({
                 {/* Header Action Controls */}
                 <div className="chat-header-actions">
                   {/* Disappearing Messages Dropdown */}
-                  <div className="ephemeral-menu-wrap">
+                  <div className="ephemeral-menu-wrap desktop-action-only">
                     <button
                       type="button"
                       className={`btn-chat-action ${ephemeralTimer ? 'active-timer' : ''}`}
@@ -2149,7 +2149,7 @@ export default function MessagesPage({
 
                   <button
                     type="button"
-                    className={`btn-chat-action ${isSearchInChatOpen ? 'active-search' : ''}`}
+                    className={`btn-chat-action desktop-action-only ${isSearchInChatOpen ? 'active-search' : ''}`}
                     onClick={() => {
                       setIsSearchInChatOpen((prev) => {
                         const next = !prev;
@@ -2188,7 +2188,7 @@ export default function MessagesPage({
 
                   <button
                     type="button"
-                    className="btn-chat-action btn-profile-action"
+                    className="btn-chat-action btn-profile-action desktop-action-only"
                     onClick={() => onNavigateToProfile && onNavigateToProfile(activePartner.username)}
                     title={`View @${activePartner.username}'s profile`}
                     aria-label="Profile"
@@ -2262,6 +2262,30 @@ export default function MessagesPage({
                         >
                           <Clock size={16} />
                           <span>Disappearing Messages</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="conv-dropdown-item mobile-only-action"
+                          onClick={() => {
+                            setIsConvMenuOpen(false);
+                            setIsSearchInChatOpen((prev) => !prev);
+                          }}
+                        >
+                          <Search size={16} />
+                          <span>Search in Chat</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="conv-dropdown-item mobile-only-action"
+                          onClick={() => {
+                            setIsConvMenuOpen(false);
+                            if (onNavigateToProfile) onNavigateToProfile(activePartner.username);
+                          }}
+                        >
+                          <UserIcon size={16} />
+                          <span>View Profile</span>
                         </button>
 
                         <button
@@ -2859,7 +2883,7 @@ export default function MessagesPage({
 
                         <input
                           type="text"
-                          placeholder={uploadingMedia ? "Encrypting and uploading media..." : `Send an encrypted message to @${activePartner.username}...`}
+                          placeholder={uploadingMedia ? "Encrypting..." : `Message @${activePartner.username}...`}
                           value={messageInput}
                           onChange={handleInputChange}
                           className="chat-input-field"
@@ -4025,6 +4049,7 @@ export default function MessagesPage({
 
         .chat-input-field {
           flex: 1;
+          min-width: 0;
           border: none;
           outline: none;
           background: transparent;
@@ -5504,6 +5529,75 @@ export default function MessagesPage({
 
         .btn-mute-confirm {
           background: #6366f1;
+        }
+
+        .archived-view-banner {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 10px 14px;
+          margin: 8px 12px;
+          background: rgba(99, 102, 241, 0.1);
+          border: 1px solid rgba(99, 102, 241, 0.25);
+          border-radius: 10px;
+          color: #c7d2fe;
+          font-size: 0.88rem;
+          font-weight: 500;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .btn-back-inbox {
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          color: #f8fafc;
+          padding: 6px 14px;
+          border-radius: 6px;
+          font-size: 0.82rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .btn-back-inbox:hover {
+          background: #6366f1;
+          border-color: #6366f1;
+          color: #ffffff;
+        }
+
+        @media (max-width: 640px) {
+          .desktop-action-only {
+            display: none !important;
+          }
+          .chat-header-actions {
+            gap: 6px;
+          }
+          .btn-chat-action {
+            width: 34px;
+            height: 34px;
+          }
+          .chat-composer-bar {
+            padding: 4px 6px 4px 8px;
+            gap: 4px;
+          }
+          .btn-composer-icon {
+            width: 32px;
+            height: 32px;
+          }
+          .chat-input-field {
+            font-size: 0.88rem;
+            padding: 6px 2px;
+          }
+          .btn-chat-send {
+            padding: 6px 10px;
+            font-size: 0.82rem;
+          }
+        }
+
+        @media (min-width: 641px) {
+          .mobile-only-action {
+            display: none !important;
+          }
         }
       `}</style>
     </div>

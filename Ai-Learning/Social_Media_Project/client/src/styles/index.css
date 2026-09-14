@@ -70,6 +70,18 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+#root,
+.app-viewport {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
 body {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   background-color: var(--bg-page);
@@ -3690,6 +3702,19 @@ a.nav-tab-btn {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.post-author-username {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
 }
 
 .post-close-friend-btn {
@@ -5754,8 +5779,8 @@ a.nav-tab-btn {
   }
   .story-tray-wrapper {
     border-radius: 0;
-    margin-left: -16px;
-    margin-right: -16px;
+    margin-left: 0;
+    margin-right: 0;
     border-left: none;
     border-right: none;
   }
@@ -6906,6 +6931,57 @@ a.mobile-nav-item {
     border-right: none;
     margin-bottom: 12px;
     padding: 12px 10px;
+  }
+
+  .feed-header-container {
+    padding: 0 12px;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .feed-header-top {
+    gap: 8px;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .feed-primary-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .feed-primary-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .feed-primary-tab {
+    padding: 5px 10px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    min-height: 32px;
+  }
+
+  .feed-control-btn {
+    min-height: 36px;
+    height: 36px;
+    padding: 0 10px;
+    flex-shrink: 0;
+  }
+
+  .post-author-username {
+    max-width: 110px;
+  }
+
+  .external-source-pill {
+    padding: 1px 6px;
+    font-size: 0.68rem;
+    max-width: 105px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 

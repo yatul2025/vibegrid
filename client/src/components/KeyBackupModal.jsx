@@ -34,8 +34,6 @@ export default function KeyBackupModal({ isOpen, onClose }) {
   const [restoreSuccess, setRestoreSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  if (!isOpen || !user) return null;
-
   const handleExport = async (e) => {
     e.preventDefault();
     setErrorMsg('');
@@ -159,6 +157,8 @@ export default function KeyBackupModal({ isOpen, onClose }) {
       setRevokingDeviceId(null);
     }
   };
+
+  if (!isOpen || !user) return null;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>

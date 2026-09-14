@@ -589,12 +589,12 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                   disabled={isRefreshing}
                 >
                   <span className={`refresh-icon ${isRefreshing ? 'spinning' : ''}`}>🔄</span>
-                  <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+                  <span className="desktop-only">{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
                 </button>
                 {user && (
                   <button
                     type="button"
-                    className="feed-control-btn feed-create-btn"
+                    className="feed-control-btn feed-create-btn desktop-only"
                     onClick={onOpenCreatePost}
                     title="Create a new post"
                   >
@@ -786,7 +786,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     </div>
                   </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                   {/* Moderate / Hide post button (Admins & Test Profiles) */}
                   {user && ([1, 2, 3, 4].includes(Number(user.id)) || Number(user.test) === 1) && (
                     <button
@@ -809,7 +809,12 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                         gap: '4px'
                       }}
                     >
-                      {moderatingId === post.id ? '⏳' : '🛡️ Hide Post'}
+                      {moderatingId === post.id ? '⏳' : (
+                        <>
+                          <span>🛡️</span>
+                          <span className="desktop-only">Hide Post</span>
+                        </>
+                      )}
                     </button>
                   )}
 
