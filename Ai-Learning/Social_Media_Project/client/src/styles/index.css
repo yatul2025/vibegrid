@@ -68,10 +68,13 @@
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
 }
 
-* {
+*,
+*::before,
+*::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ul, ol {
@@ -115,10 +118,15 @@ body {
   border: 0 !important;
 }
 
-/* Accessibility: Visible Focus Indicators (WCAG 2.2 AA) */
+/* Accessibility & Interaction: Modern Rounded Focus & Tap States (WCAG 2.2 AA) */
+:focus {
+  outline: none;
+}
+
 :focus-visible {
-  outline: 2px solid var(--primary, #6366f1) !important;
-  outline-offset: 2px !important;
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: 0 0 0 2px var(--bg-card, #ffffff), 0 0 0 4px var(--primary, #6366f1) !important;
 }
 
 button:focus-visible,
@@ -127,10 +135,30 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [role="button"]:focus-visible,
-[role="tab"]:focus-visible {
-  outline: 2px solid var(--primary, #6366f1) !important;
-  outline-offset: 2px !important;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+[role="tab"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: 0 0 0 2px var(--bg-card, #ffffff), 0 0 0 4px var(--primary, #6366f1) !important;
+}
+
+[data-theme='dark'] :focus-visible,
+[data-theme='dark'] button:focus-visible,
+[data-theme='dark'] a:focus-visible,
+[data-theme='dark'] input:focus-visible,
+[data-theme='dark'] select:focus-visible,
+[data-theme='dark'] textarea:focus-visible,
+[data-theme='dark'] [role="button"]:focus-visible,
+[data-theme='dark'] [role="tab"]:focus-visible,
+[data-theme='dark'] [tabindex]:focus-visible {
+  box-shadow: 0 0 0 2px var(--bg-page, #090d16), 0 0 0 4px var(--primary, #6366f1) !important;
+}
+
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+[role="button"]:focus:not(:focus-visible),
+[role="tab"]:focus:not(:focus-visible) {
+  outline: none !important;
 }
 
 /* App Container */
@@ -992,9 +1020,9 @@ a.nav-tab-btn {
 }
 
 .input-error:focus-visible {
-  outline: 2px solid var(--danger, #ef4444) !important;
-  outline-offset: 2px !important;
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25) !important;
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: 0 0 0 2px var(--bg-card, #ffffff), 0 0 0 4px var(--danger, #ef4444) !important;
 }
 
 .ig-input.input-match {
@@ -2739,8 +2767,10 @@ a.nav-tab-btn {
 
 .password-toggle-btn:focus-visible,
 .btn-pass-toggle:focus-visible {
-  outline: 2px solid var(--accent, #6366f1) !important;
-  outline-offset: 1px !important;
+  outline: none !important;
+  outline-offset: 0 !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 0 2px var(--bg-card, #ffffff), 0 0 0 4px var(--primary, #6366f1) !important;
 }
 
 .password-toggle-btn svg,
@@ -10328,15 +10358,24 @@ select.form-input option,
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
   gap: 6px;
   min-height: 36px;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
 }
 
 .feed-primary-tab:hover {
   color: var(--text-primary);
+  border-radius: 9999px;
+}
+
+.feed-primary-tab:active {
+  transform: scale(0.97);
+  border-radius: 9999px;
 }
 
 .feed-primary-tab.active {
