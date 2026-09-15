@@ -14,6 +14,7 @@
 
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api/client';
+import { Bell, Heart, MessageCircle, UserPlus, CheckCheck, AlertCircle } from 'lucide-react';
 
 function formatTimeAgo(dateString) {
   if (!dateString) return '';
@@ -29,6 +30,33 @@ function formatTimeAgo(dateString) {
   const diffInDays = Math.floor(diffInHours / 24);
   if (diffInDays < 7) return `${diffInDays}d ago`;
   return past.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function partitionNotifications(items) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfThisWeek = startOfToday - 6 * 24 * 60 * 60 * 1000;
+
+  const today = [];
+  const thisWeek = [];
+  const earlier = [];
+
+  items.forEach((item) => {
+    const itemTime = new Date(item.created_at).getTime();
+    if (itemTime >= startOfToday) {
+      today.push(item);
+    } else if (itemTime >= startOfThisWeek) {
+      thisWeek.push(item);
+    } else {
+      earlier.push(item);
+    }
+  });
+
+  return [
+    { label: 'Today', items: today },
+    { label: 'This Week', items: thisWeek },
+    { label: 'Earlier', items: earlier }
+  ].filter((group) => group.items.length > 0);
 }
 
 export default function NotificationsModal({
@@ -65,6 +93,18 @@ export default function NotificationsModal({
       fetchNotifications();
     }
   }, [isOpen]);
+
+  // Close on Escape key press
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Mark all notifications as read
   const handleMarkAllAsRead = async () => {
@@ -131,8 +171,10 @@ export default function NotificationsModal({
                 onClick={handleMarkAllAsRead}
                 disabled={markingRead}
                 title="Mark all as read"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
               >
-                {markingRead ? 'Updating...' : '✓ Mark all as read'}
+                <CheckCheck size={14} />
+                <span>{markingRead ? 'Updating...' : 'Mark all as read'}</span>
               </button>
             )}
             <button
@@ -149,7 +191,12 @@ export default function NotificationsModal({
 
         {/* Drawer Body */}
         <div className="notifications-body">
-          {error && <div className="form-error-banner">⚠️ {error}</div>}
+          {error && (
+            <div className="form-error-banner" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
+              <span>{error}</span>
+            </div>
+          )}
 
           {loading ? (
             <div className="notifications-loading">
@@ -158,7 +205,9 @@ export default function NotificationsModal({
             </div>
           ) : notifications.length === 0 ? (
             <div className="notifications-empty-state">
-              <div className="empty-bell-icon">🔔</div>
+              <div className="empty-bell-icon">
+                <Bell size={44} strokeWidth={1.5} color="var(--text-muted)" />
+              </div>
               <h4>No notifications yet</h4>
               <p>
                 When members of the VibeGrid community like your photos, comment, or
@@ -167,99 +216,107 @@ export default function NotificationsModal({
             </div>
           ) : (
             <div className="notifications-list">
-              {notifications.map((notif) => {
-                let actionIcon = '❤️';
-                let actionText = 'liked your photo';
-                if (notif.type === 'comment') {
-                  actionIcon = '💬';
-                  actionText = `commented: "${notif.comment_text || ''}"`;
-                } else if (notif.type === 'follow') {
-                  actionIcon = '👤';
-                  actionText = 'started following you';
-                }
+              {partitionNotifications(notifications).map((group) => (
+                <div key={group.label} className="notification-group">
+                  <div className="notification-section-header">{group.label}</div>
+                  {group.items.map((notif) => {
+                    let actionIcon = <Heart size={10} fill="#ffffff" color="#ffffff" strokeWidth={0} />;
+                    let badgeClass = 'type-like';
+                    let actionText = 'liked your photo';
+                    if (notif.type === 'comment') {
+                      actionIcon = <MessageCircle size={10} fill="#ffffff" color="#ffffff" strokeWidth={0} />;
+                      badgeClass = 'type-comment';
+                      actionText = `commented: "${notif.comment_text || ''}"`;
+                    } else if (notif.type === 'follow') {
+                      actionIcon = <UserPlus size={10} fill="#ffffff" color="#ffffff" strokeWidth={2} />;
+                      badgeClass = 'type-follow';
+                      actionText = 'started following you';
+                    }
 
-                return (
-                  <div
-                    key={notif.id}
-                    className={`notification-item ${!notif.is_read ? 'unread' : ''}`}
-                  >
-                    {/* Unread indicator dot */}
-                    {!notif.is_read && <span className="notification-unread-dot" />}
+                    return (
+                      <div
+                        key={notif.id}
+                        className={`notification-item ${!notif.is_read ? 'unread' : ''}`}
+                      >
+                        {/* Unread indicator dot */}
+                        {!notif.is_read && <span className="notification-unread-dot" />}
 
-                    {/* Sender Avatar with action badge */}
-                    <div
-                      className="notification-avatar-wrap"
-                      onClick={() => {
-                        onNavigateToProfile && onNavigateToProfile(notif.sender_username);
-                        onClose();
-                      }}
-                      title={`View @${notif.sender_username}'s profile`}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <img
-                        src={notif.sender_avatar_url || '/uploads/avatars/default-avatar.png'}
-                        alt={notif.sender_username}
-                        className="notification-avatar-img"
-                      />
-                      <span className="notification-type-badge">{actionIcon}</span>
-                    </div>
-
-                    {/* Notification Content */}
-                    <div className="notification-content">
-                      <p className="notification-text">
-                        <strong
+                        {/* Sender Avatar with action badge */}
+                        <div
+                          className="notification-avatar-wrap"
                           onClick={() => {
                             onNavigateToProfile && onNavigateToProfile(notif.sender_username);
                             onClose();
                           }}
-                          className="notification-username-link"
+                          title={`View @${notif.sender_username}'s profile`}
+                          style={{ cursor: 'pointer' }}
                         >
-                          @{notif.sender_username}
-                        </strong>{' '}
-                        {actionText}
-                      </p>
-                      <span className="notification-time">
-                        {formatTimeAgo(notif.created_at)}
-                      </span>
-                    </div>
+                          <img
+                            src={notif.sender_avatar_url || '/uploads/avatars/default-avatar.png'}
+                            alt={notif.sender_username}
+                            className="notification-avatar-img"
+                          />
+                          <span className={`notification-type-badge ${badgeClass}`}>{actionIcon}</span>
+                        </div>
 
-                    {/* Action Meta (Post thumbnail or follow action) */}
-                    {notif.post_image_url && (
-                      <div className="notification-post-thumb-wrap">
-                        <img
-                          src={notif.post_image_url}
-                          alt="Post thumbnail"
-                          className="notification-post-thumb"
-                        />
+                        {/* Notification Content */}
+                        <div className="notification-content">
+                          <p className="notification-text">
+                            <strong
+                              onClick={() => {
+                                onNavigateToProfile && onNavigateToProfile(notif.sender_username);
+                                onClose();
+                              }}
+                              className="notification-username-link"
+                            >
+                              @{notif.sender_username}
+                            </strong>{' '}
+                            {actionText}
+                          </p>
+                          <span className="notification-time">
+                            {formatTimeAgo(notif.created_at)}
+                          </span>
+                        </div>
+
+                        {/* Action Meta (Post thumbnail or follow action) */}
+                        {notif.post_image_url && (
+                          <div className="notification-post-thumb-wrap">
+                            <img
+                              src={notif.post_image_url}
+                              alt="Post thumbnail"
+                              className="notification-post-thumb"
+                            />
+                          </div>
+                        )}
+
+                        {notif.type === 'follow' && (
+                          <button
+                            type="button"
+                            className="btn-secondary btn-sm"
+                            onClick={() => {
+                              onNavigateToProfile && onNavigateToProfile(notif.sender_username);
+                              onClose();
+                            }}
+                          >
+                            Profile
+                          </button>
+                        )}
+
+                        {/* Dismiss Button */}
+                        <button
+                          type="button"
+                          className="notification-dismiss-btn"
+                          onClick={(e) => handleDeleteNotification(notif.id, e)}
+                          title="Dismiss notification"
+                          aria-label="Dismiss notification"
+                        >
+                          ✕
+                        </button>
                       </div>
-                    )}
-
-                    {notif.type === 'follow' && (
-                      <button
-                        type="button"
-                        className="btn-secondary btn-sm"
-                        onClick={() => {
-                          onNavigateToProfile && onNavigateToProfile(notif.sender_username);
-                          onClose();
-                        }}
-                      >
-                        Profile
-                      </button>
-                    )}
-
-                    {/* Dismiss Button */}
-                    <button
-                      type="button"
-                      className="notification-dismiss-btn"
-                      onClick={(e) => handleDeleteNotification(notif.id, e)}
-                      title="Dismiss notification"
-                      aria-label="Dismiss notification"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           )}
         </div>

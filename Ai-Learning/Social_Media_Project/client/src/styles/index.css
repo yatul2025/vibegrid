@@ -6103,17 +6103,43 @@ a.nav-tab-btn {
   background: var(--bg-hover);
 }
 
+.notification-section-header {
+  padding: 14px 20px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted, #64748b);
+  background: var(--bg-card);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
 .notification-item.unread {
-  background: rgba(0, 149, 246, 0.05);
+  background: rgba(99, 102, 241, 0.08);
 }
 
 .notification-unread-dot {
   position: absolute;
-  left: 6px;
-  width: 6px;
-  height: 6px;
+  left: 7px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--primary-color);
+  background: var(--primary, #6366f1);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.75);
+  animation: unreadPulse 2s infinite ease-in-out;
+}
+
+@keyframes unreadPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 0.7;
+  }
 }
 
 .notification-avatar-wrap {
@@ -6137,14 +6163,27 @@ a.nav-tab-btn {
   right: -2px;
   width: 18px;
   height: 18px;
-  font-size: 10px;
   border-radius: 50%;
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  border: 1.5px solid var(--bg-card, #131b2e);
+}
+
+.notification-type-badge.type-like {
+  background: linear-gradient(135deg, #ef4444, #f43f5e);
+  color: #ffffff;
+}
+
+.notification-type-badge.type-comment {
+  background: linear-gradient(135deg, #3b82f6, #06b6d4);
+  color: #ffffff;
+}
+
+.notification-type-badge.type-follow {
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: #ffffff;
 }
 
 .notification-content {
