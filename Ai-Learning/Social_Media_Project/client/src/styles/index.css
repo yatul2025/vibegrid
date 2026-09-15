@@ -117,7 +117,7 @@ body {
 
 /* Accessibility: Visible Focus Indicators (WCAG 2.2 AA) */
 :focus-visible {
-  outline: 2px solid #e1306c !important;
+  outline: 2px solid var(--primary, #6366f1) !important;
   outline-offset: 2px !important;
 }
 
@@ -128,9 +128,9 @@ select:focus-visible,
 textarea:focus-visible,
 [role="button"]:focus-visible,
 [role="tab"]:focus-visible {
-  outline: 2px solid #e1306c !important;
+  outline: 2px solid var(--primary, #6366f1) !important;
   outline-offset: 2px !important;
-  box-shadow: 0 0 0 4px rgba(225, 48, 108, 0.25) !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
 }
 
 /* App Container */
@@ -981,8 +981,18 @@ a.nav-tab-btn {
   display: block;
 }
 
-.ig-input.input-error {
+.ig-input.input-error,
+.form-input.input-error,
+.form-control.input-error,
+.input-error {
   border-color: var(--danger, #ef4444) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+
+.input-error:focus-visible {
+  outline: 2px solid var(--danger, #ef4444) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25) !important;
 }
 
 .ig-input.input-match {
@@ -3237,17 +3247,18 @@ a.nav-tab-btn {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 16px;
-  animation: fadeIn 0.2s ease-out;
+  animation: modalFadeIn 0.2s ease-out;
 }
 
-@keyframes fadeIn {
+@keyframes modalFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
@@ -3261,6 +3272,18 @@ a.nav-tab-btn {
   flex-direction: column;
   overflow: hidden;
   max-height: 90vh;
+  animation: modalEnter 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .modal-header {
@@ -7395,6 +7418,18 @@ a.mobile-nav-item {
     border-right: none;
     border-bottom: none;
     max-height: 92dvh;
+    animation: sheetEnter 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes sheetEnter {
+    from {
+      opacity: 0.6;
+      transform: translateY(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   .create-post-card {

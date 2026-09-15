@@ -11,9 +11,10 @@
  * 5. Instant callback onPostCreated to update feed and profile in real time.
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
+import { RotateCw, ImagePlus, AlertCircle } from 'lucide-react';
 
 export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
   const { user } = useAuth();
@@ -23,6 +24,18 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
+
+  // Close on Escape key press
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !loading) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, loading, onClose]);
 
   if (!isOpen) return null;
 
@@ -113,7 +126,12 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
           </button>
         </div>
 
-        {error && <div className="modal-error-banner">⚠️ {error}</div>}
+        {error && (
+          <div className="modal-error-banner" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <AlertCircle size={16} style={{ flexShrink: 0 }} />
+            <span>{error}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="create-post-form">
           <div className="create-post-body">
@@ -127,8 +145,10 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
                     className="preview-change-btn"
                     onClick={handleResetImage}
                     title="Choose a different image"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
-                    🔄 Change Photo
+                    <RotateCw size={14} />
+                    <span>Change Photo</span>
                   </button>
                 </div>
               ) : (
@@ -138,7 +158,9 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
                   onDragOver={handleDragOver}
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <div className="dropzone-icon">🖼️</div>
+                  <div className="dropzone-icon" style={{ display: 'flex', justifyContent: 'center' }}>
+                    <ImagePlus size={44} strokeWidth={1.5} color="var(--primary)" />
+                  </div>
                   <h4>Drag photos here</h4>
                   <p>or click to select from your device</p>
                   <span className="dropzone-hint">Supports JPEG, PNG, WebP up to 5MB</span>

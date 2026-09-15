@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import ConfirmModal from './ConfirmModal';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
+import { Send } from 'lucide-react';
 
 function formatTimeAgo(dateString) {
   if (!dateString) return '';
@@ -71,6 +72,18 @@ export default function CommentsModal({
       fetchComments();
     }
   }, [isOpen, post?.id]);
+
+  // Dismiss on Escape key press
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !commentToDelete) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, commentToDelete]);
 
   // Scroll to bottom when new comment arrives
   const scrollToBottom = () => {
@@ -309,8 +322,10 @@ export default function CommentsModal({
                       className="comment-post-btn"
                       disabled={submitting || !newComment.trim()}
                       aria-busy={submitting ? 'true' : 'false'}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
-                      {submitting ? 'Posting...' : 'Post'}
+                      <Send size={13} />
+                      <span>{submitting ? 'Posting...' : 'Post'}</span>
                     </button>
                   </div>
                 </form>
