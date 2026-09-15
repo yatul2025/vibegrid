@@ -10,6 +10,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import apiClient from '../api/client';
+import pushNotificationService from '../services/pushNotificationService';
 
 const AuthContext = createContext(null);
 
@@ -66,6 +67,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   const isDemoMode = Boolean(user?.is_demo_session || user?.isDemoSession || user?.sessionType === 'demo');
+
+  // Automatically sync Web Push subscription whenever an authenticated user session is active
+  useEffect(() => {
+    if (user && user.id && !isDemoMode) {
+      pushNotificationService.syncPushSubscription().catch(() => {});
+    }
+  }, [user?.id, isDemoMode]);
 
   // Global Join VibeGrid Auth Prompt Modal State
   const [authModalState, setAuthModalState] = useState({
@@ -283,6 +291,9 @@ export const AuthProvider = ({ children }) => {
 
   // Logout handler
   const logout = async () => {
+    try {
+      await pushNotificationService.unsubscribeFromPushNotifications().catch(() => {});
+    } catch {}
     try {
       await apiClient.post('/auth/logout');
     } catch (err) {

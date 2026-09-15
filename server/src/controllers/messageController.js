@@ -503,6 +503,7 @@ const sendMessage = async (req, res, next) => {
         : (cleanContent && cleanContent.trim() ? cleanContent.trim().slice(0, 100) : 'Sent you a message');
 
       pushService.sendPushNotification(recipient.id, {
+        senderId: senderId,
         title: `${req.user.full_name || req.user.username} (@${req.user.username})`,
         body: preview,
         icon: req.user.avatar_url || '/icons/icon-192.png',
@@ -998,6 +999,7 @@ const forwardMessage = async (req, res, next) => {
       try {
         const pushService = require('../services/pushService');
         pushService.sendPushNotification(recipient.id, {
+          senderId: req.user.id,
           title: `${req.user.full_name || req.user.username} (@${req.user.username})`,
           body: '↪️ Forwarded a message to you',
           icon: req.user.avatar_url || '/icons/icon-192.png',

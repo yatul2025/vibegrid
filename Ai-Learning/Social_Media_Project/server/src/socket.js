@@ -348,6 +348,7 @@ function initSocket(httpServer) {
         try {
           const pushService = require('./services/pushService');
           pushService.sendPushNotification(calleeId, {
+            senderId: userId,
             title: `📞 Incoming ${callType === 'video' ? 'Video' : 'Audio'} Call`,
             body: `${user.full_name || user.username} is calling you on VibeGrid...`,
             icon: user.avatar_url || '/icons/icon-192.png',

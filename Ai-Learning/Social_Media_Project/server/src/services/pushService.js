@@ -67,6 +67,12 @@ async function sendPushNotification(userId, notification) {
   try {
     if (!userId) return { sent: 0, error: 'No recipient specified' };
 
+    // Never deliver push notification to the sender themselves
+    if (notification.senderId && Number(userId) === Number(notification.senderId)) {
+      console.log('[WebPush] Skipped push to sender itself');
+      return { sent: 0, skipped: 'sender_equals_recipient' };
+    }
+
     // 1. Check recipient user notification preferences
     const userRes = await query(
       `SELECT 
@@ -114,6 +120,17 @@ async function sendPushNotification(userId, notification) {
       return { sent: 0, reason: 'no_registered_subscriptions' };
     }
 
+    // Fetch sender endpoints to ensure sender's active device never receives their own sent message
+    const senderEndpoints = new Set();
+    if (notification.senderId) {
+      try {
+        const senderSubs = await query('SELECT endpoint FROM push_subscriptions WHERE user_id = $1', [notification.senderId]);
+        if (senderSubs && senderSubs.rows) {
+          senderSubs.rows.forEach((r) => senderEndpoints.add(r.endpoint));
+        }
+      } catch (e) {}
+    }
+
     // 3. Construct standard W3C Push payload
     const payload = JSON.stringify({
       title: notification.title || 'VibeGrid',
@@ -145,6 +162,12 @@ async function sendPushNotification(userId, notification) {
     let prunedCount = 0;
 
     const deliveryPromises = subsRes.rows.map(async (sub) => {
+      // Never send push to a physical device currently registered to the sender
+      if (senderEndpoints.has(sub.endpoint)) {
+        console.log('[WebPush] Skipped push delivery: endpoint belongs to active sender device.');
+        return;
+      }
+
       const pushSubscription = {
         endpoint: sub.endpoint,
         keys: {

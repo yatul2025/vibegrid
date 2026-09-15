@@ -217,6 +217,10 @@ const subscribePush = async (req, res, next) => {
       )
     `);
 
+    // A physical browser/device can only receive push notifications for the CURRENT active user.
+    // Disassociate this endpoint from any other users (e.g. previous logins or switched accounts).
+    await query('DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id != $2', [endpoint, userId]);
+
     const upsertQuery = `
       INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent, updated_at)
       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)

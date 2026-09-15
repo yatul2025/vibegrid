@@ -179,6 +179,67 @@ export async function unsubscribeFromPushNotifications() {
 }
 
 /**
+ * Automatically synchronizes current device's Web Push subscription with the logged-in user.
+ * Invoked on login or app launch if notification permission is already granted.
+ */
+export async function syncPushSubscription() {
+  if (!isPushNotificationSupported()) return null;
+  if (getNotificationPermission() !== 'granted') return null;
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+
+    if (subscription) {
+      const subJSON = subscription.toJSON();
+      if (!subJSON.keys?.p256dh || !subJSON.keys?.auth) {
+        try {
+          await subscription.unsubscribe();
+          subscription = null;
+        } catch (err) {}
+      }
+    }
+
+    if (!subscription) {
+      const keyRes = await apiClient.get('/notifications/vapid-public-key');
+      if (!keyRes.success || !keyRes.data?.publicKey) {
+        return null;
+      }
+      const convertedVapidKey = urlBase64ToUint8Array(keyRes.data.publicKey);
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: convertedVapidKey
+      });
+    }
+
+    const subJSON = subscription.toJSON();
+    let p256dh = subJSON.keys?.p256dh;
+    let auth = subJSON.keys?.auth;
+
+    if (!p256dh && subscription.getKey) {
+      const raw = subscription.getKey('p256dh');
+      if (raw) p256dh = btoa(String.fromCharCode.apply(null, new Uint8Array(raw)));
+    }
+    if (!auth && subscription.getKey) {
+      const raw = subscription.getKey('auth');
+      if (raw) auth = btoa(String.fromCharCode.apply(null, new Uint8Array(raw)));
+    }
+
+    await apiClient.post('/notifications/push-subscribe', {
+      endpoint: subscription.endpoint,
+      keys: { p256dh, auth },
+      userAgent: navigator.userAgent
+    });
+
+    console.log('✅ [Push Service] Successfully synced Web Push subscription for current user:', subscription.endpoint);
+    return subscription;
+  } catch (err) {
+    console.warn('[Push Service] Auto-sync push subscription notice:', err.message);
+    return null;
+  }
+}
+
+/**
  * Triggers a real Web Push test notification from the backend to test background delivery
  */
 export async function sendTestNotification() {
@@ -263,6 +324,7 @@ export default {
   getNotificationPermission,
   getExistingSubscription,
   subscribeToPushNotifications,
+  syncPushSubscription,
   unsubscribeFromPushNotifications,
   sendTestNotification,
   getPushDiagnostics
