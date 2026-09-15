@@ -11,20 +11,36 @@
  * 5. Supports high-priority urgency and short TTL for incoming calls.
  */
 
-const webpush = require('web-push');
+let webpush;
+try {
+  webpush = require('web-push');
+} catch (e1) {
+  try {
+    webpush = require('../../node_modules/web-push');
+  } catch (e2) {
+    try {
+      webpush = require('../../../node_modules/web-push');
+    } catch (e3) {
+      console.warn('[WebPush] web-push module could not be loaded:', e1.message);
+    }
+  }
+}
+
 const config = require('../config/env');
 const { query } = require('../config/db');
 
 // Configure VAPID details globally
-try {
-  webpush.setVapidDetails(
-    config.vapid.subject,
-    config.vapid.publicKey,
-    config.vapid.privateKey
-  );
-  console.log('✅ [WebPush] VAPID configured with subject:', config.vapid.subject);
-} catch (err) {
-  console.error('❌ [WebPush] VAPID initialization failed:', err.message);
+if (webpush && config.vapid?.publicKey && config.vapid?.privateKey) {
+  try {
+    webpush.setVapidDetails(
+      config.vapid.subject || 'mailto:support@vibegrid.app',
+      config.vapid.publicKey,
+      config.vapid.privateKey
+    );
+    console.log('✅ [WebPush] VAPID configured with subject:', config.vapid.subject);
+  } catch (err) {
+    console.error('❌ [WebPush] VAPID initialization failed:', err.message);
+  }
 }
 
 /**
@@ -118,6 +134,11 @@ async function sendPushNotification(userId, notification) {
       TTL: isCall ? 60 : 86400, // Calls expire in 60s if not delivered; other notifications persist 24h
       urgency: isCall ? 'high' : 'normal'
     };
+
+    if (!webpush) {
+      console.warn('[WebPush] webpush client unavailable, skipping push dispatch.');
+      return { sent: 0, skipped: 'webpush_unavailable' };
+    }
 
     // 4. Send to all devices concurrently
     let sentCount = 0;

@@ -96,7 +96,19 @@ export async function subscribeToPushNotifications() {
   // Check if an existing subscription already exists
   let subscription = await registration.pushManager.getSubscription();
 
-  // If already subscribed, check if we need to resubscribe or update backend
+  // If already subscribed, ensure it has valid keys; otherwise renew
+  if (subscription) {
+    const subJSON = subscription.toJSON();
+    if (!subJSON.keys?.p256dh || !subJSON.keys?.auth) {
+      try {
+        await subscription.unsubscribe();
+        subscription = null;
+      } catch (err) {
+        console.warn('[Push Service] Could not unsubscribe stale subscription:', err);
+      }
+    }
+  }
+
   if (!subscription) {
     const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
     subscription = await registration.pushManager.subscribe({
@@ -105,11 +117,31 @@ export async function subscribeToPushNotifications() {
     });
   }
 
-  // 4. Send subscription credentials to backend
+  // 4. Extract keys reliably
   const subJSON = subscription.toJSON();
+  let p256dh = subJSON.keys?.p256dh;
+  let auth = subJSON.keys?.auth;
+
+  if (!p256dh && subscription.getKey) {
+    const raw = subscription.getKey('p256dh');
+    if (raw) {
+      p256dh = btoa(String.fromCharCode.apply(null, new Uint8Array(raw)));
+    }
+  }
+  if (!auth && subscription.getKey) {
+    const raw = subscription.getKey('auth');
+    if (raw) {
+      auth = btoa(String.fromCharCode.apply(null, new Uint8Array(raw)));
+    }
+  }
+
+  // Send subscription credentials to backend
   const res = await apiClient.post('/notifications/push-subscribe', {
-    endpoint: subJSON.endpoint,
-    keys: subJSON.keys,
+    endpoint: subscription.endpoint,
+    keys: {
+      p256dh,
+      auth
+    },
     userAgent: navigator.userAgent
   });
 

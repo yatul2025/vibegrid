@@ -155,8 +155,14 @@ const deleteNotification = async (req, res, next) => {
  */
 const getVapidPublicKey = async (req, res, next) => {
   try {
-    const pushService = require('../services/pushService');
-    const publicKey = pushService.getVapidPublicKey();
+    const config = require('../config/env');
+    const publicKey = config.vapid?.publicKey;
+    if (!publicKey) {
+      return res.status(500).json({
+        success: false,
+        error: 'VAPID public key is not configured on the server.'
+      });
+    }
     res.status(200).json({
       success: true,
       data: {
@@ -164,7 +170,11 @@ const getVapidPublicKey = async (req, res, next) => {
       }
     });
   } catch (error) {
-    next(error);
+    console.error('[Notification Controller] getVapidPublicKey error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to retrieve VAPID public key.'
+    });
   }
 };
 
@@ -175,15 +185,37 @@ const getVapidPublicKey = async (req, res, next) => {
  */
 const subscribePush = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required. User not identified.'
+      });
+    }
+
     const { endpoint, keys, userAgent } = req.body;
 
     if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid push subscription payload. Missing endpoint or keys.'
+        error: 'Invalid push subscription payload. Missing endpoint or authentication keys.'
       });
     }
+
+    // Auto-ensure table exists in the database
+    await query(`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        user_agent TEXT,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_user_push_endpoint UNIQUE(user_id, endpoint)
+      )
+    `);
 
     const upsertQuery = `
       INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent, updated_at)
@@ -205,15 +237,21 @@ const subscribePush = async (req, res, next) => {
       userAgent || req.headers['user-agent'] || null
     ]);
 
+    const subscriptionId = result.rows?.[0]?.id || 0;
+
     res.status(201).json({
       success: true,
       message: 'Push subscription registered successfully.',
       data: {
-        subscriptionId: result.rows[0].id
+        subscriptionId
       }
     });
   } catch (error) {
-    next(error);
+    console.error('[Notification Controller] subscribePush error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to save push subscription on the server.'
+    });
   }
 };
 
@@ -224,7 +262,7 @@ const subscribePush = async (req, res, next) => {
  */
 const unsubscribePush = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
     const { endpoint } = req.body;
 
     if (!endpoint) {
@@ -244,7 +282,11 @@ const unsubscribePush = async (req, res, next) => {
       message: 'Push subscription removed successfully.'
     });
   } catch (error) {
-    next(error);
+    console.error('[Notification Controller] unsubscribePush error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to remove push subscription.'
+    });
   }
 };
 
@@ -255,32 +297,47 @@ const unsubscribePush = async (req, res, next) => {
  */
 const getPushStatus = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
     const pushService = require('../services/pushService');
 
-    const subsRes = await query(
-      `SELECT id, endpoint, user_agent, created_at, updated_at 
-       FROM push_subscriptions 
-       WHERE user_id = $1 
-       ORDER BY updated_at DESC`,
-      [userId]
-    );
+    let subsRes = { rows: [] };
+    try {
+      subsRes = await query(
+        `SELECT id, endpoint, user_agent, created_at, updated_at 
+         FROM push_subscriptions 
+         WHERE user_id = $1 
+         ORDER BY updated_at DESC`,
+        [userId]
+      );
+    } catch (dbErr) {
+      console.warn('[Notification Controller] getPushStatus DB query fallback:', dbErr.message);
+    }
 
     res.status(200).json({
       success: true,
       data: {
         isVapidConfigured: Boolean(pushService.getVapidPublicKey()),
         activeSubscriptionsCount: subsRes.rows.length,
-        subscriptions: subsRes.rows.map(s => ({
-          id: s.id,
-          endpointDomain: new URL(s.endpoint).hostname,
-          userAgent: s.user_agent,
-          lastUpdated: s.updated_at
-        }))
+        subscriptions: subsRes.rows.map(s => {
+          let domain = 'push-vendor';
+          try {
+            domain = new URL(s.endpoint).hostname;
+          } catch (_) {}
+          return {
+            id: s.id,
+            endpointDomain: domain,
+            userAgent: s.user_agent,
+            lastUpdated: s.updated_at
+          };
+        })
       }
     });
   } catch (error) {
-    next(error);
+    console.error('[Notification Controller] getPushStatus error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to retrieve push status.'
+    });
   }
 };
 
@@ -291,7 +348,7 @@ const getPushStatus = async (req, res, next) => {
  */
 const sendTestPush = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
     const pushService = require('../services/pushService');
 
     const result = await pushService.sendPushNotification(userId, {
@@ -313,7 +370,11 @@ const sendTestPush = async (req, res, next) => {
       data: result
     });
   } catch (error) {
-    next(error);
+    console.error('[Notification Controller] sendTestPush error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to send test push notification.'
+    });
   }
 };
 
