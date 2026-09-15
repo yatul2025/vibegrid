@@ -172,6 +172,23 @@ class SocketService {
           await apiClient.post(`/calls/${callId}/reject`, { reason: data.reason || 'declined' });
           this.stopSignalPolling();
         }
+      } else if (event === 'call:ringing') {
+        const callId = data.callId || this.activeCallId;
+        const callerId = data.callerId || data.targetUserId;
+        if (callId && callerId) {
+          await apiClient.post(`/calls/${callId}/signal`, {
+            toUserId: callerId,
+            signalType: 'ringing',
+            payload: {}
+          });
+        }
+      } else if (event === 'call:cancel') {
+        const callId = data.callId || this.activeCallId;
+        const targetUserId = data.targetUserId;
+        if (callId) {
+          await apiClient.post(`/calls/${callId}/cancel`, { targetUserId });
+          this.stopSignalPolling();
+        }
       } else if (event === 'call:end') {
         const callId = data.callId || this.activeCallId;
         if (callId) {
@@ -289,7 +306,12 @@ class SocketService {
           for (const s of res.data.signals) {
             this.lastSignalId = Math.max(this.lastSignalId, s.id);
 
-            if (s.signal_type === 'accept') {
+            if (s.signal_type === 'ringing') {
+              this._dispatch('call:ringing', { callId: this.activeCallId, calleeId: s.from_user_id });
+            } else if (s.signal_type === 'cancelled') {
+              this._dispatch('call:cancelled', { callId: this.activeCallId, callerId: s.from_user_id });
+              this.stopSignalPolling();
+            } else if (s.signal_type === 'accept') {
               this._dispatch('call:accepted', { callId: this.activeCallId, calleeId: s.from_user_id });
             } else if (s.signal_type === 'reject') {
               this._dispatch('call:rejected', { callId: this.activeCallId, reason: s.payload?.reason });
@@ -352,6 +374,14 @@ class SocketService {
 
   sendReadReceipt(conversationId, messageId, senderId) {
     this.emit('message:read', { conversationId, messageId, senderId });
+  }
+
+  sendCallRinging(callId, callerId) {
+    this.emit('call:ringing', { callId, callerId });
+  }
+
+  sendCallCancel(callId, targetUserId) {
+    this.emit('call:cancel', { callId, targetUserId });
   }
 }
 

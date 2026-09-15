@@ -18,6 +18,7 @@ router.post('/initiate', callController.initiateCall);
 router.post('/:id/accept', callController.acceptCall);
 router.post('/:id/reject', callController.rejectCall);
 router.post('/:id/end', callController.endCall);
+router.post('/:id/cancel', callController.cancelCall);
 router.post('/:id/signal', callController.sendSignal);
 router.get('/:id/signals', callController.getSignals);
 

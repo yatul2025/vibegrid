@@ -821,6 +821,22 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
     }
   };
 
+  const handleForcePwaUpdate = async () => {
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((r) => r.unregister()));
+      }
+      window.location.reload();
+    } catch {
+      window.location.reload();
+    }
+  };
+
   const handleLoadDiagnostics = async () => {
     try {
       setLoadingDiagnostics(true);
@@ -2466,6 +2482,10 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
                 </span>
               </div>
               <div className="diagnostics-row">
+                <span className="diagnostics-label">PWA Version</span>
+                <span className="diagnostics-value">vibegrid-pwa-v15</span>
+              </div>
+              <div className="diagnostics-row">
                 <span className="diagnostics-label">Platform Notes</span>
                 <span className="diagnostics-value" style={{ whiteSpace: 'normal', fontFamily: 'inherit' }}>
                   {pushDiagnostics.platform?.notes}
@@ -2473,6 +2493,14 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
               </div>
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={handleForcePwaUpdate}
+                title="Clears cached service workers and refreshes the application to the latest version"
+              >
+                🔄 Refresh to Latest Version
+              </button>
               <button
                 type="button"
                 className="btn-primary btn-sm"

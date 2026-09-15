@@ -387,7 +387,7 @@ class WebRTCService {
           return;
         }
       } else if (connState === 'disconnected' || iceState === 'disconnected') {
-        effectiveState = 'disconnected';
+        effectiveState = 'reconnecting';
         setTimeout(() => {
           if (this.peerConnection && (this.peerConnection.iceConnectionState === 'disconnected' || this.peerConnection.connectionState === 'disconnected')) {
             console.log('[WebRTC] Disconnection persisted, triggering recovery ICE restart...');
