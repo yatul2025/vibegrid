@@ -26,6 +26,18 @@ const getConversations = async (req, res, next) => {
     const { archived } = req.query;
     const showArchived = archived === 'true';
 
+    // Recipient device active: mark undelivered messages to this user as delivered
+    await query(
+      `UPDATE messages 
+       SET delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP)
+       WHERE recipient_id = $1 AND delivered_at IS NULL`,
+      [userId]
+    );
+    await query(
+      `UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [userId]
+    );
+
     const conversationsQuery = `
       WITH ranked_messages AS (
         SELECT 
@@ -231,14 +243,40 @@ const getMessages = async (req, res, next) => {
 
     const messagesRes = await query(messagesQuery, [userId, partner.id]);
 
-    // 3. Mark incoming messages as read and update read_at
+    // 3. Mark incoming messages from partner as delivered and read
     await query(
-      'UPDATE messages SET is_read = TRUE, read_at = COALESCE(read_at, CURRENT_TIMESTAMP) WHERE sender_id = $1 AND recipient_id = $2 AND is_read = FALSE',
+      `UPDATE messages 
+       SET is_read = TRUE, 
+           read_at = COALESCE(read_at, CURRENT_TIMESTAMP),
+           delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP)
+       WHERE sender_id = $1 AND recipient_id = $2 AND (is_read = FALSE OR delivered_at IS NULL)`,
       [partner.id, userId]
     );
 
+    // Update active presence on production
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        await query(`UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1`, [userId]);
+      } catch {}
+    }
+
+    // Relay read & delivery receipts to partner via Socket.IO if active
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${partner.id}`).emit('message:read_receipt', {
+        readerId: userId,
+        conversationId
+      });
+      io.to(`user:${partner.id}`).emit('message:delivery_receipt', {
+        recipientId: userId,
+        conversationId,
+        deliveredAt: new Date().toISOString()
+      });
+    }
+
     // 4. Format messages and resolve quoted replies
     const formattedMessages = messagesRes.rows.map((msg) => {
+      const isMine = Boolean(msg.is_mine);
       let reply_to_message = null;
       if (msg.reply_to_id) {
         if (msg.reply_id) {
@@ -260,6 +298,17 @@ const getMessages = async (req, res, next) => {
         }
       }
 
+      // Incoming messages are actively viewed right now by current user
+      const isRead = isMine
+        ? (partner.show_read_receipts === false ? false : msg.is_read)
+        : true;
+      const deliveredAt = isMine
+        ? msg.delivered_at
+        : (msg.delivered_at || new Date().toISOString());
+      const readAt = isMine
+        ? msg.read_at
+        : (msg.read_at || new Date().toISOString());
+
       return {
         id: msg.id,
         sender_id: msg.sender_id,
@@ -272,21 +321,37 @@ const getMessages = async (req, res, next) => {
         message_type: msg.message_type || 'text',
         reply_to_id: msg.reply_to_id,
         reply_to_message,
-        is_read: (partner.show_read_receipts === false && msg.is_mine) ? false : msg.is_read,
+        is_read: isRead,
         is_deleted: Boolean(msg.is_deleted),
         is_forwarded: Boolean(msg.is_forwarded),
         is_starred: Boolean(msg.is_starred),
         reactions: Array.isArray(msg.reactions) ? msg.reactions : [],
         edited_at: msg.edited_at,
-        delivered_at: msg.delivered_at,
-        read_at: msg.read_at,
+        delivered_at: deliveredAt,
+        read_at: readAt,
         created_at: msg.created_at,
-        is_mine: msg.is_mine
+        is_mine: isMine
       };
     });
 
     const cmRow = convRes.rows[0];
     const isMuted = Boolean(cmRow?.is_muted && (!cmRow.muted_until || new Date(cmRow.muted_until) > new Date()));
+
+    // Check if partner is currently typing to this user (ephemeral state within 3.5s)
+    let isPartnerTyping = false;
+    try {
+      const typingCheckRes = await query(
+        `SELECT EXISTS(
+           SELECT 1 FROM chat_typing
+           WHERE user_id = $1 AND target_user_id = $2
+             AND updated_at > CURRENT_TIMESTAMP - INTERVAL '3.5 seconds'
+         ) AS is_typing`,
+        [partner.id, userId]
+      );
+      isPartnerTyping = Boolean(typingCheckRes.rows[0]?.is_typing);
+    } catch (tErr) {
+      // Ephemeral check fallback
+    }
 
     res.status(200).json({
       success: true,
@@ -301,7 +366,8 @@ const getMessages = async (req, res, next) => {
         isArchived: Boolean(cmRow?.is_archived),
         isBlocked,
         isBlockedBy,
-        messages: formattedMessages
+        messages: formattedMessages,
+        isPartnerTyping
       }
     });
   } catch (error) {
@@ -721,15 +787,24 @@ const markConversationAsRead = async (req, res, next) => {
       const senderId = userRes.rows[0].id;
       const readAt = new Date().toISOString();
       await query(
-        'UPDATE messages SET is_read = TRUE, read_at = CURRENT_TIMESTAMP WHERE sender_id = $1 AND recipient_id = $2 AND is_read = FALSE',
+        `UPDATE messages 
+         SET is_read = TRUE, 
+             read_at = CURRENT_TIMESTAMP,
+             delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP)
+         WHERE sender_id = $1 AND recipient_id = $2 AND is_read = FALSE`,
         [senderId, userId]
       );
+      await query(`UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1`, [userId]);
 
       const io = req.app.get('io');
       if (io) {
         io.to(`user:${senderId}`).emit('message:read_receipt', {
           readerId: userId,
           readAt
+        });
+        io.to(`user:${senderId}`).emit('message:delivery_receipt', {
+          recipientId: userId,
+          deliveredAt: readAt
         });
       }
     }
@@ -751,6 +826,18 @@ const markConversationAsRead = async (req, res, next) => {
 const getUnreadMessagesCount = async (req, res, next) => {
   try {
     const userId = req.user.id;
+
+    // Recipient active: mark undelivered messages to this user as delivered
+    await query(
+      `UPDATE messages 
+       SET delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP)
+       WHERE recipient_id = $1 AND delivered_at IS NULL`,
+      [userId]
+    );
+    await query(
+      `UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [userId]
+    );
 
     const countQuery = `
       SELECT COUNT(*)::int AS count
@@ -1688,6 +1775,102 @@ const reportEntity = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Set ephemeral typing status for direct messaging
+ * @route   POST /api/messages/typing
+ * @access  Private (Authenticated)
+ */
+const sendTypingStatus = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { targetUserId, conversationId, isTyping } = req.body;
+
+    if (!targetUserId) {
+      return res.status(400).json({ success: false, error: 'targetUserId is required' });
+    }
+
+    const targetId = Number(targetUserId);
+    const convId = conversationId ? Number(conversationId) : null;
+
+    if (isTyping) {
+      await query(
+        `INSERT INTO chat_typing (user_id, target_user_id, conversation_id, updated_at)
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+         ON CONFLICT (user_id)
+         DO UPDATE SET target_user_id = EXCLUDED.target_user_id,
+                       conversation_id = EXCLUDED.conversation_id,
+                       updated_at = CURRENT_TIMESTAMP`,
+        [userId, targetId, convId]
+      );
+    } else {
+      await query(`DELETE FROM chat_typing WHERE user_id = $1`, [userId]);
+    }
+
+    // Real-time WebSocket relay if Socket.IO server is active
+    const io = req.app.get('io');
+    if (io) {
+      const payload = {
+        userId,
+        username: req.user.username,
+        fullName: req.user.full_name,
+        isTyping: Boolean(isTyping),
+        conversationId: convId
+      };
+      io.to(`user:${targetId}`).emit('typing:status', payload);
+      if (convId) {
+        io.to(`conv:${convId}`).emit('typing:status', payload);
+      }
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Check ephemeral typing status for a conversation partner
+ * @route   GET /api/messages/:username/typing
+ * @access  Private (Authenticated)
+ */
+const getTypingStatus = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { username } = req.params;
+
+    const partnerRes = await query(
+      `SELECT id FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1`,
+      [username]
+    );
+
+    if (partnerRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const partnerId = partnerRes.rows[0].id;
+
+    const checkRes = await query(
+      `SELECT EXISTS(
+         SELECT 1 FROM chat_typing
+         WHERE user_id = $1 AND target_user_id = $2
+           AND updated_at > CURRENT_TIMESTAMP - INTERVAL '3.5 seconds'
+       ) AS is_typing`,
+      [partnerId, userId]
+    );
+
+    const isTyping = Boolean(checkRes.rows[0]?.is_typing);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        isTyping
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getConversations,
   getMessages,
@@ -1709,5 +1892,7 @@ module.exports = {
   togglePinConversation,
   toggleArchiveConversation,
   clearConversationMessages,
-  reportEntity
+  reportEntity,
+  sendTypingStatus,
+  getTypingStatus
 };

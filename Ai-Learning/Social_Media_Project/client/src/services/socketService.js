@@ -226,6 +226,22 @@ class SocketService {
             payload: candidatePayload
           });
         }
+      } else if (event === 'typing:start') {
+        if (data && data.targetUserId) {
+          await apiClient.post('/messages/typing', {
+            targetUserId: data.targetUserId,
+            conversationId: data.conversationId,
+            isTyping: true
+          });
+        }
+      } else if (event === 'typing:stop') {
+        if (data && data.targetUserId) {
+          await apiClient.post('/messages/typing', {
+            targetUserId: data.targetUserId,
+            conversationId: data.conversationId,
+            isTyping: false
+          });
+        }
       } else if (event === 'presence:get') {
         if (typeof callback === 'function') {
           callback([]);

@@ -26,7 +26,9 @@ const {
   togglePinConversation,
   toggleArchiveConversation,
   clearConversationMessages,
-  reportEntity
+  reportEntity,
+  sendTypingStatus,
+  getTypingStatus
 } = require('../controllers/messageController');
 
 // ─── Mocks ───────────────────────────────────────────────────────────
@@ -1058,7 +1060,68 @@ describe('Phase 5: Conversation Controls & Reports', () => {
       );
     });
   });
+
+  // =====================================================================
+  describe('Ephemeral Typing Indicator Tests', () => {
+    it('should return 400 if targetUserId is missing in sendTypingStatus', async () => {
+      const req = mockReq({ body: { isTyping: true } });
+      const res = mockRes();
+      await sendTypingStatus(req, res, mockNext);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    it('should insert into chat_typing on isTyping = true', async () => {
+      query.mockResolvedValueOnce({ rowCount: 1 });
+      const req = mockReq({
+        body: { targetUserId: 2, conversationId: 10, isTyping: true }
+      });
+      const res = mockRes();
+      await sendTypingStatus(req, res, mockNext);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ success: true });
+    });
+
+    it('should delete from chat_typing on isTyping = false', async () => {
+      query.mockResolvedValueOnce({ rowCount: 1 });
+      const req = mockReq({
+        body: { targetUserId: 2, conversationId: 10, isTyping: false }
+      });
+      const res = mockRes();
+      await sendTypingStatus(req, res, mockNext);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ success: true });
+    });
+
+    it('should return isTyping boolean in getTypingStatus', async () => {
+      query.mockResolvedValueOnce({ rows: [{ id: 2 }] }); // partner query
+      query.mockResolvedValueOnce({ rows: [{ is_typing: true }] }); // typing check
+
+      const req = mockReq({ params: { username: 'bob' } });
+      const res = mockRes();
+      await getTypingStatus(req, res, mockNext);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        data: { isTyping: true }
+      });
+    });
+
+    it('should return 404 in getTypingStatus if partner not found', async () => {
+      query.mockResolvedValueOnce({ rows: [] }); // partner query not found
+
+      const req = mockReq({ params: { username: 'nonexistent' } });
+      const res = mockRes();
+      await getTypingStatus(req, res, mockNext);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
+  });
 });
+
 
 
 

@@ -191,6 +191,18 @@ const testConnection = async () => {
         ALTER TABLE users ADD COLUMN IF NOT EXISTS test INTEGER DEFAULT 0;
         UPDATE users SET test = 1 WHERE id IN (1, 2, 3, 4);
         UPDATE users SET test = 0 WHERE id NOT IN (1, 2, 3, 4);
+
+        ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+        ALTER TABLE messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+        CREATE INDEX IF NOT EXISTS idx_messages_recipient_delivered ON messages(recipient_id, delivered_at);
+
+        CREATE TABLE IF NOT EXISTS chat_typing (
+          user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          conversation_id INTEGER,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_typing_target ON chat_typing(user_id, target_user_id, updated_at);
       `);
     } catch (tblErr) {
       console.warn('[DB] Table init check warning:', tblErr.message);

@@ -694,6 +694,17 @@ export default function MessagesPage({
         setEphemeralTimer(res.data.ephemeralTimerSeconds || null);
         setPinnedMessage(res.data.pinnedMessage || null);
 
+        // Real-time typing status from serverless sync
+        if (typeof res.data.isPartnerTyping === 'boolean') {
+          setIsPartnerTyping(res.data.isPartnerTyping);
+          if (res.data.isPartnerTyping) {
+            if (partnerTypingTimeoutRef.current) clearTimeout(partnerTypingTimeoutRef.current);
+            partnerTypingTimeoutRef.current = setTimeout(() => {
+              setIsPartnerTyping(false);
+            }, 3500);
+          }
+        }
+
         // Phase 5: Conversation controls & privacy status
         setIsMuted(Boolean(res.data.isMuted));
         setIsPinned(Boolean(res.data.isPinned));
@@ -763,9 +774,35 @@ export default function MessagesPage({
       if (!socketService.isConnected()) {
         fetchMessagesForPartner(activePartner.username, false);
       }
-    }, 3000);
+    }, 2000);
     return () => clearInterval(interval);
   }, [activePartner, fetchMessagesForPartner]);
+
+  // Fast ephemeral typing check (every 1.2s) when in active conversation and socket is not connected
+  useEffect(() => {
+    if (!activePartner) return;
+    const typingPollInterval = setInterval(async () => {
+      if (socketService.isConnected()) return;
+      try {
+        const res = await apiClient.get(`/messages/${activePartner.username}/typing`);
+        if (res.success && res.data) {
+          const isTyping = Boolean(res.data.isTyping);
+          setIsPartnerTyping(isTyping);
+          if (partnerTypingTimeoutRef.current) {
+            clearTimeout(partnerTypingTimeoutRef.current);
+          }
+          if (isTyping) {
+            partnerTypingTimeoutRef.current = setTimeout(() => {
+              setIsPartnerTyping(false);
+            }, 3500);
+          }
+        }
+      } catch (err) {
+        // Quietly handle poll glitches
+      }
+    }, 1200);
+    return () => clearInterval(typingPollInterval);
+  }, [activePartner]);
 
   // Initial Load
   useEffect(() => {
@@ -1166,6 +1203,10 @@ export default function MessagesPage({
     // Case B: Sending a new message (with optional reply)
     // Clear draft for this partner
     saveDraft(activePartner.username, '');
+    socketService.sendTypingStop(activeConversationId, activePartner.id);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
 
     const activeReply = replyingTo;
     setReplyingTo(null);

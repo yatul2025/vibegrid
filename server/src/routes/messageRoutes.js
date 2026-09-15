@@ -24,6 +24,7 @@ router.get('/conversations', messageController.getConversations);
 router.get('/unread-count', messageController.getUnreadMessagesCount);
 router.get('/starred', messageController.getStarredMessages);
 router.post('/forward', messageController.forwardMessage);
+router.post('/typing', messageController.sendTypingStatus);
 
 // Specific message actions (declared before /:username parameter)
 router.put('/msg/:id/edit', messageController.editMessage);
@@ -46,6 +47,7 @@ router.delete('/conv/:id/clear', messageController.clearConversationMessages);
 router.post('/report', messageController.reportEntity);
 
 // Parameterized routes
+router.get('/:username/typing', messageController.getTypingStatus);
 router.get('/:username', messageController.getMessages);
 router.post('/:username', messageController.sendMessage);
 router.put('/:username/read', messageController.markConversationAsRead);
