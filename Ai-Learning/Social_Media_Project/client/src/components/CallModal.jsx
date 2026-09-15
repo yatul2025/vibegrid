@@ -208,8 +208,16 @@ export default function CallModal() {
 
   // Call State: null | 'incoming' | 'outgoing' | 'connected'
   const [callState, setCallState] = useState(null);
+  // Detailed Call Sub-State State Machine:
+  // 'calling' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'declined' | 'no_answer' | 'unavailable' | 'failed'
+  const [callSubState, setCallSubState] = useState('calling');
   const [callData, setCallData] = useState(null);
   const [durationSeconds, setDurationSeconds] = useState(0);
+
+  // Ringing and auto-dismiss timer refs
+  const ringTimeoutRef = useRef(null);
+  const incomingTimeoutRef = useRef(null);
+  const autoDismissTimerRef = useRef(null);
 
   // In-Call Controls
   const [isAudioMuted, setIsAudioMuted] = useState(false);
@@ -288,10 +296,26 @@ export default function CallModal() {
     } catch {}
   };
 
+  const clearAllCallTimers = () => {
+    if (ringTimeoutRef.current) {
+      clearTimeout(ringTimeoutRef.current);
+      ringTimeoutRef.current = null;
+    }
+    if (incomingTimeoutRef.current) {
+      clearTimeout(incomingTimeoutRef.current);
+      incomingTimeoutRef.current = null;
+    }
+    if (autoDismissTimerRef.current) {
+      clearTimeout(autoDismissTimerRef.current);
+      autoDismissTimerRef.current = null;
+    }
+  };
+
   /**
    * Unconditionally stops all media hardware and resets video elements
    */
   const stopAllMedia = () => {
+    clearAllCallTimers();
     try {
       stopRingtone();
     } catch (e) {
@@ -353,6 +377,7 @@ export default function CallModal() {
     // 1. Incoming Call Event
     const handleIncomingCall = (data) => {
       console.log('📞 [Socket] Incoming call received:', data);
+      clearAllCallTimers();
       setCallData({
         callId: data.callId,
         peer: data.caller,
@@ -360,14 +385,49 @@ export default function CallModal() {
         isInitiator: false
       });
       setCallState('incoming');
+      setCallSubState('incoming');
       startRingtone();
+
+      // Immediately send explicit delivery acknowledgement so caller transitions from Calling... to Ringing...
+      if (data.callId && data.caller?.id) {
+        socketService.sendCallRinging(data.callId, data.caller.id);
+      }
+
+      // Auto dismiss if caller hangs up or recipient does not answer within 40s
+      incomingTimeoutRef.current = setTimeout(() => {
+        handleEndCall();
+      }, 40000);
+    };
+
+    // 1.1 Recipient device delivery acknowledgement
+    const handleCallRinging = (data) => {
+      console.log('🔔 [Socket] Delivery confirmed by callee device, status -> Ringing:', data);
+      setCallSubState('ringing');
+    };
+
+    // 1.2 Caller cancelled before callee answered
+    const handleCallCancelled = (data) => {
+      console.log('🚫 [Socket] Call cancelled by caller:', data);
+      stopAllMedia();
+      setCallState(null);
+      setCallData(null);
+    };
+
+    // 1.3 Callee answered or rejected on another device/tab
+    const handleCallAnsweredElsewhere = (data) => {
+      console.log('📱 [Socket] Call handled on another device:', data);
+      stopAllMedia();
+      setCallState(null);
+      setCallData(null);
     };
 
     // 2. Call Accepted by Callee (for caller)
     const handleCallAccepted = async (data) => {
       console.log('✅ [Socket] Call accepted by peer:', data);
+      clearAllCallTimers();
       stopRingtone();
       setCallState('connected');
+      setCallSubState('connecting');
       setConnectionStatus('connecting');
 
       try {
@@ -388,11 +448,13 @@ export default function CallModal() {
     // 3. Call Rejected / Busy
     const handleCallRejected = (data) => {
       console.log('❌ [Socket] Call rejected by peer:', data);
+      clearAllCallTimers();
       stopAllMedia();
-      setCallState(null);
-      setCallData(null);
-      setHasRemoteVideo(false);
-      alert(`Call was declined (${data.reason || 'declined'}).`);
+      setCallState('outgoing');
+      setCallSubState('declined');
+      autoDismissTimerRef.current = setTimeout(() => {
+        handleEndCall();
+      }, 2500);
     };
 
     // 4. Call Ended
@@ -463,6 +525,7 @@ export default function CallModal() {
 
     // Global custom event for initiating a call from chat or profile
     const handleCustomInitiateCall = async (event) => {
+      clearAllCallTimers();
       const { targetUser, callType } = event.detail;
       const effectiveType = callType || 'audio';
       setCallData({
@@ -471,8 +534,21 @@ export default function CallModal() {
         isInitiator: true
       });
       setCallState('outgoing');
+      setCallSubState('calling'); // Explicitly start at "Calling..."
       setConnectionStatus('connecting');
       startRingtone();
+
+      // Ringing timeout (38s)
+      ringTimeoutRef.current = setTimeout(() => {
+        console.log('⏰ Outgoing call timed out - no answer');
+        stopAllMedia();
+        setCallState('outgoing');
+        setCallSubState('no_answer'); // Show "No answer"
+        socketService.sendCallCancel(null, targetUser.id);
+        autoDismissTimerRef.current = setTimeout(() => {
+          handleEndCall();
+        }, 2500);
+      }, 38000);
 
       // Pre-warm local media preview for caller
       try {
@@ -490,10 +566,18 @@ export default function CallModal() {
         callType: effectiveType
       }, (res) => {
         if (!res.success) {
-          alert(res.error || 'Could not initiate call.');
           stopAllMedia();
-          setCallState(null);
-          setCallData(null);
+          if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
+          if (res.reason === 'unavailable') {
+            setCallState('outgoing');
+            setCallSubState('unavailable'); // Show "User unavailable"
+            autoDismissTimerRef.current = setTimeout(() => {
+              handleEndCall();
+            }, 2500);
+          } else {
+            alert(res.error || 'Could not initiate call.');
+            handleEndCall();
+          }
         } else {
           setCallData((prev) => ({ ...prev, callId: res.callId }));
         }
@@ -502,6 +586,9 @@ export default function CallModal() {
 
     window.addEventListener('vibegrid:initiate-call', handleCustomInitiateCall);
     socketService.on('call:incoming', handleIncomingCall);
+    socketService.on('call:ringing', handleCallRinging);
+    socketService.on('call:cancelled', handleCallCancelled);
+    socketService.on('call:answered_elsewhere', handleCallAnsweredElsewhere);
     socketService.on('call:accepted', handleCallAccepted);
     socketService.on('call:rejected', handleCallRejected);
     socketService.on('call:ended', handleCallEnded);
@@ -515,6 +602,9 @@ export default function CallModal() {
     return () => {
       window.removeEventListener('vibegrid:initiate-call', handleCustomInitiateCall);
       socketService.off('call:incoming', handleIncomingCall);
+      socketService.off('call:ringing', handleCallRinging);
+      socketService.off('call:cancelled', handleCallCancelled);
+      socketService.off('call:answered_elsewhere', handleCallAnsweredElsewhere);
       socketService.off('call:accepted', handleCallAccepted);
       socketService.off('call:rejected', handleCallRejected);
       socketService.off('call:ended', handleCallEnded);
@@ -606,10 +696,17 @@ export default function CallModal() {
       console.log('🔄 [CallModal] WebRTC connection state:', state);
       setConnectionStatus(state);
       if (state === 'connected' || state === 'completed') {
+        setCallSubState('connected');
         setTimeout(bindStreams, 50);
+      } else if (state === 'reconnecting') {
+        setCallSubState('reconnecting');
       } else if (state === 'failed' || state === 'closed') {
         if (state === 'failed') {
-          alert('Call connection failed. Please check network connectivity.');
+          setCallSubState('failed');
+          autoDismissTimerRef.current = setTimeout(() => {
+            handleEndCall();
+          }, 2500);
+          return;
         }
         handleEndCall();
       }
@@ -908,7 +1005,16 @@ export default function CallModal() {
     setConnectionStatus('connecting');
   };
 
+  const handleCancelOutgoingCall = () => {
+    clearAllCallTimers();
+    if (callData?.peer?.id) {
+      socketService.sendCallCancel(callData.callId, callData.peer.id);
+    }
+    handleEndCall();
+  };
+
   const handleEndCall = () => {
+    clearAllCallTimers();
     console.log('⏹️ [CallModal] handleEndCall: Dismissing call modal and stopping media');
 
     // 1. Snapshot call parameters before wiping state
@@ -1072,26 +1178,41 @@ export default function CallModal() {
                 alt={callData.peer?.username}
                 className="call-avatar-img"
               />
-              <span className="pulse-ring ring-1"></span>
-              <span className="pulse-ring ring-2"></span>
+              {!['declined', 'no_answer', 'unavailable', 'failed'].includes(callSubState) && (
+                <>
+                  <span className="pulse-ring ring-1"></span>
+                  <span className="pulse-ring ring-2"></span>
+                </>
+              )}
             </div>
 
-            <h3 className="call-peer-name">@{callData.peer?.username}</h3>
-            <p className="call-status-label">
-              Calling {callData.callType === 'video' ? 'with video' : ''}...
+            <h3 className="call-peer-name">{callData.peer?.full_name || `@${callData.peer?.username}`}</h3>
+            {callData.peer?.full_name && (
+              <span className="call-peer-subhandle">@{callData.peer?.username}</span>
+            )}
+            <p className={`call-status-label status-${callSubState}`}>
+              {callSubState === 'calling' && 'Calling...'}
+              {callSubState === 'ringing' && 'Ringing...'}
+              {callSubState === 'connecting' && 'Connecting...'}
+              {callSubState === 'declined' && 'Call declined'}
+              {callSubState === 'no_answer' && 'No answer'}
+              {callSubState === 'unavailable' && 'User unavailable'}
+              {callSubState === 'failed' && 'Call failed'}
             </p>
 
-            <div className="call-actions-row">
-              <button
-                type="button"
-                className="call-btn btn-decline"
-                onClick={handleEndCall}
-                title="Cancel Call"
-                aria-label="Cancel Call"
-              >
-                <PhoneHangupIcon />
-              </button>
-            </div>
+            {!['declined', 'no_answer', 'unavailable', 'failed'].includes(callSubState) && (
+              <div className="call-actions-row">
+                <button
+                  type="button"
+                  className="call-btn btn-decline"
+                  onClick={handleCancelOutgoingCall}
+                  title="Cancel Call"
+                  aria-label="Cancel Call"
+                >
+                  <PhoneHangupIcon />
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1103,9 +1224,9 @@ export default function CallModal() {
             {/* Top Header Bar with Live Badge, User Info, Quality, and Fullscreen Controls */}
             <div className="call-header-bar">
               <div className="call-header-info">
-                <span className={`call-live-badge ${isLive ? 'status-connected' : 'status-connecting'}`}>
+                <span className={`call-live-badge ${connectionStatus === 'reconnecting' ? 'status-reconnecting' : (isLive ? 'status-connected' : 'status-connecting')}`}>
                   <span className="live-pulsing-dot" />
-                  {isLive ? 'LIVE' : 'CONNECTING...'}
+                  {connectionStatus === 'reconnecting' ? 'RECONNECTING...' : (isLive ? 'LIVE' : 'CONNECTING...')}
                 </span>
                 <span className="call-peer-title">@{callData.peer?.username}</span>
                 <span className="call-timer">{formatDuration(durationSeconds)}</span>
@@ -1651,7 +1772,15 @@ export default function CallModal() {
           font-size: 24px;
           font-weight: 800;
           letter-spacing: -0.4px;
-          margin: 0 0 6px 0;
+          margin: 0 0 4px 0;
+        }
+
+        .call-peer-subhandle {
+          font-size: 13px;
+          font-weight: 600;
+          color: #94a3b8;
+          margin: 0 0 10px 0;
+          display: block;
         }
 
         .call-status-label {
@@ -1659,6 +1788,26 @@ export default function CallModal() {
           font-size: 15px;
           font-weight: 500;
           margin: 0 0 36px 0;
+          transition: color 0.2s ease;
+        }
+
+        .call-status-label.status-ringing {
+          color: #10b981;
+          font-weight: 600;
+        }
+
+        .call-status-label.status-calling,
+        .call-status-label.status-connecting {
+          color: #60a5fa;
+          font-weight: 600;
+        }
+
+        .call-status-label.status-declined,
+        .call-status-label.status-no_answer,
+        .call-status-label.status-unavailable,
+        .call-status-label.status-failed {
+          color: #ef4444;
+          font-weight: 700;
         }
 
         .call-actions-row {

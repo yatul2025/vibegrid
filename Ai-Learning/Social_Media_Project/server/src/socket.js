@@ -151,36 +151,34 @@ function initSocket(httpServer) {
     });
 
     socket.on('typing:start', ({ conversationId, targetUserId }) => {
+      const payload = {
+        conversationId,
+        userId,
+        username: user.username,
+        fullName: user.full_name,
+        isTyping: true
+      };
       if (conversationId) {
-        socket.to(`conv:${conversationId}`).emit('typing:status', {
-          conversationId,
-          userId,
-          username: user.username,
-          isTyping: true
-        });
-      } else if (targetUserId) {
-        socket.to(`user:${targetUserId}`).emit('typing:status', {
-          userId,
-          username: user.username,
-          isTyping: true
-        });
+        socket.to(`conv:${conversationId}`).emit('typing:status', payload);
+      }
+      if (targetUserId) {
+        socket.to(`user:${targetUserId}`).emit('typing:status', payload);
       }
     });
 
     socket.on('typing:stop', ({ conversationId, targetUserId }) => {
+      const payload = {
+        conversationId,
+        userId,
+        username: user.username,
+        fullName: user.full_name,
+        isTyping: false
+      };
       if (conversationId) {
-        socket.to(`conv:${conversationId}`).emit('typing:status', {
-          conversationId,
-          userId,
-          username: user.username,
-          isTyping: false
-        });
-      } else if (targetUserId) {
-        socket.to(`user:${targetUserId}`).emit('typing:status', {
-          userId,
-          username: user.username,
-          isTyping: false
-        });
+        socket.to(`conv:${conversationId}`).emit('typing:status', payload);
+      }
+      if (targetUserId) {
+        socket.to(`user:${targetUserId}`).emit('typing:status', payload);
       }
     });
 
@@ -311,6 +309,20 @@ function initSocket(httpServer) {
           }
         }
 
+        // Check if recipient is online
+        const isCalleeOnline = (onlineUsers.get(calleeId) || 0) > 0;
+
+        if (!isCalleeOnline) {
+          if (typeof callback === 'function') {
+            callback({
+              success: false,
+              reason: 'unavailable',
+              error: 'User unavailable'
+            });
+          }
+          return;
+        }
+
         // Record call in database
         const callInsert = await query(
           `INSERT INTO calls (conversation_id, initiator_id, call_type, status)
@@ -328,10 +340,7 @@ function initSocket(httpServer) {
           [callId, userId, calleeId]
         );
 
-        // Check if recipient is online
-        const isCalleeOnline = (onlineUsers.get(calleeId) || 0) > 0;
-
-        // Send incoming call invitation to callee's room
+        // Send incoming call invitation to all active devices of callee
         io.to(`user:${calleeId}`).emit('call:incoming', {
           callId,
           caller: {
@@ -384,6 +393,58 @@ function initSocket(httpServer) {
       }
     });
 
+    // 1.1 Device Acknowledgement: Callee device signals that incoming call is delivered and ringing
+    socket.on('call:ringing', ({ callId, callerId }) => {
+      if (!callerId) return;
+      io.to(`user:${callerId}`).emit('call:ringing', {
+        callId,
+        calleeId: userId
+      });
+    });
+
+    // 1.2 Caller Cancels Before Answer
+    socket.on('call:cancel', async ({ callId, targetUserId }) => {
+      const activeCall = activeUserCalls.get(userId);
+      const effectiveCallId = callId || activeCall?.callId;
+      const effectivePeerId = targetUserId || activeCall?.peerId;
+
+      activeUserCalls.delete(userId);
+      if (effectivePeerId) activeUserCalls.delete(effectivePeerId);
+
+      if (effectivePeerId) {
+        io.to(`user:${effectivePeerId}`).emit('call:cancelled', {
+          callId: effectiveCallId,
+          callerId: userId
+        });
+      }
+
+      try {
+        if (effectiveCallId) {
+          await query(
+            `UPDATE calls SET status = 'cancelled', ended_at = CURRENT_TIMESTAMP WHERE id = $1 AND status NOT IN ('ended', 'connected')`,
+            [effectiveCallId]
+          );
+
+          const callInfo = await query('SELECT conversation_id, call_type FROM calls WHERE id = $1', [effectiveCallId]);
+          if (callInfo.rows.length > 0 && callInfo.rows[0].conversation_id) {
+            const convId = callInfo.rows[0].conversation_id;
+            const callType = callInfo.rows[0].call_type || 'audio';
+            const callText = `⚠️ Missed ${callType} call`;
+
+            const msgRes = await query(`
+              INSERT INTO messages (conversation_id, sender_id, recipient_id, content, message_type)
+              VALUES ($1, $2, $3, $4, 'call_log')
+              RETURNING id, conversation_id, sender_id, content, message_type, created_at
+            `, [convId, userId, effectivePeerId, callText]);
+
+            io.to(`conv:${convId}`).emit('message:receive', msgRes.rows[0]);
+          }
+        }
+      } catch (err) {
+        console.error('[Call Cancel Error]', err);
+      }
+    });
+
     // 2. Accept Call
     socket.on('call:accept', async ({ callId, callerId }) => {
       try {
@@ -399,9 +460,16 @@ function initSocket(httpServer) {
           [callId, userId]
         );
 
-        socket.to(`user:${callerId}`).emit('call:accepted', {
+        // Notify caller that call was accepted
+        io.to(`user:${callerId}`).emit('call:accepted', {
           callId,
           calleeId: userId
+        });
+
+        // Multi-device dismissal: dismiss incoming modal on recipient's other devices
+        socket.to(`user:${userId}`).emit('call:answered_elsewhere', {
+          callId,
+          action: 'accepted'
         });
       } catch (err) {
         console.error('[Call Accept Error]', err);
@@ -423,10 +491,16 @@ function initSocket(httpServer) {
         activeUserCalls.delete(userId);
         activeUserCalls.delete(callerId);
 
-        socket.to(`user:${callerId}`).emit('call:rejected', {
+        io.to(`user:${callerId}`).emit('call:rejected', {
           callId,
           calleeId: userId,
           reason
+        });
+
+        // Multi-device dismissal: dismiss ringing on recipient's other devices
+        socket.to(`user:${userId}`).emit('call:answered_elsewhere', {
+          callId,
+          action: 'rejected'
         });
 
         // Insert missed call record in conversation
