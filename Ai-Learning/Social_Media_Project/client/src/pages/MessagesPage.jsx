@@ -605,6 +605,45 @@ export default function MessagesPage({
     }
   }, [messages.length, isPartnerTyping, scrollToBottom]);
 
+  // Manage body class for active chat to optimize mobile viewport & prevent window scrolling behind keyboard
+  useEffect(() => {
+    if (activePartner) {
+      document.body.classList.add('has-active-chat');
+    } else {
+      document.body.classList.remove('has-active-chat');
+      document.documentElement.style.removeProperty('--chat-viewport-height');
+    }
+    return () => {
+      document.body.classList.remove('has-active-chat');
+      document.documentElement.style.removeProperty('--chat-viewport-height');
+    };
+  }, [activePartner]);
+
+  // Handle mobile visualViewport resize when virtual keyboard opens or closes
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+
+    const handleVisualViewportChange = () => {
+      if (activePartnerRef.current) {
+        const vv = window.visualViewport;
+        if (vv) {
+          document.documentElement.style.setProperty('--chat-viewport-height', `${vv.height}px`);
+        }
+        scrollToBottom(false);
+      }
+    };
+
+    window.visualViewport.addEventListener('resize', handleVisualViewportChange);
+    window.visualViewport.addEventListener('scroll', handleVisualViewportChange);
+    handleVisualViewportChange();
+
+    return () => {
+      window.visualViewport.removeEventListener('resize', handleVisualViewportChange);
+      window.visualViewport.removeEventListener('scroll', handleVisualViewportChange);
+      document.documentElement.style.removeProperty('--chat-viewport-height');
+    };
+  }, [scrollToBottom, activePartner]);
+
   // ==========================================================================
   // 1. Initial Data Fetching (Conversations List)
   // ==========================================================================
@@ -6217,6 +6256,77 @@ export default function MessagesPage({
             font-size: 0.82rem;
             flex-shrink: 0;
             margin-bottom: 1px;
+          }
+
+          body.has-active-chat .top-navbar,
+          body.has-active-chat .mobile-bottom-navbar {
+            display: none !important;
+          }
+
+          body.has-active-chat .main-content {
+            padding: 0 !important;
+            margin: 0 !important;
+            height: 100% !important;
+            max-height: 100% !important;
+            overflow: hidden !important;
+          }
+
+          body.has-active-chat .messages-page-wrapper {
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            border: none !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100% !important;
+            height: var(--chat-viewport-height, 100dvh) !important;
+            max-height: var(--chat-viewport-height, 100dvh) !important;
+            overflow: hidden !important;
+            z-index: 50 !important;
+          }
+
+          body.has-active-chat .messages-layout-container {
+            height: 100% !important;
+            max-height: 100% !important;
+            border-radius: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+          }
+
+          body.has-active-chat .messages-chat-panel {
+            height: 100% !important;
+            max-height: 100% !important;
+            min-height: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            position: relative !important;
+            overflow: hidden !important;
+          }
+
+          body.has-active-chat .chat-header {
+            flex-shrink: 0 !important;
+          }
+
+          body.has-active-chat .chat-stream {
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+
+          body.has-active-chat .chat-composer-container {
+            flex-shrink: 0 !important;
+            position: relative !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 20 !important;
+            background: var(--card-bg, #131722) !important;
+            padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+            border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.1)) !important;
           }
         }
 
