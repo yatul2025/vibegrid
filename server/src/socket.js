@@ -450,35 +450,49 @@ function initSocket(httpServer) {
 
     // 4. End Call
     socket.on('call:end', async ({ callId, targetUserId }) => {
+      // 1. Immediately determine peer ID and call ID
+      const activeCall = activeUserCalls.get(userId);
+      const effectiveCallId = callId || activeCall?.callId;
+      const effectivePeerId = targetUserId || activeCall?.peerId;
+
+      activeUserCalls.delete(userId);
+      if (effectivePeerId) activeUserCalls.delete(effectivePeerId);
+
+      // 2. Immediately notify the peer using io.to so all active tabs/devices receive it
+      if (effectivePeerId) {
+        io.to(`user:${effectivePeerId}`).emit('call:ended', {
+          callId: effectiveCallId,
+          reason: 'hangup'
+        });
+      }
+
+      // Also confirm to the sender so their UI can never stay stuck
+      socket.emit('call:ended', {
+        callId: effectiveCallId,
+        reason: 'hangup'
+      });
+
+      // 3. Update database asynchronously
       try {
-        const callRes = await query(
-          `SELECT started_at, conversation_id, initiator_id, call_type FROM calls WHERE id = $1 LIMIT 1`,
-          [callId]
-        );
+        if (effectiveCallId) {
+          const callRes = await query(
+            `SELECT started_at, conversation_id, initiator_id, call_type FROM calls WHERE id = $1 LIMIT 1`,
+            [effectiveCallId]
+          );
 
-        let durationSeconds = 0;
-        if (callRes.rows.length > 0 && callRes.rows[0].started_at) {
-          durationSeconds = Math.max(0, Math.floor((Date.now() - new Date(callRes.rows[0].started_at).getTime()) / 1000));
-        }
+          let durationSeconds = 0;
+          if (callRes.rows.length > 0 && callRes.rows[0].started_at) {
+            durationSeconds = Math.max(0, Math.floor((Date.now() - new Date(callRes.rows[0].started_at).getTime()) / 1000));
+          }
 
-        await query(
-          `UPDATE calls SET status = 'ended', ended_at = CURRENT_TIMESTAMP, duration_seconds = $2 WHERE id = $1`,
-          [callId, durationSeconds]
-        );
-        await query(
-          `UPDATE call_participants SET left_at = CURRENT_TIMESTAMP, duration_seconds = $2 WHERE call_id = $1 AND user_id = $3`,
-          [callId, durationSeconds, userId]
-        );
-
-        activeUserCalls.delete(userId);
-        if (targetUserId) activeUserCalls.delete(targetUserId);
-
-        if (targetUserId) {
-          socket.to(`user:${targetUserId}`).emit('call:ended', {
-            callId,
-            durationSeconds
-          });
-        }
+          await query(
+            `UPDATE calls SET status = 'ended', ended_at = CURRENT_TIMESTAMP, duration_seconds = $2 WHERE id = $1`,
+            [effectiveCallId, durationSeconds]
+          );
+          await query(
+            `UPDATE call_participants SET left_at = CURRENT_TIMESTAMP, duration_seconds = $2 WHERE call_id = $1 AND user_id = $3`,
+            [effectiveCallId, durationSeconds, userId]
+          );
 
         // Insert call log message into conversation thread
         if (callRes.rows.length > 0 && callRes.rows[0].conversation_id) {

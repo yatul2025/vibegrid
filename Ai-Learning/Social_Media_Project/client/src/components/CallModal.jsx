@@ -193,6 +193,16 @@ function ActivityIcon() {
   );
 }
 
+function MoreOptionsIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="12" cy="5" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="12" cy="19" r="2" />
+    </svg>
+  );
+}
+
 export default function CallModal() {
   const { user } = useAuth();
 
@@ -215,6 +225,7 @@ export default function CallModal() {
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
   const [floatingReactions, setFloatingReactions] = useState([]);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   // Production WebRTC Hardening States
   const [networkStats, setNetworkStats] = useState(null);
@@ -365,10 +376,7 @@ export default function CallModal() {
     // 4. Call Ended
     const handleCallEnded = (data) => {
       console.log('⏹️ [Socket] Call ended by peer:', data?.reason || 'ended');
-      stopAllMedia();
-      setCallState(null);
-      setCallData(null);
-      setHasRemoteVideo(false);
+      handleEndCall();
     };
 
     // 5. WebRTC SDP Offer Relay
@@ -568,8 +576,10 @@ export default function CallModal() {
       setConnectionStatus(state);
       if (state === 'connected' || state === 'completed') {
         setTimeout(bindStreams, 50);
-      } else if (state === 'failed') {
-        alert('Call connection failed. Please check network connectivity.');
+      } else if (state === 'failed' || state === 'closed') {
+        if (state === 'failed') {
+          alert('Call connection failed. Please check network connectivity.');
+        }
         handleEndCall();
       }
     };
@@ -886,6 +896,7 @@ export default function CallModal() {
     setIsSwappedView(false);
     setShowReactions(false);
     setShowDiagnostics(false);
+    setShowMoreMenu(false);
   };
 
   const handleToggleMute = () => {
@@ -1249,7 +1260,96 @@ export default function CallModal() {
               </div>
             )}
 
-            {/* Professional Glassmorphic Floating Control Dock */}
+            {/* Kebab Popover Menu (Secondary Call Options) */}
+            {showMoreMenu && (
+              <div className="call-more-menu-popover" role="dialog" aria-label="More call options">
+                {/* Speaker Mute/Unmute */}
+                <button
+                  type="button"
+                  className={`more-menu-item ${isSpeakerMuted ? 'active-danger' : ''}`}
+                  onClick={() => {
+                    handleToggleSpeaker();
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <SpeakerIcon muted={isSpeakerMuted} />
+                  <span>{isSpeakerMuted ? 'Unmute Speaker' : 'Mute Speaker'}</span>
+                </button>
+
+                {/* Screen Sharing (VIDEO ONLY) */}
+                {isVideoMode && (
+                  <button
+                    type="button"
+                    className={`more-menu-item ${isScreenSharing ? 'active' : ''}`}
+                    onClick={() => {
+                      handleToggleScreenShare();
+                      setShowMoreMenu(false);
+                    }}
+                  >
+                    <ScreenShareIcon active={isScreenSharing} />
+                    <span>{isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}</span>
+                  </button>
+                )}
+
+                {/* Swap Feeds (VIDEO ONLY) */}
+                {isVideoMode && (
+                  <button
+                    type="button"
+                    className={`more-menu-item ${isSwappedView ? 'active' : ''}`}
+                    onClick={() => {
+                      handleSwapFeeds();
+                      setShowMoreMenu(false);
+                    }}
+                  >
+                    <SwapIcon />
+                    <span>Swap Feeds</span>
+                  </button>
+                )}
+
+                {/* Reactions */}
+                <button
+                  type="button"
+                  className="more-menu-item"
+                  onClick={() => {
+                    setShowReactions((prev) => !prev);
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <ReactionsIcon />
+                  <span>Send Reactions</span>
+                </button>
+
+                {/* Fullscreen Toggle (VIDEO ONLY) */}
+                {isVideoMode && (
+                  <button
+                    type="button"
+                    className={`more-menu-item ${isFullscreen ? 'active' : ''}`}
+                    onClick={() => {
+                      toggleFullscreen();
+                      setShowMoreMenu(false);
+                    }}
+                  >
+                    <FullscreenIcon isFullscreen={isFullscreen} />
+                    <span>{isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</span>
+                  </button>
+                )}
+
+                {/* Network Diagnostics */}
+                <button
+                  type="button"
+                  className={`more-menu-item ${showDiagnostics ? 'active' : ''}`}
+                  onClick={() => {
+                    setShowDiagnostics((prev) => !prev);
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <ActivityIcon />
+                  <span>Network Diagnostics</span>
+                </button>
+              </div>
+            )}
+
+            {/* Streamlined Glassmorphic Floating Control Dock */}
             <div className={`call-controls-toolbar ${!isVideoMode ? 'audio-toolbar' : ''}`}>
               {/* 1. Mute Microphone */}
               <button
@@ -1275,68 +1375,7 @@ export default function CallModal() {
                 </button>
               )}
 
-              {/* 3. Speaker Output Mute / Deafen */}
-              <button
-                type="button"
-                className={`control-btn ${isSpeakerMuted ? 'active-danger' : ''}`}
-                onClick={handleToggleSpeaker}
-                title={isSpeakerMuted ? 'Unmute Audio Output' : 'Mute Audio Output'}
-                aria-label="Speaker"
-              >
-                <SpeakerIcon muted={isSpeakerMuted} />
-              </button>
-
-              {/* 4. Screen Sharing (VIDEO ONLY) */}
-              {isVideoMode && (
-                <button
-                  type="button"
-                  className={`control-btn ${isScreenSharing ? 'active-primary' : ''}`}
-                  onClick={handleToggleScreenShare}
-                  title={isScreenSharing ? 'Stop Sharing Screen' : 'Share Screen'}
-                  aria-label="Screen Share"
-                >
-                  <ScreenShareIcon active={isScreenSharing} />
-                </button>
-              )}
-
-              {/* 5. Swap Main & Corner Video Feeds (VIDEO ONLY) */}
-              {isVideoMode && (
-                <button
-                  type="button"
-                  className={`control-btn ${isSwappedView ? 'active-primary' : ''}`}
-                  onClick={handleSwapFeeds}
-                  title="Swap Main & PIP Feeds"
-                  aria-label="Swap Feeds"
-                >
-                  <SwapIcon />
-                </button>
-              )}
-
-              {/* 6. In-Call Emoji Reactions Popover Trigger */}
-              <button
-                type="button"
-                className={`control-btn ${showReactions ? 'active-primary' : ''}`}
-                onClick={() => setShowReactions((prev) => !prev)}
-                title="Reactions"
-                aria-label="Reactions"
-              >
-                <ReactionsIcon />
-              </button>
-
-              {/* 7. Fullscreen Toggle (VIDEO ONLY) */}
-              {isVideoMode && (
-                <button
-                  type="button"
-                  className={`control-btn ${isFullscreen ? 'active-primary' : ''}`}
-                  onClick={toggleFullscreen}
-                  title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
-                  aria-label="Fullscreen"
-                >
-                  <FullscreenIcon isFullscreen={isFullscreen} />
-                </button>
-              )}
-
-              {/* 8. Flip Camera (VIDEO ONLY, mobile friendly) */}
+              {/* 3. Flip Camera (VIDEO ONLY, mobile friendly) */}
               {isVideoMode && !isScreenSharing && (
                 <button
                   type="button"
@@ -1350,18 +1389,18 @@ export default function CallModal() {
                 </button>
               )}
 
-              {/* 9. Network Diagnostics Toggle */}
+              {/* 4. More Options Kebab (•••) */}
               <button
                 type="button"
-                className={`control-btn ${showDiagnostics ? 'active-primary' : ''}`}
-                onClick={() => setShowDiagnostics((prev) => !prev)}
-                title="Real-time Network Diagnostics"
-                aria-label="Network Diagnostics"
+                className={`control-btn ${showMoreMenu ? 'active-primary' : ''}`}
+                onClick={() => setShowMoreMenu((prev) => !prev)}
+                title="More Options"
+                aria-label="More Options"
               >
-                <ActivityIcon />
+                <MoreOptionsIcon />
               </button>
 
-              {/* 10. End Call Hangup Pill */}
+              {/* 5. End Call Hangup Pill */}
               <button
                 type="button"
                 className="control-btn btn-end-call"
@@ -2131,6 +2170,64 @@ export default function CallModal() {
 
         .reaction-emoji-btn:hover {
           transform: scale(1.35) translateY(-3px);
+        }
+
+        /* Kebab More Options Popover */
+        .call-more-menu-popover {
+          position: absolute;
+          bottom: 86px;
+          left: 50%;
+          transform: translateX(-50%);
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 8px;
+          background: rgba(18, 20, 26, 0.96);
+          backdrop-filter: blur(24px) saturate(180%);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          border-radius: 16px;
+          box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75);
+          animation: popoverIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+          z-index: 102;
+          min-width: 220px;
+        }
+
+        .more-menu-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 10px 14px;
+          background: transparent;
+          border: none;
+          border-radius: 10px;
+          color: #f1f5f9;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: background 0.15s ease, transform 0.1s ease;
+          text-align: left;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .more-menu-item:hover {
+          background: rgba(255, 255, 255, 0.12);
+        }
+
+        .more-menu-item.active {
+          color: #818cf8;
+          background: rgba(99, 102, 241, 0.18);
+        }
+
+        .more-menu-item.active-danger {
+          color: #f87171;
+          background: rgba(239, 68, 68, 0.18);
+        }
+
+        .more-menu-item svg {
+          flex-shrink: 0;
+          width: 20px;
+          height: 20px;
         }
 
         /* Bottom Glassmorphic Control Dock */
