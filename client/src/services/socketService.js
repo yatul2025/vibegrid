@@ -381,11 +381,28 @@ class SocketService {
   }
 
   sendTypingStart(conversationId, targetUserId) {
-    this.emit('typing:start', { conversationId, targetUserId });
+    if (!targetUserId) return;
+    if (this.isConnected()) {
+      this.socket.emit('typing:start', { conversationId, targetUserId });
+    }
+    // Always persist to serverless HTTP endpoint so HTTP polling peers stay in sync
+    apiClient.post('/messages/typing', {
+      targetUserId,
+      conversationId,
+      isTyping: true
+    }).catch(() => {});
   }
 
   sendTypingStop(conversationId, targetUserId) {
-    this.emit('typing:stop', { conversationId, targetUserId });
+    if (!targetUserId) return;
+    if (this.isConnected()) {
+      this.socket.emit('typing:stop', { conversationId, targetUserId });
+    }
+    apiClient.post('/messages/typing', {
+      targetUserId,
+      conversationId,
+      isTyping: false
+    }).catch(() => {});
   }
 
   sendReadReceipt(conversationId, messageId, senderId) {

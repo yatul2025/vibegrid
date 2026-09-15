@@ -164,6 +164,18 @@ function initSocket(httpServer) {
       if (targetUserId) {
         socket.to(`user:${targetUserId}`).emit('typing:status', payload);
       }
+      // Keep DB-backed chat_typing in sync so HTTP polling clients and serverless peers see it
+      if (targetUserId) {
+        query(
+          `INSERT INTO chat_typing (user_id, target_user_id, conversation_id, updated_at)
+           VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+           ON CONFLICT (user_id)
+           DO UPDATE SET target_user_id = EXCLUDED.target_user_id,
+                         conversation_id = EXCLUDED.conversation_id,
+                         updated_at = CURRENT_TIMESTAMP`,
+          [userId, Number(targetUserId), conversationId ? Number(conversationId) : null]
+        ).catch(() => {});
+      }
     });
 
     socket.on('typing:stop', ({ conversationId, targetUserId }) => {
@@ -180,6 +192,7 @@ function initSocket(httpServer) {
       if (targetUserId) {
         socket.to(`user:${targetUserId}`).emit('typing:status', payload);
       }
+      query(`DELETE FROM chat_typing WHERE user_id = $1`, [userId]).catch(() => {});
     });
 
     // Read receipt broadcast

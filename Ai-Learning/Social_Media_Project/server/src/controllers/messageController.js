@@ -337,14 +337,14 @@ const getMessages = async (req, res, next) => {
     const cmRow = convRes.rows[0];
     const isMuted = Boolean(cmRow?.is_muted && (!cmRow.muted_until || new Date(cmRow.muted_until) > new Date()));
 
-    // Check if partner is currently typing to this user (ephemeral state within 3.5s)
+    // Check if partner is currently typing to this user (ephemeral state within 5s)
     let isPartnerTyping = false;
     try {
       const typingCheckRes = await query(
         `SELECT EXISTS(
            SELECT 1 FROM chat_typing
            WHERE user_id = $1 AND target_user_id = $2
-             AND updated_at > CURRENT_TIMESTAMP - INTERVAL '3.5 seconds'
+             AND updated_at > CURRENT_TIMESTAMP - INTERVAL '5 seconds'
          ) AS is_typing`,
         [partner.id, userId]
       );
@@ -536,6 +536,8 @@ const sendMessage = async (req, res, next) => {
 
     // Update conversation timestamp
     await query('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [conversationId]);
+    // Ephemeral typing cleanup: sender has sent message, so they are no longer typing
+    await query('DELETE FROM chat_typing WHERE user_id = $1', [senderId]).catch(() => {});
 
     // Real-time broadcast to recipient and conversation room
     const io = req.app.get('io');
@@ -1853,7 +1855,7 @@ const getTypingStatus = async (req, res, next) => {
       `SELECT EXISTS(
          SELECT 1 FROM chat_typing
          WHERE user_id = $1 AND target_user_id = $2
-           AND updated_at > CURRENT_TIMESTAMP - INTERVAL '3.5 seconds'
+           AND updated_at > CURRENT_TIMESTAMP - INTERVAL '5 seconds'
        ) AS is_typing`,
       [partnerId, userId]
     );
