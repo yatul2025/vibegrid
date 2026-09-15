@@ -367,6 +367,195 @@ export default function MessagesPage({
   const activePartnerRef = useRef(activePartner);
   activePartnerRef.current = activePartner;
 
+  // Refs for tracking modal states synchronously in popstate handler
+  const isNewChatModalOpenRef = useRef(isNewChatModalOpen);
+  isNewChatModalOpenRef.current = isNewChatModalOpen;
+  const isSafetyModalOpenRef = useRef(isSafetyModalOpen);
+  isSafetyModalOpenRef.current = isSafetyModalOpen;
+  const isCallHistoryOpenRef = useRef(isCallHistoryOpen);
+  isCallHistoryOpenRef.current = isCallHistoryOpen;
+  const isKeyBackupOpenRef = useRef(isKeyBackupOpen);
+  isKeyBackupOpenRef.current = isKeyBackupOpen;
+  const isCreateGroupOpenRef = useRef(isCreateGroupOpen);
+  isCreateGroupOpenRef.current = isCreateGroupOpen;
+  const isStarredModalOpenRef = useRef(isStarredModalOpen);
+  isStarredModalOpenRef.current = isStarredModalOpen;
+  const deleteModalTargetRef = useRef(deleteModalTarget);
+  deleteModalTargetRef.current = deleteModalTarget;
+  const forwardModalTargetRef = useRef(forwardModalTarget);
+  forwardModalTargetRef.current = forwardModalTarget;
+  const messageInfoTargetRef = useRef(messageInfoTarget);
+  messageInfoTargetRef.current = messageInfoTarget;
+  const isMuteModalOpenRef = useRef(isMuteModalOpen);
+  isMuteModalOpenRef.current = isMuteModalOpen;
+  const isClearChatModalOpenRef = useRef(isClearChatModalOpen);
+  isClearChatModalOpenRef.current = isClearChatModalOpen;
+  const isReportModalOpenRef = useRef(isReportModalOpen);
+  isReportModalOpenRef.current = isReportModalOpen;
+  const isConvMenuOpenRef = useRef(isConvMenuOpen);
+  isConvMenuOpenRef.current = isConvMenuOpen;
+  const isEphemeralMenuOpenRef = useRef(isEphemeralMenuOpen);
+  isEphemeralMenuOpenRef.current = isEphemeralMenuOpen;
+  const isSelectionModeRef = useRef(isSelectionMode);
+  isSelectionModeRef.current = isSelectionMode;
+  const isSearchInChatOpenRef = useRef(isSearchInChatOpen);
+  isSearchInChatOpenRef.current = isSearchInChatOpen;
+
+  const pushModalHistory = (modalName) => {
+    if (typeof window !== 'undefined' && window.history) {
+      window.history.pushState({
+        tab: 'messages',
+        modal: modalName,
+        inChatWith: activePartnerRef.current?.username || null
+      }, '');
+    }
+  };
+
+  const closeModalWithHistory = (modalName, closeAction) => {
+    closeAction();
+    if (typeof window !== 'undefined' && window.history && window.history.state?.modal === modalName) {
+      window.history.back();
+    }
+  };
+
+  const openNewChatModal = () => {
+    pushModalHistory('new_chat');
+    setIsNewChatModalOpen(true);
+  };
+
+  const closeNewChatModal = () => {
+    closeModalWithHistory('new_chat', () => setIsNewChatModalOpen(false));
+  };
+
+  const openSafetyModal = () => {
+    pushModalHistory('safety');
+    setIsSafetyModalOpen(true);
+  };
+
+  const closeSafetyModal = () => {
+    closeModalWithHistory('safety', () => setIsSafetyModalOpen(false));
+  };
+
+  const openCallHistoryModal = () => {
+    pushModalHistory('call_history');
+    setIsCallHistoryOpen(true);
+  };
+
+  const closeCallHistoryModal = () => {
+    closeModalWithHistory('call_history', () => setIsCallHistoryOpen(false));
+  };
+
+  const openKeyBackupModal = () => {
+    pushModalHistory('key_backup');
+    setIsKeyBackupOpen(true);
+  };
+
+  const closeKeyBackupModal = () => {
+    closeModalWithHistory('key_backup', () => setIsKeyBackupOpen(false));
+  };
+
+  const openCreateGroupModal = () => {
+    pushModalHistory('create_group');
+    setIsCreateGroupOpen(true);
+  };
+
+  const closeCreateGroupModal = () => {
+    closeModalWithHistory('create_group', () => setIsCreateGroupOpen(false));
+  };
+
+  const openStarredModal = () => {
+    pushModalHistory('starred');
+    setIsStarredModalOpen(true);
+  };
+
+  const closeStarredModal = () => {
+    closeModalWithHistory('starred', () => setIsStarredModalOpen(false));
+  };
+
+  // Handle native back gestures and browser history navigation in Messages
+  useEffect(() => {
+    const handlePopState = (e) => {
+      // 1. Close open chat modals/menus first if any are active
+      if (isNewChatModalOpenRef.current) {
+        setIsNewChatModalOpen(false);
+        return;
+      }
+      if (isSafetyModalOpenRef.current) {
+        setIsSafetyModalOpen(false);
+        return;
+      }
+      if (isCallHistoryOpenRef.current) {
+        setIsCallHistoryOpen(false);
+        return;
+      }
+      if (isKeyBackupOpenRef.current) {
+        setIsKeyBackupOpen(false);
+        return;
+      }
+      if (isCreateGroupOpenRef.current) {
+        setIsCreateGroupOpen(false);
+        return;
+      }
+      if (isStarredModalOpenRef.current) {
+        setIsStarredModalOpen(false);
+        return;
+      }
+      if (forwardModalTargetRef.current) {
+        setForwardModalTarget(null);
+        return;
+      }
+      if (deleteModalTargetRef.current) {
+        setDeleteModalTarget(null);
+        return;
+      }
+      if (messageInfoTargetRef.current) {
+        setMessageInfoTarget(null);
+        return;
+      }
+      if (isMuteModalOpenRef.current) {
+        setIsMuteModalOpen(false);
+        return;
+      }
+      if (isClearChatModalOpenRef.current) {
+        setIsClearChatModalOpen(false);
+        return;
+      }
+      if (isReportModalOpenRef.current) {
+        setIsReportModalOpen(false);
+        return;
+      }
+      if (isConvMenuOpenRef.current) {
+        setIsConvMenuOpen(false);
+        return;
+      }
+      if (isEphemeralMenuOpenRef.current) {
+        setIsEphemeralMenuOpen(false);
+        return;
+      }
+      if (isSelectionModeRef.current) {
+        setIsSelectionMode(false);
+        setSelectedMessageIds(new Set());
+        return;
+      }
+      if (isSearchInChatOpenRef.current) {
+        setIsSearchInChatOpen(false);
+        setChatSearchQuery('');
+        return;
+      }
+
+      // 2. Active chat conversation
+      if (activePartnerRef.current) {
+        // If the state no longer points to this chat partner, exit chat view to conversation list
+        if (!e.state || e.state.inChatWith !== activePartnerRef.current.username) {
+          setActivePartner(null);
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   // Jump and highlight a quoted reply message
   const scrollToMessage = (messageId) => {
     if (!messageId) return;
@@ -522,6 +711,11 @@ export default function MessagesPage({
     fetchConversations();
 
     if (initialTargetUsername) {
+      if (typeof window !== 'undefined' && window.history) {
+        if (!window.history.state?.inChatWith) {
+          window.history.replaceState({ tab: 'messages', inChatWith: initialTargetUsername, targetDM: initialTargetUsername }, '');
+        }
+      }
       fetchMessagesForPartner(initialTargetUsername, true);
     }
   }, [fetchConversations, initialTargetUsername, fetchMessagesForPartner]);
@@ -1494,7 +1688,7 @@ export default function MessagesPage({
 
   // Open Starred Messages Modal
   const handleOpenStarredMessages = async () => {
-    setIsStarredModalOpen(true);
+    openStarredModal();
     setLoadingStarred(true);
     try {
       const res = await apiClient.get('/messages/starred');
@@ -1837,6 +2031,11 @@ export default function MessagesPage({
   }, [searchQuery, user?.id]);
 
   const selectConversation = (username) => {
+    if (typeof window !== 'undefined' && window.history) {
+      if (window.history.state?.inChatWith !== username) {
+        window.history.pushState({ tab: 'messages', inChatWith: username }, '');
+      }
+    }
     fetchMessagesForPartner(username, true);
     setConversations((prev) =>
       prev.map((c) =>
@@ -1851,6 +2050,11 @@ export default function MessagesPage({
     setIsNewChatModalOpen(false);
     setSearchQuery('');
     setSearchResults([]);
+    if (typeof window !== 'undefined' && window.history) {
+      if (window.history.state?.inChatWith !== targetUser.username) {
+        window.history.pushState({ tab: 'messages', inChatWith: targetUser.username }, '');
+      }
+    }
     fetchMessagesForPartner(targetUser.username, true);
   };
 
@@ -1895,7 +2099,7 @@ export default function MessagesPage({
               <button
                 type="button"
                 className="btn-sidebar-icon"
-                onClick={() => setIsCallHistoryOpen(true)}
+                onClick={openCallHistoryModal}
                 title="Call History & Logs"
                 aria-label="Call History"
               >
@@ -1904,7 +2108,7 @@ export default function MessagesPage({
               <button
                 type="button"
                 className="btn-sidebar-icon"
-                onClick={() => setIsCreateGroupOpen(true)}
+                onClick={openCreateGroupModal}
                 title="Create Encrypted Group"
                 aria-label="Create Group"
               >
@@ -1922,7 +2126,7 @@ export default function MessagesPage({
               <button
                 type="button"
                 className="btn-sidebar-icon"
-                onClick={() => setIsKeyBackupOpen(true)}
+                onClick={openKeyBackupModal}
                 title="E2EE Keys Backup & Restore"
                 aria-label="Key Backup"
               >
@@ -1944,7 +2148,7 @@ export default function MessagesPage({
               <button
                 type="button"
                 className="btn-sidebar-icon btn-new-chat-action"
-                onClick={() => setIsNewChatModalOpen(true)}
+                onClick={openNewChatModal}
                 title="Start a new chat"
                 aria-label="New Chat"
               >
@@ -1981,7 +2185,7 @@ export default function MessagesPage({
                   <button
                     type="button"
                     className="btn-primary btn-sm"
-                    onClick={() => setIsNewChatModalOpen(true)}
+                    onClick={openNewChatModal}
                   >
                     Send a Message
                   </button>
@@ -2060,7 +2264,13 @@ export default function MessagesPage({
                 <button
                   type="button"
                   className="btn-chat-back-mobile"
-                  onClick={() => setActivePartner(null)}
+                  onClick={() => {
+                    if (typeof window !== 'undefined' && window.history && window.history.state?.inChatWith) {
+                      window.history.back();
+                    } else {
+                      setActivePartner(null);
+                    }
+                  }}
                   title="Back to conversations"
                   aria-label="Back to conversations"
                 >
@@ -2090,7 +2300,7 @@ export default function MessagesPage({
                         className={`btn-safety-badge ${isPeerVerified ? 'verified' : 'unverified'}`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setIsSafetyModalOpen(true);
+                          openSafetyModal();
                         }}
                         title={isPeerVerified ? 'Cryptographic Identity Verified' : 'Click to verify Safety Number'}
                       >
@@ -2345,7 +2555,7 @@ export default function MessagesPage({
                           className="conv-dropdown-item"
                           onClick={() => {
                             setIsConvMenuOpen(false);
-                            setIsSafetyModalOpen(true);
+                            openSafetyModal();
                           }}
                         >
                           <ShieldCheck size={16} />
@@ -2974,7 +3184,7 @@ export default function MessagesPage({
               <button
                 type="button"
                 className="btn-primary"
-                onClick={() => setIsNewChatModalOpen(true)}
+                onClick={openNewChatModal}
               >
                 Start a New Chat
               </button>
@@ -2986,7 +3196,7 @@ export default function MessagesPage({
       {/* Safety Number Verification Modal */}
       <SafetyNumberModal
         isOpen={isSafetyModalOpen}
-        onClose={() => setIsSafetyModalOpen(false)}
+        onClose={closeSafetyModal}
         peerUser={activePartner}
         myUserId={user?.id}
         onVerificationChanged={(verified) => setIsPeerVerified(verified)}
@@ -2994,14 +3204,14 @@ export default function MessagesPage({
 
       {/* New Message Search Modal */}
       {isNewChatModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsNewChatModalOpen(false)}>
+        <div className="modal-backdrop" onClick={closeNewChatModal}>
           <div className="modal-card new-chat-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>New Message</h3>
               <button
                 type="button"
                 className="modal-close-btn"
-                onClick={() => setIsNewChatModalOpen(false)}
+                onClick={closeNewChatModal}
               >
                 ✕
               </button>
@@ -3051,20 +3261,20 @@ export default function MessagesPage({
       {/* Create Group Modal */}
       <CreateGroupModal
         isOpen={isCreateGroupOpen}
-        onClose={() => setIsCreateGroupOpen(false)}
+        onClose={closeCreateGroupModal}
         onGroupCreated={() => fetchConversations()}
       />
 
       {/* Call History Modal */}
       <CallHistoryModal
         isOpen={isCallHistoryOpen}
-        onClose={() => setIsCallHistoryOpen(false)}
+        onClose={closeCallHistoryModal}
       />
 
       {/* Key Backup Modal */}
       <KeyBackupModal
         isOpen={isKeyBackupOpen}
-        onClose={() => setIsKeyBackupOpen(false)}
+        onClose={closeKeyBackupModal}
       />
 
       {/* Floating Context Menu */}
@@ -3343,7 +3553,7 @@ export default function MessagesPage({
 
       {/* Starred Messages Modal */}
       {isStarredModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsStarredModalOpen(false)}>
+        <div className="modal-backdrop" onClick={closeStarredModal}>
           <div className="modal-card vg-starred-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-header-title-wrap">
@@ -3353,7 +3563,7 @@ export default function MessagesPage({
               <button
                 type="button"
                 className="modal-close-btn"
-                onClick={() => setIsStarredModalOpen(false)}
+                onClick={closeStarredModal}
               >
                 ✕
               </button>
@@ -3374,7 +3584,7 @@ export default function MessagesPage({
                     key={sm.id}
                     className="starred-item"
                     onClick={() => {
-                      setIsStarredModalOpen(false);
+                      closeStarredModal();
                       if (activePartner && activePartner.username.toLowerCase() === sm.partner_username.toLowerCase()) {
                         scrollToMessage(sm.id);
                       } else {

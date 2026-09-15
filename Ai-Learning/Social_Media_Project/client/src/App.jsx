@@ -107,12 +107,125 @@ function AppContent() {
     setCurrentTab('auth');
   };
 
+  const lastBackPressTimeRef = useRef(0);
+  const [showExitToast, setShowExitToast] = useState(false);
+  const exitToastTimeoutRef = useRef(null);
+
+  // Centralized Navigation with Browser History integration
+  const navigateToTab = (newTab, options = {}) => {
+    const { viewedUser = null, replace = false, targetDM = null, force = false } = options;
+    if (!force && newTab === currentTab && viewedUser === viewedUsername && targetDM === directMessageTarget) {
+      return;
+    }
+    setCurrentTab(newTab);
+    setViewedUsername(viewedUser);
+    setDirectMessageTarget(targetDM);
+    if (typeof window !== 'undefined' && window.history) {
+      const stateObj = { tab: newTab, viewedUsername: viewedUser, targetDM };
+      if (replace) {
+        window.history.replaceState(stateObj, '');
+      } else {
+        window.history.pushState(stateObj, '');
+      }
+    }
+  };
+
   // Open Settings helper
   const openSettings = (section = 'privacy') => {
     setSettingsSection(section);
-    setViewedUsername(null);
-    setCurrentTab('settings');
+    navigateToTab('settings', { viewedUser: null });
   };
+
+  const openCreatePost = () => {
+    if (guardDemoAction('create_post')) return;
+    if (typeof window !== 'undefined' && window.history) {
+      window.history.pushState({ modal: 'create_post', tab: currentTab, viewedUsername }, '');
+    }
+    setIsCreatePostOpen(true);
+  };
+
+  const closeCreatePost = () => {
+    setIsCreatePostOpen(false);
+    if (typeof window !== 'undefined' && window.history && window.history.state?.modal === 'create_post') {
+      window.history.back();
+    }
+  };
+
+  const openNotifications = () => {
+    if (typeof window !== 'undefined' && window.history) {
+      window.history.pushState({ modal: 'notifications', tab: currentTab, viewedUsername }, '');
+    }
+    setIsNotificationsOpen(true);
+  };
+
+  const closeNotifications = () => {
+    setIsNotificationsOpen(false);
+    if (typeof window !== 'undefined' && window.history && window.history.state?.modal === 'notifications') {
+      window.history.back();
+    }
+  };
+
+  // Initialize and handle browser back / popstate navigation
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.history) return;
+
+    // Set root history state on initial load if none exists
+    const initialTab = sessionStorage.getItem('vibegrid_active_tab') || 'feed';
+    const initialUser = sessionStorage.getItem('vibegrid_viewed_username') || null;
+    if (!window.history.state) {
+      window.history.replaceState({ tab: initialTab, viewedUsername: initialUser, root: initialTab === 'feed' }, '');
+    }
+
+    const handlePopState = (e) => {
+      // 1. Modals in App.jsx
+      if (isCreatePostOpen) {
+        setIsCreatePostOpen(false);
+        return;
+      }
+      if (isNotificationsOpen) {
+        setIsNotificationsOpen(false);
+        return;
+      }
+      if (isProfileMenuOpen) {
+        setIsProfileMenuOpen(false);
+        return;
+      }
+
+      // 2. Tab Navigation
+      if (e.state && e.state.tab) {
+        setCurrentTab(e.state.tab);
+        setViewedUsername(e.state.viewedUsername || null);
+        setDirectMessageTarget(e.state.targetDM || null);
+      } else {
+        // If popped beyond recorded history, check if on feed or sub-tab
+        if (currentTab !== 'feed') {
+          setCurrentTab('feed');
+          setViewedUsername(null);
+          setDirectMessageTarget(null);
+          window.history.replaceState({ tab: 'feed', viewedUsername: null, root: true }, '');
+        } else {
+          // On feed (root home screen), handle Android double-back exit gracefully
+          const now = Date.now();
+          if (now - lastBackPressTimeRef.current < 2000) {
+            // User swiped back twice rapidly on feed — allow normal exit
+            return;
+          }
+          lastBackPressTimeRef.current = now;
+          // Re-insert root entry to prevent accidental immediate exit
+          window.history.pushState({ tab: 'feed', viewedUsername: null }, '');
+          setShowExitToast(true);
+          if (exitToastTimeoutRef.current) clearTimeout(exitToastTimeoutRef.current);
+          exitToastTimeoutRef.current = setTimeout(() => setShowExitToast(false), 2000);
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      if (exitToastTimeoutRef.current) clearTimeout(exitToastTimeoutRef.current);
+    };
+  }, [isCreatePostOpen, isNotificationsOpen, isProfileMenuOpen, currentTab]);
 
   // Fetch unread notifications count
   const fetchUnreadCount = async () => {
@@ -220,13 +333,12 @@ function AppContent() {
   };
 
   const navigateToProfile = (username = null) => {
-    setViewedUsername(username);
-    setCurrentTab('profile');
+    navigateToTab('profile', { viewedUser: username });
   };
 
   const handlePostCreated = () => {
     setFeedRefreshKey((prev) => prev + 1);
-    setCurrentTab('feed');
+    navigateToTab('feed');
   };
 
   // Show a clean loading splash if checking initial auth state without a cached user
@@ -307,14 +419,7 @@ function AppContent() {
           <div 
             className="nav-brand" 
             style={{ cursor: 'pointer' }}
-            onClick={() => {
-              if (user) {
-                setViewedUsername(null);
-                setCurrentTab('feed');
-              } else {
-                setCurrentTab('feed');
-              }
-            }}
+            onClick={() => navigateToTab('feed')}
           >
             <div className="nav-brand-icon-wrapper">
               <svg viewBox="0 0 52 52" width="36" height="36" className="vg-nav-logo-svg" fill="none">
@@ -344,7 +449,7 @@ function AppContent() {
                 />
               </svg>
             </div>
-            <span className="nav-brand-title">VibeGrid</span>
+            <span className="nav-brand-text">VibeGrid</span>
           </div>
 
           {/* Demo Mode Indicator (Visible when in Demo Mode) */}
@@ -353,9 +458,9 @@ function AppContent() {
             onNavigateToLogin={handleNavigateToLogin}
           />
 
-          {/* Desktop Navigation Links */}
-          <nav className="nav-links desktop-only" aria-label="Main navigation">
-            <ul className="nav-links-list">
+          {/* Desktop Nav Actions */}
+          <nav className="nav-tabs-container desktop-only" aria-label="Main Navigation">
+            <ul className="nav-tabs-list">
               {user ? (
                 <>
                   <li>
@@ -364,8 +469,7 @@ function AppContent() {
                       className={`nav-tab-btn ${currentTab === 'feed' && !viewedUsername ? 'active' : ''}`}
                       onClick={(e) => {
                         e.preventDefault();
-                        setViewedUsername(null);
-                        setCurrentTab('feed');
+                        navigateToTab('feed');
                       }}
                     >
                       🏠 Feed
@@ -378,7 +482,7 @@ function AppContent() {
                       className={`nav-tab-btn ${currentTab === 'explore' ? 'active' : ''}`}
                       onClick={(e) => {
                         e.preventDefault();
-                        setCurrentTab('explore');
+                        navigateToTab('explore');
                       }}
                     >
                       🔍 Explore
@@ -389,10 +493,7 @@ function AppContent() {
                     <button
                       type="button"
                       className="nav-tab-btn btn-create-nav"
-                      onClick={() => {
-                        if (guardDemoAction('create_post')) return;
-                        setIsCreatePostOpen(true);
-                      }}
+                      onClick={openCreatePost}
                       title="Create and share a new post"
                     >
                       ➕ Create
@@ -403,7 +504,10 @@ function AppContent() {
                     <button
                       type="button"
                       className={`nav-tab-btn nav-notifications-btn ${isNotificationsOpen ? 'active' : ''}`}
-                      onClick={() => setIsNotificationsOpen((prev) => !prev)}
+                      onClick={() => {
+                        if (isNotificationsOpen) closeNotifications();
+                        else openNotifications();
+                      }}
                       title="Activity Notifications"
                     >
                       <span>🔔</span>
@@ -422,8 +526,7 @@ function AppContent() {
                       className={`nav-tab-btn nav-messages-btn ${currentTab === 'messages' ? 'active' : ''}`}
                       onClick={(e) => {
                         e.preventDefault();
-                        setDirectMessageTarget(null);
-                        setCurrentTab('messages');
+                        navigateToTab('messages');
                       }}
                       title="Direct Messages"
                     >
@@ -508,8 +611,8 @@ function AppContent() {
                             className="dropdown-item"
                             role="menuitem"
                             onClick={() => {
-                              setCurrentTab('status');
                               setIsProfileMenuOpen(false);
+                              navigateToTab('status');
                             }}
                           >
                             <span className="dropdown-icon">📊</span>
@@ -568,8 +671,7 @@ function AppContent() {
                       className={`nav-tab-btn ${currentTab === 'feed' ? 'active' : ''}`}
                       onClick={(e) => {
                         e.preventDefault();
-                        setViewedUsername(null);
-                        setCurrentTab('feed');
+                        navigateToTab('feed');
                       }}
                     >
                       🏠 Feed
@@ -582,7 +684,7 @@ function AppContent() {
                       className={`nav-tab-btn ${currentTab === 'explore' ? 'active' : ''}`}
                       onClick={(e) => {
                         e.preventDefault();
-                        setCurrentTab('explore');
+                        navigateToTab('explore');
                       }}
                     >
                       🔍 Explore
@@ -595,7 +697,7 @@ function AppContent() {
                       className={`nav-tab-btn ${currentTab === 'auth' ? 'active' : ''}`}
                       onClick={(e) => {
                         e.preventDefault();
-                        setCurrentTab('auth');
+                        navigateToTab('auth');
                       }}
                     >
                       👤 Sign In / Register
@@ -658,10 +760,7 @@ function AppContent() {
               <>
                 <button
                   className={`nav-icon-btn-mobile ${currentTab === 'messages' ? 'active' : ''}`}
-                  onClick={() => {
-                    setDirectMessageTarget(null);
-                    setCurrentTab('messages');
-                  }}
+                  onClick={() => navigateToTab('messages')}
                   title="Direct Messages"
                   aria-label="Direct Messages"
                 >
@@ -685,7 +784,7 @@ function AppContent() {
             ) : (
               <button
                 className="btn-primary btn-sm"
-                onClick={() => setCurrentTab('auth')}
+                onClick={() => navigateToTab('auth')}
                 aria-label="Sign In"
                 style={{ minHeight: '44px', minWidth: '44px' }}
               >
@@ -705,7 +804,7 @@ function AppContent() {
             ) : (
               <FeedPage
                 key={feedRefreshKey}
-                onOpenCreatePost={() => setIsCreatePostOpen(true)}
+                onOpenCreatePost={openCreatePost}
                 onNavigateToProfile={(username) => navigateToProfile(username)}
               />
             )
@@ -714,10 +813,7 @@ function AppContent() {
           {currentTab === 'feed' && (
             <FeedPage
               key={feedRefreshKey}
-              onOpenCreatePost={() => {
-                if (guardDemoAction('create_post')) return;
-                setIsCreatePostOpen(true);
-              }}
+              onOpenCreatePost={openCreatePost}
               onNavigateToProfile={(username) => navigateToProfile(username)}
             />
           )}
@@ -738,14 +834,10 @@ function AppContent() {
               <ProfilePage
                 key={viewedUsername || user.username}
                 targetUsername={viewedUsername}
-                onOpenCreatePost={() => {
-                  if (guardDemoAction('create_post')) return;
-                  setIsCreatePostOpen(true);
-                }}
+                onOpenCreatePost={openCreatePost}
                 onNavigateToProfile={(username) => navigateToProfile(username)}
                 onOpenDirectMessage={(username) => {
-                  setDirectMessageTarget(username);
-                  setCurrentTab('messages');
+                  navigateToTab('messages', { targetDM: username });
                 }}
                 onOpenSettings={openSettings}
               />
@@ -776,8 +868,7 @@ function AppContent() {
                 className={`mobile-nav-item ${currentTab === 'feed' && !viewedUsername ? 'active' : ''}`}
                 onClick={(e) => {
                   e.preventDefault();
-                  setViewedUsername(null);
-                  setCurrentTab('feed');
+                  navigateToTab('feed');
                 }}
                 title="Home Feed"
               >
@@ -792,7 +883,7 @@ function AppContent() {
                 className={`mobile-nav-item ${currentTab === 'explore' ? 'active' : ''}`}
                 onClick={(e) => {
                   e.preventDefault();
-                  setCurrentTab('explore');
+                  navigateToTab('explore');
                 }}
                 title="Explore"
               >
@@ -805,10 +896,7 @@ function AppContent() {
               <button
                 type="button"
                 className="mobile-nav-item mobile-nav-create-btn"
-                onClick={() => {
-                  if (guardDemoAction('create_post')) return;
-                  setIsCreatePostOpen(true);
-                }}
+                onClick={openCreatePost}
                 title="Create Post"
               >
                 <span className="mobile-nav-create-icon">➕</span>
@@ -819,7 +907,10 @@ function AppContent() {
               <button
                 type="button"
                 className={`mobile-nav-item ${isNotificationsOpen ? 'active' : ''}`}
-                onClick={() => setIsNotificationsOpen(true)}
+                onClick={() => {
+                  if (isNotificationsOpen) closeNotifications();
+                  else openNotifications();
+                }}
                 title="Activity Notifications"
               >
                 <span className="mobile-nav-icon">
@@ -861,14 +952,14 @@ function AppContent() {
       {/* Global Create Post Modal */}
       <CreatePostModal
         isOpen={isCreatePostOpen}
-        onClose={() => setIsCreatePostOpen(false)}
+        onClose={closeCreatePost}
         onPostCreated={handlePostCreated}
       />
 
       {/* Global Activity Notifications Modal */}
       <NotificationsModal
         isOpen={isNotificationsOpen}
-        onClose={() => setIsNotificationsOpen(false)}
+        onClose={closeNotifications}
         onNavigateToProfile={navigateToProfile}
         onUnreadCountChange={(count) => {
           if (typeof count === 'number') {
@@ -878,6 +969,13 @@ function AppContent() {
           }
         }}
       />
+
+      {/* PWA Double-Back Exit Toast */}
+      {showExitToast && (
+        <div className="pwa-exit-toast" role="status">
+          Swipe back again to exit
+        </div>
+      )}
 
       {/* Global WebRTC 1-to-1 Audio/Video Call Modal */}
       {user && <CallModal />}
