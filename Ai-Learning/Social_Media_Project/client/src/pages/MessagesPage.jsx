@@ -361,6 +361,7 @@ export default function MessagesPage({
   const chatStreamRef = useRef(null);
   const fileInputRef = useRef(null);
   const docFileInputRef = useRef(null);
+  const chatInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const touchStartPosRef = useRef({ x: 0, y: 0 });
@@ -1014,16 +1015,40 @@ export default function MessagesPage({
     }, 1500);
   };
 
+  // Auto-resize chat input textarea as content expands
+  const adjustChatInputHeight = () => {
+    const el = chatInputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const newHeight = Math.min(Math.max(el.scrollHeight, 24), 140);
+    el.style.height = `${newHeight}px`;
+  };
+
+  useEffect(() => {
+    adjustChatInputHeight();
+  }, [messageInput]);
+
+  // Submit on Enter without Shift, allow Shift+Enter for newlines
+  const handleInputKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing) {
+      e.preventDefault();
+      handleSendMessage(e);
+    }
+  };
+
   // ==========================================================================
   // 4. Send or Edit Encrypted Text Message
   // ==========================================================================
   const handleSendMessage = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (guardDemoAction('message')) return;
     if (!messageInput.trim() || !activePartner || sending) return;
 
     const textToSend = messageInput.trim();
     setMessageInput('');
+    if (chatInputRef.current) {
+      chatInputRef.current.style.height = 'auto';
+    }
     socketService.sendTypingStop(activeConversationId, activePartner.id);
 
     // Case A: Editing an existing message
@@ -3151,14 +3176,17 @@ export default function MessagesPage({
                           <Mic size={20} />
                         </button>
 
-                        <input
-                          type="text"
+                        <textarea
+                          ref={chatInputRef}
+                          rows={1}
                           placeholder={uploadingMedia ? "Encrypting..." : `Message @${activePartner.username}...`}
                           value={messageInput}
                           onChange={handleInputChange}
+                          onKeyDown={handleInputKeyDown}
                           className="chat-input-field"
-                          maxLength={1000}
+                          maxLength={5000}
                           disabled={uploadingMedia}
+                          aria-label={`Message @${activePartner.username}`}
                         />
 
                         <button
@@ -4282,12 +4310,12 @@ export default function MessagesPage({
 
         .chat-composer-bar {
           display: flex;
-          align-items: center;
-          gap: 10px;
+          align-items: flex-end;
+          gap: 8px;
           background: var(--bg-page, #0b0e14);
           border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
-          border-radius: 28px;
-          padding: 5px 7px 5px 12px;
+          border-radius: 24px;
+          padding: 6px 8px 6px 12px;
           transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
 
@@ -4308,6 +4336,8 @@ export default function MessagesPage({
           color: var(--text-secondary, #94a3b8);
           cursor: pointer;
           transition: all 0.2s ease;
+          flex-shrink: 0;
+          margin-bottom: 1px;
         }
 
         .btn-composer-icon:hover {
@@ -4323,8 +4353,27 @@ export default function MessagesPage({
           outline: none;
           background: transparent;
           color: var(--text-primary, #f8fafc);
+          font-family: inherit;
           font-size: 0.94rem;
-          padding: 8px 4px;
+          line-height: 1.45;
+          padding: 7px 4px 7px 4px;
+          margin: 0;
+          resize: none;
+          min-height: 24px;
+          max-height: 140px;
+          overflow-y: auto;
+          white-space: pre-wrap;
+          word-break: break-word;
+          scrollbar-width: thin;
+        }
+
+        .chat-input-field::-webkit-scrollbar {
+          width: 4px;
+        }
+
+        .chat-input-field::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.15);
+          border-radius: 4px;
         }
 
         .chat-input-field::placeholder {
@@ -4345,6 +4394,8 @@ export default function MessagesPage({
           cursor: pointer;
           transition: all 0.2s ease;
           box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+          flex-shrink: 0;
+          margin-bottom: 1px;
         }
 
         .btn-chat-send:hover:not(:disabled) {
@@ -5951,18 +6002,24 @@ export default function MessagesPage({
           .chat-composer-bar {
             padding: 4px 6px 4px 8px;
             gap: 4px;
+            align-items: flex-end;
           }
           .btn-composer-icon {
             width: 32px;
             height: 32px;
+            flex-shrink: 0;
+            margin-bottom: 1px;
           }
           .chat-input-field {
             font-size: 0.88rem;
             padding: 6px 2px;
+            min-height: 22px;
           }
           .btn-chat-send {
             padding: 6px 10px;
             font-size: 0.82rem;
+            flex-shrink: 0;
+            margin-bottom: 1px;
           }
         }
 

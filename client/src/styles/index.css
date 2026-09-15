@@ -6507,22 +6507,30 @@ a.nav-tab-btn {
 /* Composer Bar */
 .chat-composer-bar {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
-  padding: 12px 18px;
+  padding: 10px 16px;
   border-top: 1px solid var(--border-color);
   background: var(--card-bg);
 }
 
 .chat-input-field {
   flex: 1;
-  padding: 10px 16px;
-  border-radius: 24px;
+  padding: 8px 12px;
+  border-radius: 18px;
   border: 1px solid var(--border-color);
   background: var(--bg-page);
   color: var(--text-primary);
+  font-family: inherit;
   font-size: 0.9rem;
+  line-height: 1.45;
   outline: none;
+  resize: none;
+  min-height: 24px;
+  max-height: 140px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
   transition: border-color 0.15s ease;
 }
 
