@@ -33,9 +33,9 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
   --radius-full: 9999px;
 
   --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -955,6 +955,8 @@ a.nav-tab-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: 8px;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
 .ig-peek-btn:hover {
@@ -1122,6 +1124,8 @@ a.nav-tab-btn {
   align-items: center;
   justify-content: center;
   padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.15s ease;
 }
 
 [data-theme="light"] .ig-link-button {
@@ -1400,6 +1404,7 @@ a.nav-tab-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: 8px;
   font-family: inherit;
 }
 
@@ -1585,7 +1590,9 @@ a.nav-tab-btn {
   align-items: center;
   justify-content: center;
   line-height: 1;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
   transition: var(--transition);
 }
 
@@ -1820,7 +1827,7 @@ a.nav-tab-btn {
   background: var(--bg-hover);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md, 14px);
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
@@ -1841,7 +1848,7 @@ a.nav-tab-btn {
   background: transparent;
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md, 14px);
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
@@ -1865,7 +1872,7 @@ a.nav-tab-btn {
   color: var(--text-primary);
   font-size: 0.88rem;
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md, 14px);
   cursor: pointer;
   transition: var(--transition);
 }
@@ -1894,7 +1901,7 @@ a.nav-tab-btn {
   color: white;
   font-size: 0.88rem;
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md, 14px);
   cursor: pointer;
   transition: var(--transition);
 }
@@ -3337,7 +3344,7 @@ a.nav-tab-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   transition: var(--transition);
 }
 
@@ -4007,6 +4014,7 @@ a.nav-tab-btn {
   padding: 8px 12px;
   min-height: 44px;
   min-width: 44px;
+  border-radius: 12px;
   color: var(--text-primary);
   transition: var(--transition);
 }
@@ -4511,7 +4519,11 @@ a.nav-tab-btn {
 /* Profile Follow Toggle Button */
 .btn-follow-toggle {
   padding: 8px 24px;
-  border-radius: var(--radius-sm);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md, 14px);
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
@@ -6269,7 +6281,7 @@ a.nav-tab-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
 }
 
 .notification-item:hover .notification-dismiss-btn,
@@ -6930,7 +6942,7 @@ a.nav-tab-btn {
   padding: 8px 10px;
   min-width: 44px;
   min-height: 44px;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   cursor: pointer;
   position: relative;
   display: flex;
@@ -7016,8 +7028,9 @@ a.nav-tab-btn {
   padding: 6px 0;
   min-height: 44px;
   min-width: 44px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: color 0.15s ease, transform 0.15s ease;
+  transition: color 0.15s ease, transform 0.15s ease, background 0.15s ease;
 }
 
 a.mobile-nav-item {
@@ -7112,7 +7125,7 @@ a.mobile-nav-item {
   cursor: pointer;
   padding: 4px 8px;
   margin-right: 6px;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
 }
 
 @media (max-width: 768px) {
@@ -7275,6 +7288,7 @@ a.mobile-nav-item {
     padding: 6px 8px;
     min-height: 44px;
     min-width: 44px;
+    border-radius: 12px;
   }
 
   .actions-left {
@@ -8540,9 +8554,11 @@ a.mobile-nav-item {
 .settings-back-btn {
   background: var(--bg-hover);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  width: 36px;
-  height: 36px;
+  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -8605,8 +8621,19 @@ a.mobile-nav-item {
   font-size: 1.2rem;
   color: inherit;
   cursor: pointer;
-  padding: 0 4px;
+  padding: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
   line-height: 1;
+  transition: background 0.15s ease;
+}
+
+.alert-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .demo-account-banner {
@@ -9494,8 +9521,13 @@ select.form-input option,
   line-height: 1;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 8px;
+  padding: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
   transition: all 0.15s ease;
   z-index: 2;
 }

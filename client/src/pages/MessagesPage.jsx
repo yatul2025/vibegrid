@@ -4320,7 +4320,7 @@ export default function MessagesPage({
           height: 40px;
           min-width: 40px;
           min-height: 40px;
-          border-radius: 10px;
+          border-radius: 12px;
           border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
           background: rgba(255, 255, 255, 0.04);
           color: var(--text-secondary, #94a3b8);
@@ -6375,6 +6375,7 @@ export default function MessagesPage({
             justify-content: center;
             padding: 4px 6px;
             margin-right: 2px;
+            border-radius: 12px;
             flex-shrink: 0;
           }
           .conv-dropdown-menu {
