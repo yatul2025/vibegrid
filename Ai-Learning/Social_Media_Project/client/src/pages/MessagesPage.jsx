@@ -1020,12 +1020,14 @@ export default function MessagesPage({
     const el = chatInputRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    const newHeight = Math.min(Math.max(el.scrollHeight, 24), 140);
+    const newHeight = Math.min(Math.max(el.scrollHeight, 36), 160);
     el.style.height = `${newHeight}px`;
   };
 
   useEffect(() => {
     adjustChatInputHeight();
+    const rafId = requestAnimationFrame(adjustChatInputHeight);
+    return () => cancelAnimationFrame(rafId);
   }, [messageInput]);
 
   // Submit on Enter without Shift, allow Shift+Enter for newlines
@@ -3181,6 +3183,7 @@ export default function MessagesPage({
                           rows={1}
                           placeholder={uploadingMedia ? "Encrypting..." : `Message @${activePartner.username}...`}
                           value={messageInput}
+                          onInput={adjustChatInputHeight}
                           onChange={handleInputChange}
                           onKeyDown={handleInputKeyDown}
                           className="chat-input-field"
@@ -4349,21 +4352,23 @@ export default function MessagesPage({
         .chat-input-field {
           flex: 1;
           min-width: 0;
+          box-sizing: border-box;
           border: none;
           outline: none;
           background: transparent;
           color: var(--text-primary, #f8fafc);
           font-family: inherit;
           font-size: 0.94rem;
-          line-height: 1.45;
-          padding: 7px 4px 7px 4px;
+          line-height: 1.4;
+          padding: 8px 6px;
           margin: 0;
           resize: none;
-          min-height: 24px;
-          max-height: 140px;
+          min-height: 36px;
+          max-height: 160px;
           overflow-y: auto;
           white-space: pre-wrap;
           word-break: break-word;
+          overflow-wrap: anywhere;
           scrollbar-width: thin;
         }
 

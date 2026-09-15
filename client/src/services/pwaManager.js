@@ -26,7 +26,11 @@ export function registerServiceWorker(onUpdateAvailable) {
       .then((registration) => {
         console.log('✅ [PWA] Service Worker registered with scope:', registration.scope);
 
-        // Check for updates to the service worker
+        // Check for updates to the service worker immediately
+        try {
+          registration.update();
+        } catch {}
+
         registration.addEventListener('updatefound', () => {
           const installingWorker = registration.installing;
           if (installingWorker == null) return;
@@ -43,6 +47,15 @@ export function registerServiceWorker(onUpdateAvailable) {
       .catch((error) => {
         console.warn('⚠️ [PWA] Service Worker registration failed:', error);
       });
+
+    // Auto-refresh when new service worker activates so users immediately get UI updates
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      console.log('⚡ [PWA] New service worker took control — refreshing application');
+      if (!window.__vg_sw_reloaded) {
+        window.__vg_sw_reloaded = true;
+        window.location.reload();
+      }
+    });
   });
 
   // Listen for native beforeinstallprompt
