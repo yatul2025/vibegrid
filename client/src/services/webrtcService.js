@@ -396,6 +396,9 @@ class WebRTCService {
         }, 5000);
       } else if (connState === 'closed' || iceState === 'closed') {
         effectiveState = 'closed';
+        if (this.onConnectionStateChange) {
+          try { this.onConnectionStateChange('closed'); } catch {}
+        }
         this.endCall();
         return;
       }
@@ -978,9 +981,9 @@ class WebRTCService {
     this.iceRestartAttempts = 0;
     this.lastStats = null;
 
-    if (this.onLocalStream) this.onLocalStream(null);
-    if (this.onRemoteStream) this.onRemoteStream(null);
-    if (this.onNetworkStats) this.onNetworkStats(null);
+    try { if (this.onLocalStream) this.onLocalStream(null); } catch {}
+    try { if (this.onRemoteStream) this.onRemoteStream(null); } catch {}
+    try { if (this.onNetworkStats) this.onNetworkStats(null); } catch {}
   }
 }
 

@@ -292,34 +292,56 @@ export default function CallModal() {
    * Unconditionally stops all media hardware and resets video elements
    */
   const stopAllMedia = () => {
-    stopRingtone();
-    webrtcService.endCall();
+    try {
+      stopRingtone();
+    } catch (e) {
+      console.warn('[CallModal] Error stopping ringtone:', e);
+    }
 
-    if (localVideoRef.current) {
-      if (localVideoRef.current.srcObject) {
-        try {
-          localVideoRef.current.srcObject.getTracks().forEach((t) => {
-            try { t.stop(); t.enabled = false; } catch {}
-          });
-        } catch {}
+    try {
+      webrtcService.endCall();
+    } catch (e) {
+      console.warn('[CallModal] Error ending WebRTC:', e);
+    }
+
+    try {
+      if (localVideoRef.current) {
+        if (localVideoRef.current.srcObject) {
+          try {
+            localVideoRef.current.srcObject.getTracks().forEach((t) => {
+              try { t.stop(); t.enabled = false; } catch {}
+            });
+          } catch {}
+        }
+        localVideoRef.current.srcObject = null;
       }
-      localVideoRef.current.srcObject = null;
-    }
+    } catch {}
 
-    if (remoteVideoRef.current) {
-      if (remoteVideoRef.current.srcObject) {
-        try {
-          remoteVideoRef.current.srcObject.getTracks().forEach((t) => {
-            try { t.stop(); t.enabled = false; } catch {}
-          });
-        } catch {}
+    try {
+      if (remoteVideoRef.current) {
+        if (remoteVideoRef.current.srcObject) {
+          try {
+            remoteVideoRef.current.srcObject.getTracks().forEach((t) => {
+              try { t.stop(); t.enabled = false; } catch {}
+            });
+          } catch {}
+        }
+        remoteVideoRef.current.srcObject = null;
       }
-      remoteVideoRef.current.srcObject = null;
-    }
+    } catch {}
 
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.srcObject = null;
-    }
+    try {
+      if (remoteAudioRef.current) {
+        if (remoteAudioRef.current.srcObject) {
+          try {
+            remoteAudioRef.current.srcObject.getTracks().forEach((t) => {
+              try { t.stop(); t.enabled = false; } catch {}
+            });
+          } catch {}
+        }
+        remoteAudioRef.current.srcObject = null;
+      }
+    } catch {}
   };
 
   // ==========================================================================
@@ -544,14 +566,23 @@ export default function CallModal() {
 
     webrtcService.onLocalStream = (stream) => {
       if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-        localVideoRef.current.play().catch(() => {});
+        localVideoRef.current.srcObject = stream || null;
+        if (stream) {
+          localVideoRef.current.play().catch(() => {});
+        }
       }
     };
 
     webrtcService.onRemoteStream = (stream) => {
       console.log('📺 [CallModal] Remote stream received:', stream);
-      const vTracks = stream.getVideoTracks();
+      if (!stream) {
+        setHasRemoteVideo(false);
+        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+        if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
+        return;
+      }
+
+      const vTracks = stream.getVideoTracks ? stream.getVideoTracks() : [];
       if (vTracks && vTracks.length > 0) {
         setHasRemoteVideo(true);
       }
@@ -878,16 +909,17 @@ export default function CallModal() {
   };
 
   const handleEndCall = () => {
-    if (callData?.callId) {
-      socketService.emit('call:end', {
-        callId: callData.callId,
-        targetUserId: callData.peer?.id
-      });
-    }
-    stopAllMedia();
+    console.log('⏹️ [CallModal] handleEndCall: Dismissing call modal and stopping media');
+
+    // 1. Snapshot call parameters before wiping state
+    const currentCallId = callData?.callId;
+    const currentPeerId = callData?.peer?.id;
+
+    // 2. Immediately unmount modal and reset states so user can NEVER get stuck on call screen
     setCallState(null);
     setCallData(null);
     setConnectionStatus('connecting');
+    setDurationSeconds(0);
     setIsAudioMuted(false);
     setIsVideoMuted(false);
     setIsScreenSharing(false);
@@ -897,6 +929,32 @@ export default function CallModal() {
     setShowReactions(false);
     setShowDiagnostics(false);
     setShowMoreMenu(false);
+    setHasRemoteVideo(false);
+
+    // 3. Clear call timer
+    if (durationTimerRef.current) {
+      clearInterval(durationTimerRef.current);
+      durationTimerRef.current = null;
+    }
+
+    // 4. Send socket signal to peer & server
+    if (currentCallId) {
+      try {
+        socketService.emit('call:end', {
+          callId: currentCallId,
+          targetUserId: currentPeerId
+        });
+      } catch (e) {
+        console.warn('[CallModal] socket emit call:end error:', e);
+      }
+    }
+
+    // 5. Cleanly stop all media and release camera/mic hardware
+    try {
+      stopAllMedia();
+    } catch (e) {
+      console.warn('[CallModal] stopAllMedia error:', e);
+    }
   };
 
   const handleToggleMute = () => {

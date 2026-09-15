@@ -511,10 +511,11 @@ function initSocket(httpServer) {
 
           io.to(`conv:${convId}`).emit('message:receive', msgRes.rows[0]);
         }
-      } catch (err) {
-        console.error('[Call End Error]', err);
       }
-    });
+    } catch (err) {
+      console.error('[Call End Error]', err);
+    }
+  });
 
     // 5. WebRTC Peer-to-Peer SDP Offer / Answer Relay
     socket.on('signal:offer', ({ targetUserId, sdp, callId, callType, isIceRestart }) => {
