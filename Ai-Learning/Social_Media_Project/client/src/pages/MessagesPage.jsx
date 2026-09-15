@@ -255,6 +255,8 @@ export default function MessagesPage({
   const [messageInput, setMessageInput] = useState('');
   const [sending, setSending] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const [showMediaWhenTyping, setShowMediaWhenTyping] = useState(false);
 
   // Advanced Security & Media States
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
@@ -1048,6 +1050,8 @@ export default function MessagesPage({
 
     const textToSend = messageInput.trim();
     setMessageInput('');
+    setIsInputFocused(false);
+    setShowMediaWhenTyping(false);
     if (chatInputRef.current) {
       chatInputRef.current.style.height = 'auto';
     }
@@ -3145,62 +3149,102 @@ export default function MessagesPage({
                           onChange={handleSendFile}
                         />
 
-                        <button
-                          type="button"
-                          className="btn-composer-icon"
-                          onClick={() => fileInputRef.current?.click()}
-                          title="Attach Encrypted Photo"
-                          aria-label="Attach Photo"
-                          disabled={sending || uploadingMedia}
-                        >
-                          <ImageIcon size={20} />
-                        </button>
+                        {/* Section 1: The Main Input Capsule */}
+                        <div className={`chat-input-pill ${isInputFocused || messageInput.trim() ? 'is-typing' : ''}`}>
+                          {/* Left-side action symbols: Hidden when typing/focused to maximize space */}
+                          {(!isInputFocused && !messageInput.trim()) || showMediaWhenTyping ? (
+                            <div className="composer-left-actions">
+                              <button
+                                type="button"
+                                className="btn-composer-icon"
+                                onClick={() => fileInputRef.current?.click()}
+                                title="Attach Encrypted Photo"
+                                aria-label="Attach Photo"
+                                disabled={sending || uploadingMedia}
+                              >
+                                <ImageIcon size={20} />
+                              </button>
 
-                        <button
-                          type="button"
-                          className="btn-composer-icon"
-                          onClick={() => docFileInputRef.current?.click()}
-                          title="Attach Document or Video"
-                          aria-label="Attach File"
-                          disabled={sending || uploadingMedia}
-                        >
-                          <Paperclip size={20} />
-                        </button>
+                              <button
+                                type="button"
+                                className="btn-composer-icon"
+                                onClick={() => docFileInputRef.current?.click()}
+                                title="Attach Document or Video"
+                                aria-label="Attach File"
+                                disabled={sending || uploadingMedia}
+                              >
+                                <Paperclip size={20} />
+                              </button>
 
-                        <button
-                          type="button"
-                          className="btn-composer-icon"
-                          onClick={() => setIsVoiceRecording(true)}
-                          title="Record Encrypted Voice Note"
-                          aria-label="Record Voice Note"
-                          disabled={sending || uploadingMedia}
-                        >
-                          <Mic size={20} />
-                        </button>
+                              <button
+                                type="button"
+                                className="btn-composer-icon"
+                                onClick={() => setIsVoiceRecording(true)}
+                                title="Record Encrypted Voice Note"
+                                aria-label="Record Voice Note"
+                                disabled={sending || uploadingMedia}
+                              >
+                                <Mic size={20} />
+                              </button>
 
-                        <textarea
-                          ref={chatInputRef}
-                          rows={1}
-                          placeholder={uploadingMedia ? "Encrypting..." : `Message @${activePartner.username}...`}
-                          value={messageInput}
-                          onInput={adjustChatInputHeight}
-                          onChange={handleInputChange}
-                          onKeyDown={handleInputKeyDown}
-                          className="chat-input-field"
-                          maxLength={5000}
-                          disabled={uploadingMedia}
-                          aria-label={`Message @${activePartner.username}`}
-                        />
+                              {showMediaWhenTyping && (
+                                <button
+                                  type="button"
+                                  className="btn-composer-icon btn-collapse-media"
+                                  onClick={() => setShowMediaWhenTyping(false)}
+                                  title="Hide media actions"
+                                  aria-label="Hide media actions"
+                                >
+                                  <X size={16} />
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn-composer-icon btn-expand-media"
+                              onClick={() => setShowMediaWhenTyping(true)}
+                              title="Add media"
+                              aria-label="Add media"
+                            >
+                              <Plus size={18} />
+                            </button>
+                          )}
 
-                        <button
-                          type="submit"
-                          className="btn-primary btn-chat-send"
-                          disabled={!messageInput.trim() || sending || uploadingMedia}
-                          title="Send message"
-                        >
-                          <span>{sending ? '...' : 'Send'}</span>
-                          <Send size={15} className="send-icon-svg" />
-                        </button>
+                          <textarea
+                            ref={chatInputRef}
+                            rows={1}
+                            placeholder={uploadingMedia ? "Encrypting..." : `Message @${activePartner.username}...`}
+                            value={messageInput}
+                            onFocus={() => setIsInputFocused(true)}
+                            onBlur={() => {
+                              if (!messageInput.trim()) {
+                                setIsInputFocused(false);
+                                setShowMediaWhenTyping(false);
+                              }
+                            }}
+                            onInput={adjustChatInputHeight}
+                            onChange={handleInputChange}
+                            onKeyDown={handleInputKeyDown}
+                            className="chat-input-field"
+                            maxLength={5000}
+                            disabled={uploadingMedia}
+                            aria-label={`Message @${activePartner.username}`}
+                          />
+                        </div>
+
+                        {/* Section 2: Dedicated Separate Send Button Section with ONLY the Symbol */}
+                        <div className="chat-send-section">
+                          <button
+                            type="submit"
+                            className={`btn-chat-send-circle ${messageInput.trim() ? 'active' : ''}`}
+                            disabled={!messageInput.trim() || sending || uploadingMedia}
+                            title="Send message"
+                            aria-label="Send message"
+                          >
+                            <Send size={18} className="send-icon-svg" />
+                          </button>
+                        </div>
                       </form>
                     )}
                   </>
@@ -4314,17 +4358,37 @@ export default function MessagesPage({
         .chat-composer-bar {
           display: flex;
           align-items: flex-end;
-          gap: 8px;
+          gap: 10px;
+          width: 100%;
+          background: transparent;
+          border: none;
+          padding: 0;
+        }
+
+        .chat-input-pill {
+          display: flex;
+          align-items: flex-end;
+          flex: 1;
+          min-width: 0;
           background: var(--bg-page, #0b0e14);
           border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
           border-radius: 24px;
-          padding: 6px 8px 6px 12px;
+          padding: 4px 8px 4px 10px;
           transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
 
-        .chat-composer-bar:focus-within {
+        .chat-input-pill:focus-within {
           border-color: #6366f1;
           box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        .composer-left-actions {
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          flex-shrink: 0;
+          margin-bottom: 2px;
+          animation: fadeIn 0.15s ease;
         }
 
         .btn-composer-icon {
@@ -4347,6 +4411,28 @@ export default function MessagesPage({
           color: #818cf8;
           background: rgba(255, 255, 255, 0.08);
           transform: scale(1.08);
+        }
+
+        .btn-expand-media {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 50%;
+          margin-right: 4px;
+          color: var(--text-secondary, #94a3b8);
+        }
+
+        .btn-expand-media:hover {
+          background: rgba(99, 102, 241, 0.15);
+          color: #818cf8;
+        }
+
+        .btn-collapse-media {
+          color: var(--text-secondary, #94a3b8);
+          margin-left: 2px;
+        }
+
+        .btn-collapse-media:hover {
+          color: #ef4444;
+          background: rgba(239, 68, 68, 0.12);
         }
 
         .chat-input-field {
@@ -4383,6 +4469,55 @@ export default function MessagesPage({
 
         .chat-input-field::placeholder {
           color: var(--text-secondary, #64748b);
+        }
+
+        /* Section 2: Dedicated Circular Send Button */
+        .chat-send-section {
+          display: flex;
+          align-items: flex-end;
+          flex-shrink: 0;
+        }
+
+        .btn-chat-send-circle {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+          outline: none;
+          cursor: pointer;
+          background: var(--bg-page, #0b0e14);
+          color: var(--text-secondary, #64748b);
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          margin-bottom: 2px;
+          flex-shrink: 0;
+          padding: 0;
+        }
+
+        .btn-chat-send-circle.active,
+        .btn-chat-send-circle:not(:disabled) {
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+          color: #ffffff;
+          border-color: transparent;
+          box-shadow: 0 2px 10px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-chat-send-circle:hover:not(:disabled) {
+          transform: translateY(-2px) scale(1.05);
+          box-shadow: 0 4px 16px rgba(99, 102, 241, 0.6);
+        }
+
+        .btn-chat-send-circle:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+          box-shadow: none;
+          transform: none;
+        }
+
+        .send-icon-svg {
+          transform: translate(1px, -1px);
         }
 
         .btn-chat-send {
@@ -6005,9 +6140,12 @@ export default function MessagesPage({
             max-width: calc(100vw - 20px);
           }
           .chat-composer-bar {
-            padding: 4px 6px 4px 8px;
-            gap: 4px;
-            align-items: flex-end;
+            gap: 6px;
+            padding: 0;
+          }
+          .chat-input-pill {
+            padding: 2px 6px 2px 8px;
+            border-radius: 20px;
           }
           .btn-composer-icon {
             width: 32px;
@@ -6017,8 +6155,16 @@ export default function MessagesPage({
           }
           .chat-input-field {
             font-size: 0.88rem;
-            padding: 6px 2px;
-            min-height: 22px;
+            padding: 6px 4px;
+            min-height: 24px;
+          }
+          .chat-send-section {
+            flex-shrink: 0;
+          }
+          .btn-chat-send-circle {
+            width: 38px;
+            height: 38px;
+            margin-bottom: 1px;
           }
           .btn-chat-send {
             padding: 6px 10px;
