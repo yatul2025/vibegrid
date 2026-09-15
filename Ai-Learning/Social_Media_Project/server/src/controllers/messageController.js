@@ -494,6 +494,32 @@ const sendMessage = async (req, res, next) => {
       }
     }
 
+    // Trigger real Web Push notification for offline / background / minimized PWA
+    try {
+      const pushService = require('../services/pushService');
+      const isE2EE = Boolean(ciphertext);
+      const preview = isE2EE
+        ? '🔒 Sent you an encrypted message'
+        : (cleanContent && cleanContent.trim() ? cleanContent.trim().slice(0, 100) : 'Sent you a message');
+
+      pushService.sendPushNotification(recipient.id, {
+        title: `${req.user.full_name || req.user.username} (@${req.user.username})`,
+        body: preview,
+        icon: req.user.avatar_url || '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        tag: `dm-${req.user.username}`,
+        type: 'dm',
+        data: {
+          type: 'dm',
+          url: `/#messages?partner=${req.user.username}`,
+          conversationId: conversationId,
+          username: req.user.username
+        }
+      }).catch((err) => console.warn('[Push Notification DM Error]:', err.message));
+    } catch (pushErr) {
+      console.warn('[Push Service Error]:', pushErr.message);
+    }
+
     res.status(201).json({
       success: true,
       data: {
@@ -967,6 +993,25 @@ const forwardMessage = async (req, res, next) => {
           io.to(`conv:${conversationId}`).emit('message:receive', newMsg);
         }
       }
+
+      // Trigger Web Push notification for forwarded message
+      try {
+        const pushService = require('../services/pushService');
+        pushService.sendPushNotification(recipient.id, {
+          title: `${req.user.full_name || req.user.username} (@${req.user.username})`,
+          body: '↪️ Forwarded a message to you',
+          icon: req.user.avatar_url || '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          tag: `dm-${req.user.username}`,
+          type: 'dm',
+          data: {
+            type: 'dm',
+            url: `/#messages?partner=${req.user.username}`,
+            conversationId: conversationId,
+            username: req.user.username
+          }
+        }).catch((err) => console.warn('[Push Notification Forward Error]:', err.message));
+      } catch (pushErr) {}
     }
 
     res.status(201).json({

@@ -227,6 +227,72 @@ function AppContent() {
     };
   }, [isCreatePostOpen, isNotificationsOpen, isProfileMenuOpen, currentTab]);
 
+  // Handle Deep Links from Web Push Notifications or external URLs
+  useEffect(() => {
+    const handleDeepLink = () => {
+      if (typeof window === 'undefined') return;
+      const hash = window.location.hash || '';
+
+      // Check hash route, e.g. #messages?partner=username or #settings or #notifications
+      if (hash.startsWith('#messages')) {
+        const queryIdx = hash.indexOf('?');
+        let partner = null;
+        if (queryIdx !== -1) {
+          const params = new URLSearchParams(hash.slice(queryIdx + 1));
+          partner = params.get('partner');
+        }
+        navigateToTab('messages', { targetDM: partner });
+      } else if (hash.startsWith('#notifications')) {
+        openNotifications();
+      } else if (hash.startsWith('#settings')) {
+        openSettings();
+      } else if (hash.startsWith('#profile')) {
+        const queryIdx = hash.indexOf('?');
+        let profileUser = null;
+        if (queryIdx !== -1) {
+          const params = new URLSearchParams(hash.slice(queryIdx + 1));
+          profileUser = params.get('user');
+        }
+        navigateToProfile(profileUser);
+      }
+    };
+
+    // Run on initial mount
+    handleDeepLink();
+
+    // Listen for hashchange events
+    window.addEventListener('hashchange', handleDeepLink);
+
+    // Listen for Service Worker postMessage from notification clicks
+    const handleServiceWorkerMessage = (event) => {
+      if (event.data?.type === 'NAVIGATE_FROM_NOTIFICATION') {
+        const notifData = event.data.data || {};
+        if (notifData.type === 'dm' && notifData.username) {
+          navigateToTab('messages', { targetDM: notifData.username });
+        } else if (notifData.type === 'call') {
+          navigateToTab('messages', { targetDM: notifData.username });
+        } else if (notifData.type === 'follow' && notifData.username) {
+          navigateToProfile(notifData.username);
+        } else if (notifData.type === 'like' || notifData.type === 'comment') {
+          navigateToTab('feed');
+        } else if (notifData.url) {
+          window.location.href = notifData.url;
+        }
+      }
+    };
+
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    }
+
+    return () => {
+      window.removeEventListener('hashchange', handleDeepLink);
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+      }
+    };
+  }, []);
+
   // Fetch unread notifications count
   const fetchUnreadCount = async () => {
     if (!user) return;

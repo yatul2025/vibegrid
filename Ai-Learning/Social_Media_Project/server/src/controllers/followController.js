@@ -84,6 +84,21 @@ const toggleFollow = async (req, res, next) => {
              VALUES ($1, $2, 'follow')`,
             [targetUser.id, requesterId]
           );
+
+          const pushService = require('../services/pushService');
+          pushService.sendPushNotification(targetUser.id, {
+            title: 'New Follower',
+            body: `@${req.user.username} started following you.`,
+            icon: req.user.avatar_url || '/icons/icon-192.png',
+            badge: '/icons/icon-192.png',
+            tag: `follow-${req.user.username}`,
+            type: 'follow',
+            data: {
+              type: 'follow',
+              url: `/#profile?user=${req.user.username}`,
+              username: req.user.username
+            }
+          }).catch((err) => console.warn('[Push Follow Error]:', err.message));
         } catch (notifErr) {
           console.warn('[Notification Error]', notifErr.message);
         }

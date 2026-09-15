@@ -342,6 +342,29 @@ function initSocket(httpServer) {
           conversationId
         });
 
+        // Trigger high-urgency Web Push notification for callee (for background / locked screen / closed PWA)
+        try {
+          const pushService = require('./services/pushService');
+          pushService.sendPushNotification(calleeId, {
+            title: `📞 Incoming ${callType === 'video' ? 'Video' : 'Audio'} Call`,
+            body: `${user.full_name || user.username} is calling you on VibeGrid...`,
+            icon: user.avatar_url || '/icons/icon-192.png',
+            badge: '/icons/icon-192.png',
+            tag: `call-${callId}`,
+            type: 'call',
+            data: {
+              type: 'call',
+              url: `/#messages?callId=${callId}&partner=${user.username}`,
+              callId,
+              callType,
+              callerId: userId,
+              username: user.username
+            }
+          }).catch((err) => console.warn('[Push Notification Call Error]:', err.message));
+        } catch (pushErr) {
+          console.warn('[Call Push Service Error]:', pushErr.message);
+        }
+
         if (typeof callback === 'function') {
           callback({
             success: true,

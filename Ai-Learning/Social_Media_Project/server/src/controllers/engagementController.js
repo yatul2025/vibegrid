@@ -102,6 +102,21 @@ const toggleLike = async (req, res, next) => {
              VALUES ($1, $2, 'like', $3)`,
             [postOwnerId, userId, postId]
           );
+
+          const pushService = require('../services/pushService');
+          pushService.sendPushNotification(postOwnerId, {
+            title: 'Post Liked',
+            body: `@${req.user.username} liked your post.`,
+            icon: req.user.avatar_url || '/icons/icon-192.png',
+            badge: '/icons/icon-192.png',
+            tag: `like-${postId}`,
+            type: 'like',
+            data: {
+              type: 'like',
+              url: `/#feed?postId=${postId}`,
+              postId
+            }
+          }).catch((err) => console.warn('[Push Like Error]:', err.message));
         } catch (notifErr) {
           console.warn('[Notification Error]', notifErr.message);
         }
@@ -318,6 +333,21 @@ const addComment = async (req, res, next) => {
            VALUES ($1, $2, 'comment', $3, $4)`,
           [postOwnerId, userId, postId, cleanText.slice(0, 150)]
         );
+
+        const pushService = require('../services/pushService');
+        pushService.sendPushNotification(postOwnerId, {
+          title: 'New Comment',
+          body: `@${req.user.username}: ${cleanText.slice(0, 80)}`,
+          icon: req.user.avatar_url || '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          tag: `comment-${postId}`,
+          type: 'comment',
+          data: {
+            type: 'comment',
+            url: `/#feed?postId=${postId}`,
+            postId
+          }
+        }).catch((err) => console.warn('[Push Comment Error]:', err.message));
       } catch (notifErr) {
         console.warn('[Notification Error]', notifErr.message);
       }

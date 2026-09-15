@@ -9,7 +9,7 @@
  * 4. Automatic cache cleanup on deployment and immediate client claiming
  */
 
-const CACHE_NAME = 'vibegrid-pwa-v2';
+const CACHE_NAME = 'vibegrid-pwa-v3';
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_ASSETS = [
@@ -149,3 +149,92 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 });
+
+// ============================================================================
+// 4. Real Web Push Event: Display Native System / OS Notification
+// ============================================================================
+self.addEventListener('push', (event) => {
+  if (!event.data) {
+    console.log('[SW Push] Received push event with empty payload');
+    return;
+  }
+
+  let payload = {};
+  try {
+    payload = event.data.json();
+  } catch (e) {
+    payload = {
+      title: 'VibeGrid',
+      body: event.data.text()
+    };
+  }
+
+  const notificationType = payload.data?.type || 'general';
+  const isCall = notificationType === 'call';
+
+  const title = payload.title || 'VibeGrid Notification';
+  const options = {
+    body: payload.body || 'You have a new activity alert on VibeGrid.',
+    icon: payload.icon || '/icons/icon-192.png',
+    badge: payload.badge || '/icons/icon-192.png',
+    tag: payload.tag || `vg-${notificationType}-${Date.now()}`,
+    data: payload.data || {},
+    renotify: true,
+    vibrate: isCall ? [300, 200, 300, 200, 500] : [200, 100, 200],
+    requireInteraction: isCall, // Calls stay on screen until user interacts
+    actions: isCall ? [
+      { action: 'answer', title: '📞 Answer' },
+      { action: 'decline', title: '✕ Decline' }
+    ] : []
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// ============================================================================
+// 5. Notification Click Event: Deep Link Routing & Existing Window Focus
+// ============================================================================
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const notifData = event.notification.data || {};
+  const action = event.action;
+
+  // If user tapped "Decline" on an incoming call action button
+  if (action === 'decline') {
+    return;
+  }
+
+  // Determine destination URL
+  let targetUrl = notifData.url || '/';
+
+  // Ensure target URL is absolute or properly formatted
+  if (targetUrl.startsWith('/')) {
+    targetUrl = self.location.origin + targetUrl;
+  }
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // 1. If an existing VibeGrid window is open, focus it and post navigation event
+      for (const client of clientList) {
+        if (client.url && 'focus' in client) {
+          client.postMessage({
+            type: 'NAVIGATE_FROM_NOTIFICATION',
+            data: notifData
+          });
+          return client.focus().then(() => {
+            if ('navigate' in client && targetUrl) {
+              return client.navigate(targetUrl);
+            }
+          });
+        }
+      }
+
+      // 2. Otherwise open a new window to the destination URL
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
+

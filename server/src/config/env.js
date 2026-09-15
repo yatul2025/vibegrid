@@ -32,6 +32,11 @@ const config = {
   email: {
     user: (process.env.EMAIL_USER || '').trim(),
     pass: (process.env.EMAIL_PASS || '').replace(/\s+/g, '')
+  },
+  vapid: {
+    publicKey: process.env.VAPID_PUBLIC_KEY || 'BLVPwmEUJoZMU1ukVq-BkpOtiQKg3y0K0fjnxHj5JdzTdAHc8SzmPJ8Ktj46BdocS-zcz_Oj1Gk-WUEVwLuS0V8',
+    privateKey: process.env.VAPID_PRIVATE_KEY || '_V5vcocKyq3Alceg0Nd1ED1JkPk7y2v5YmdOlURuhgA',
+    subject: process.env.VAPID_SUBJECT || 'mailto:support@vibegrid.app'
   }
 };
 

@@ -1393,7 +1393,7 @@ const getNotificationSettings = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const result = await query(
-      `SELECT notif_likes, notif_comments, notif_follows, notif_messages,
+      `SELECT notif_likes, notif_comments, notif_follows, notif_messages, notif_calls,
               notif_mentions, notif_tags, notif_stories, notif_security, notif_email
        FROM users
        WHERE id = $1
@@ -1436,6 +1436,7 @@ const updateNotificationSettings = async (req, res, next) => {
       notif_comments,
       notif_follows,
       notif_messages,
+      notif_calls,
       notif_mentions,
       notif_tags,
       notif_stories,
@@ -1445,7 +1446,7 @@ const updateNotificationSettings = async (req, res, next) => {
 
     // Fetch existing settings
     const currentRes = await query(
-      `SELECT notif_likes, notif_comments, notif_follows, notif_messages,
+      `SELECT notif_likes, notif_comments, notif_follows, notif_messages, notif_calls,
               notif_mentions, notif_tags, notif_stories, notif_security, notif_email
        FROM users
        WHERE id = $1
@@ -1463,6 +1464,7 @@ const updateNotificationSettings = async (req, res, next) => {
     const updatedComments = notif_comments !== undefined ? notif_comments : current.notif_comments;
     const updatedFollows = notif_follows !== undefined ? notif_follows : current.notif_follows;
     const updatedMessages = notif_messages !== undefined ? notif_messages : current.notif_messages;
+    const updatedCalls = notif_calls !== undefined ? notif_calls : (current.notif_calls !== undefined ? current.notif_calls : true);
     const updatedMentions = notif_mentions !== undefined ? notif_mentions : current.notif_mentions;
     const updatedTags = notif_tags !== undefined ? notif_tags : current.notif_tags;
     const updatedStories = notif_stories !== undefined ? notif_stories : current.notif_stories;
@@ -1475,20 +1477,22 @@ const updateNotificationSettings = async (req, res, next) => {
            notif_comments = $2,
            notif_follows = $3,
            notif_messages = $4,
-           notif_mentions = $5,
-           notif_tags = $6,
-           notif_stories = $7,
-           notif_security = $8,
-           notif_email = $9,
+           notif_calls = $5,
+           notif_mentions = $6,
+           notif_tags = $7,
+           notif_stories = $8,
+           notif_security = $9,
+           notif_email = $10,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $10
-       RETURNING notif_likes, notif_comments, notif_follows, notif_messages,
+       WHERE id = $11
+       RETURNING notif_likes, notif_comments, notif_follows, notif_messages, notif_calls,
                  notif_mentions, notif_tags, notif_stories, notif_security, notif_email`,
       [
         updatedLikes,
         updatedComments,
         updatedFollows,
         updatedMessages,
+        updatedCalls,
         updatedMentions,
         updatedTags,
         updatedStories,

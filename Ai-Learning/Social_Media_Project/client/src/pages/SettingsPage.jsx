@@ -22,6 +22,7 @@ import apiClient from '../api/client';
 import { getDefaultAvatar, isDefaultAvatar } from '../utils/avatar';
 import ConfirmModal from '../components/ConfirmModal';
 import PasswordToggleButton from '../components/PasswordToggleIcon';
+import pushNotificationService from '../services/pushNotificationService';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -141,6 +142,7 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
     notif_comments: true,
     notif_follows: true,
     notif_messages: true,
+    notif_calls: true,
     notif_mentions: true,
     notif_tags: true,
     notif_stories: true,
@@ -149,6 +151,15 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
   });
   const [loadingNotif, setLoadingNotif] = useState(false);
   const [savingNotif, setSavingNotif] = useState(false);
+
+  // Web Push Subscription & Diagnostics States
+  const [pushPermission, setPushPermission] = useState(() => pushNotificationService.getNotificationPermission());
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [testPushLoading, setTestPushLoading] = useState(false);
+  const [pushDiagnostics, setPushDiagnostics] = useState(null);
+  const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
+  const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
 
   // Account Deactivation Modal States
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
@@ -248,6 +259,7 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
       fetchPrivacySettings();
     } else if (activeSection === 'notifications') {
       fetchNotificationSettings();
+      checkPushState();
     }
   }, [activeSection]);
 
@@ -757,6 +769,68 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
       setFeedbackMsg({ type: 'error', text: err.message || 'Failed to update notification preferences.' });
     } finally {
       setSavingNotif(false);
+    }
+  };
+
+  const checkPushState = async () => {
+    try {
+      const perm = pushNotificationService.getNotificationPermission();
+      setPushPermission(perm);
+      const sub = await pushNotificationService.getExistingSubscription();
+      setIsPushSubscribed(Boolean(sub));
+    } catch (e) {
+      console.warn('Failed to check push state:', e);
+    }
+  };
+
+  const handleEnablePush = async () => {
+    try {
+      setPushLoading(true);
+      await pushNotificationService.subscribeToPushNotifications();
+      await checkPushState();
+      setFeedbackMsg({ type: 'success', text: '✅ Web Push notifications enabled! You will now receive background alerts.' });
+    } catch (err) {
+      setFeedbackMsg({ type: 'error', text: err.message || 'Failed to enable push notifications.' });
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
+  const handleDisablePush = async () => {
+    try {
+      setPushLoading(true);
+      await pushNotificationService.unsubscribeFromPushNotifications();
+      await checkPushState();
+      setFeedbackMsg({ type: 'success', text: 'Web Push notifications disabled for this device.' });
+    } catch (err) {
+      setFeedbackMsg({ type: 'error', text: err.message || 'Failed to unsubscribe.' });
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
+  const handleSendTestPush = async () => {
+    try {
+      setTestPushLoading(true);
+      await pushNotificationService.sendTestNotification();
+      setFeedbackMsg({ type: 'success', text: '🚀 Test push notification sent! Check your notification tray.' });
+    } catch (err) {
+      setFeedbackMsg({ type: 'error', text: err.message || 'Failed to send test push notification.' });
+    } finally {
+      setTestPushLoading(false);
+    }
+  };
+
+  const handleLoadDiagnostics = async () => {
+    try {
+      setLoadingDiagnostics(true);
+      const diag = await pushNotificationService.getPushDiagnostics();
+      setPushDiagnostics(diag);
+      setShowDiagnosticsModal(true);
+    } catch (err) {
+      alert('Failed to load push diagnostics: ' + err.message);
+    } finally {
+      setLoadingDiagnostics(false);
     }
   };
 
@@ -1847,6 +1921,76 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
                     </div>
                   )}
 
+                  {/* Real Web Push Status & Action Card */}
+                  <div className="pwa-push-status-card">
+                    <div className="pwa-push-status-header">
+                      <div className="pwa-push-status-title">
+                        <span className="pwa-push-icon">📲</span>
+                        <div>
+                          <strong>Web Push Notifications</strong>
+                          <p>Delivers real OS alerts even when VibeGrid is in the background, minimized, or your screen is locked.</p>
+                        </div>
+                      </div>
+                      <div className="pwa-push-badges">
+                        <span className={`pwa-status-pill ${pushPermission === 'granted' ? 'pill-success' : pushPermission === 'denied' ? 'pill-danger' : 'pill-warning'}`}>
+                          Permission: {pushPermission === 'granted' ? 'Granted' : pushPermission === 'denied' ? 'Denied' : 'Not Requested'}
+                        </span>
+                        <span className={`pwa-status-pill ${isPushSubscribed ? 'pill-success' : 'pill-muted'}`}>
+                          Device Push: {isPushSubscribed ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {pushPermission === 'denied' && (
+                      <div className="pwa-push-alert-denied">
+                        ⚠️ <strong>Notifications are blocked by your browser or OS settings.</strong>
+                        <p>To enable real push notifications, click the tune/lock icon in your browser address bar and set Notifications to "Allow", then refresh.</p>
+                      </div>
+                    )}
+
+                    <div className="pwa-push-actions">
+                      {!isPushSubscribed ? (
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          onClick={handleEnablePush}
+                          disabled={pushLoading || pushPermission === 'denied'}
+                        >
+                          {pushLoading ? 'Enabling...' : '🔔 Enable Push Notifications'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-secondary btn-sm"
+                          onClick={handleDisablePush}
+                          disabled={pushLoading}
+                        >
+                          {pushLoading ? 'Updating...' : '🔕 Disable on This Device'}
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        className="btn-secondary btn-sm"
+                        onClick={handleSendTestPush}
+                        disabled={testPushLoading || !isPushSubscribed}
+                        title={!isPushSubscribed ? 'Enable push notifications first to test' : 'Send a real backend push'}
+                      >
+                        {testPushLoading ? 'Sending...' : '🚀 Send Test Notification'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn-link btn-sm"
+                        onClick={handleLoadDiagnostics}
+                        disabled={loadingDiagnostics}
+                        style={{ marginLeft: 'auto', textDecoration: 'underline', color: 'var(--text-secondary)' }}
+                      >
+                        {loadingDiagnostics ? 'Inspecting...' : '🔍 Push Diagnostics & Setup'}
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="account-mgmt-card">
                     {/* Activity Group */}
                     <div className="privacy-group">
@@ -1914,6 +2058,23 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
                             type="checkbox"
                             checked={Boolean(notificationSettings.notif_messages)}
                             onChange={(e) => handleUpdateNotification({ notif_messages: e.target.checked })}
+                            disabled={savingNotif || isDemoUser}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </div>
+
+                      {/* Incoming Calls */}
+                      <div className="privacy-toggle-row">
+                        <div className="privacy-toggle-info">
+                          <strong>Incoming Audio & Video Calls</strong>
+                          <p>Receive high-urgency ringing push alerts when someone calls you.</p>
+                        </div>
+                        <label className="switch-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(notificationSettings.notif_calls)}
+                            onChange={(e) => handleUpdateNotification({ notif_calls: e.target.checked })}
                             disabled={savingNotif || isDemoUser}
                           />
                           <span className="switch-slider" />
@@ -2263,6 +2424,65 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Web Push Diagnostics Modal */}
+      {showDiagnosticsModal && pushDiagnostics && (
+        <div className="modal-backdrop" onClick={() => setShowDiagnosticsModal(false)}>
+          <div className="diagnostics-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>🔍 Web Push Diagnostics & Setup</h3>
+              <button type="button" className="modal-close-btn" onClick={() => setShowDiagnosticsModal(false)}>✕</button>
+            </div>
+            <div className="diagnostics-list">
+              <div className="diagnostics-row">
+                <span className="diagnostics-label">Notification Permission</span>
+                <span className="diagnostics-value">{pushDiagnostics.permission}</span>
+              </div>
+              <div className="diagnostics-row">
+                <span className="diagnostics-label">Service Worker</span>
+                <span className="diagnostics-value">
+                  {pushDiagnostics.serviceWorker?.registered ? `Registered (${pushDiagnostics.serviceWorker.scope})` : 'Not Registered'}
+                </span>
+              </div>
+              <div className="diagnostics-row">
+                <span className="diagnostics-label">Push Subscription</span>
+                <span className="diagnostics-value">
+                  {pushDiagnostics.subscription ? `Active (${pushDiagnostics.subscription.endpointDomain})` : 'None'}
+                </span>
+              </div>
+              <div className="diagnostics-row">
+                <span className="diagnostics-label">Backend VAPID</span>
+                <span className="diagnostics-value">
+                  {pushDiagnostics.backendStatus?.isVapidConfigured ? 'Configured ✅' : 'Not Configured ⚠️'}
+                </span>
+              </div>
+              <div className="diagnostics-row">
+                <span className="diagnostics-label">Active Devices</span>
+                <span className="diagnostics-value">
+                  {pushDiagnostics.backendStatus?.activeSubscriptionsCount || 0} registered
+                </span>
+              </div>
+              <div className="diagnostics-row">
+                <span className="diagnostics-label">Platform Notes</span>
+                <span className="diagnostics-value" style={{ whiteSpace: 'normal', fontFamily: 'inherit' }}>
+                  {pushDiagnostics.platform?.notes}
+                </span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
+              <button
+                type="button"
+                className="btn-primary btn-sm"
+                onClick={handleSendTestPush}
+                disabled={testPushLoading || !isPushSubscribed}
+              >
+                {testPushLoading ? 'Sending...' : '🚀 Send Test Notification'}
+              </button>
+              <button type="button" className="btn-secondary btn-sm" onClick={() => setShowDiagnosticsModal(false)}>Close</button>
+            </div>
           </div>
         </div>
       )}

@@ -10032,3 +10032,165 @@ select.form-input option,
     transform: translate(-50%, 0);
   }
 }
+
+/* 10. Web Push Settings Card & Diagnostic Badges */
+.pwa-push-status-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+}
+
+.pwa-push-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.pwa-push-status-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pwa-push-icon {
+  font-size: 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--primary-light);
+}
+
+.pwa-push-status-title strong {
+  font-size: 1rem;
+  color: var(--text-primary);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.pwa-push-status-title p {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.pwa-push-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pwa-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.pill-success {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+.pill-danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.28);
+}
+
+.pill-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.pill-muted {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-muted);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.pwa-push-alert-denied {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.24);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  color: #f87171;
+  font-size: 0.84rem;
+}
+
+.pwa-push-alert-denied p {
+  margin: 4px 0 0 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.pwa-push-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.diagnostics-modal-card {
+  max-width: 580px;
+  width: 90vw;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-color);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.diagnostics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.diagnostics-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-color);
+  font-size: 0.85rem;
+}
+
+.diagnostics-label {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.diagnostics-value {
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 0.8rem;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
