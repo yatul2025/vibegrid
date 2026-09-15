@@ -525,8 +525,8 @@ function AppContent() {
           />
 
           {/* Desktop Nav Actions */}
-          <nav className="nav-tabs-container desktop-only" aria-label="Main Navigation">
-            <ul className="nav-tabs-list">
+          <nav className="nav-links nav-tabs-container desktop-only" aria-label="Main Navigation">
+            <ul className="nav-links-list nav-tabs-list">
               {user ? (
                 <>
                   <li>
