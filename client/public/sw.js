@@ -1,20 +1,18 @@
 /**
  * VibeGrid Progressive Web App Service Worker
- * Version: vibegrid-pwa-v1
+ * Version: vibegrid-pwa-v2
  * 
  * Features:
- * 1. Safe static asset caching & Stale-While-Revalidate for app shell
+ * 1. Safe static asset caching & Network-First navigation
  * 2. Instant offline fallback page for navigation requests when disconnected
  * 3. Strict Network-Only bypass for sensitive/authenticated endpoints (auth, E2EE messages, WebRTC calls)
  * 4. Automatic cache cleanup on deployment and immediate client claiming
  */
 
-const CACHE_NAME = 'vibegrid-pwa-v1';
+const CACHE_NAME = 'vibegrid-pwa-v2';
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_ASSETS = [
-  '/',
-  '/index.html',
   '/offline.html',
   '/manifest.webmanifest',
   '/manifest.json',
@@ -80,7 +78,7 @@ self.addEventListener('fetch', (event) => {
   // C. Navigation Requests (HTML pages) -> Network-First with Offline Fallback
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'no-cache' })
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const responseClone = networkResponse.clone();

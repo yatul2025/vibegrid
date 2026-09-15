@@ -17,6 +17,7 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
+  const secondsRef = useRef(0);
 
   useEffect(() => {
     let stream = null;
@@ -51,6 +52,7 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
 
         mediaRecorderRef.current = mediaRecorder;
         audioChunksRef.current = [];
+        secondsRef.current = 0;
 
         mediaRecorder.ondataavailable = (event) => {
           if (event.data && event.data.size > 0) {
@@ -61,8 +63,9 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
         mediaRecorder.onstop = () => {
           const finalMime = mediaRecorder.mimeType || mimeType || 'audio/webm';
           const audioBlob = new Blob(audioChunksRef.current, { type: finalMime });
+          const recordedDuration = secondsRef.current > 0 ? secondsRef.current : 1;
           if (onAudioRecorded && audioBlob.size > 0) {
-            onAudioRecorded(audioBlob, recordSeconds, finalMime);
+            onAudioRecorded(audioBlob, recordedDuration, finalMime);
           }
           // Clean up microphone stream
           stream.getTracks().forEach((track) => track.stop());
@@ -73,7 +76,8 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
         setIsPaused(false);
 
         timerRef.current = setInterval(() => {
-          setRecordSeconds((prev) => prev + 1);
+          secondsRef.current += 1;
+          setRecordSeconds(secondsRef.current);
         }, 1000);
       } catch (err) {
         console.error('Microphone access denied:', err);
@@ -88,6 +92,7 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
       if (timerRef.current) clearInterval(timerRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         try {
+          mediaRecorderRef.current.onstop = null;
           mediaRecorderRef.current.stop();
         } catch {}
       }
@@ -105,7 +110,8 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
       }
       setIsPaused(false);
       timerRef.current = setInterval(() => {
-        setRecordSeconds((prev) => prev + 1);
+        secondsRef.current += 1;
+        setRecordSeconds(secondsRef.current);
       }, 1000);
     } else {
       if (mediaRecorderRef.current.state === 'recording') {
@@ -127,7 +133,11 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
   const handleCancel = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
+      // Detach onstop handler so canceled recordings are not sent
+      mediaRecorderRef.current.onstop = null;
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {}
     }
     audioChunksRef.current = [];
     if (onCancel) onCancel();
@@ -291,8 +301,8 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
         }
 
         .btn-rec-cancel {
-          background: var(--bg-hover, #e2e8f0);
-          color: #64748b;
+          background: rgba(255, 255, 255, 0.1);
+          color: #ef4444;
         }
 
         .btn-rec-send {
@@ -302,6 +312,21 @@ export default function VoiceRecorder({ onAudioRecorded, onCancel }) {
 
         .btn-rec-action:hover {
           transform: scale(1.1);
+        }
+
+        @media (max-width: 540px) {
+          .voice-recorder-bar {
+            padding: 6px 10px;
+            gap: 6px;
+          }
+          .rec-hint {
+            display: none;
+          }
+          .btn-rec-action {
+            width: 30px;
+            height: 30px;
+            font-size: 12px;
+          }
         }
       `}</style>
     </div>

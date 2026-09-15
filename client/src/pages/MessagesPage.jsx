@@ -363,6 +363,7 @@ export default function MessagesPage({
   const docFileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const longPressTimerRef = useRef(null);
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
   const activePartnerRef = useRef(activePartner);
   activePartnerRef.current = activePartner;
 
@@ -1208,7 +1209,7 @@ export default function MessagesPage({
         mediaKey: encMedia.mediaKeyBase64,
         iv: encMedia.ivNonce,
         mimeType: recordedMimeType || audioBlob.type || 'audio/webm',
-        durationSeconds
+        durationSeconds: Math.max(1, Math.round(durationSeconds || 0))
       };
 
       const payloadString = JSON.stringify(mediaPayload);
@@ -1264,14 +1265,33 @@ export default function MessagesPage({
   };
 
   const handleTouchStart = (e, msg) => {
-    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
     const touch = e.touches?.[0];
     if (!touch) return;
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
     const clientX = touch.clientX;
     const clientY = touch.clientY;
+
     longPressTimerRef.current = setTimeout(() => {
+      longPressTimerRef.current = null;
       handleContextMenu({ clientX, clientY, preventDefault: () => {}, stopPropagation: () => {} }, msg);
-    }, 450);
+    }, 500);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!longPressTimerRef.current) return;
+    const touch = e.touches?.[0];
+    if (!touch) return;
+    const deltaX = Math.abs(touch.clientX - touchStartPosRef.current.x);
+    const deltaY = Math.abs(touch.clientY - touchStartPosRef.current.y);
+    // If finger moves more than 8px, it is a scroll gesture — cancel long press immediately
+    if (deltaX > 8 || deltaY > 8) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
   };
 
   const handleTouchEnd = () => {
@@ -2077,12 +2097,12 @@ export default function MessagesPage({
                         {isPeerVerified ? (
                           <>
                             <ShieldCheck size={13} className="safety-badge-icon" />
-                            <span>Verified</span>
+                            <span className="safety-badge-text">Verified</span>
                           </>
                         ) : (
                           <>
                             <Shield size={13} className="safety-badge-icon" />
-                            <span>E2EE</span>
+                            <span className="safety-badge-text">E2EE</span>
                           </>
                         )}
                       </button>
@@ -2118,7 +2138,10 @@ export default function MessagesPage({
                     <button
                       type="button"
                       className={`btn-chat-action ${ephemeralTimer ? 'active-timer' : ''}`}
-                      onClick={() => setIsEphemeralMenuOpen((prev) => !prev)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsEphemeralMenuOpen((prev) => !prev);
+                      }}
                       title="Disappearing Messages Settings"
                       aria-label="Disappearing Messages"
                     >
@@ -2201,7 +2224,10 @@ export default function MessagesPage({
                     <button
                       type="button"
                       className="btn-chat-action btn-conv-menu-trigger"
-                      onClick={() => setIsConvMenuOpen((prev) => !prev)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsConvMenuOpen((prev) => !prev);
+                      }}
                       title="Conversation Options"
                       aria-label="Conversation Options"
                     >
@@ -2209,6 +2235,32 @@ export default function MessagesPage({
                     </button>
                     {isConvMenuOpen && (
                       <div className="conv-dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="conv-dropdown-item"
+                          onClick={() => {
+                            setIsConvMenuOpen(false);
+                            initiateAudioCall();
+                          }}
+                        >
+                          <Phone size={16} />
+                          <span>Voice Call</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="conv-dropdown-item"
+                          onClick={() => {
+                            setIsConvMenuOpen(false);
+                            initiateVideoCall();
+                          }}
+                        >
+                          <Video size={16} />
+                          <span>Video Call</span>
+                        </button>
+
+                        <div className="conv-dropdown-divider" />
+
                         <button
                           type="button"
                           className="conv-dropdown-item"
@@ -2467,7 +2519,13 @@ export default function MessagesPage({
               )}
 
               {/* Chat Message Stream */}
-              <div className="chat-stream" ref={chatStreamRef}>
+              <div
+                className="chat-stream"
+                ref={chatStreamRef}
+                onScroll={() => {
+                  if (contextMenu) setContextMenu(null);
+                }}
+              >
                 {/* E2EE Security Disclaimer Banner */}
                 <div className="e2ee-stream-banner">
                   <div className="e2ee-banner-icon-badge">
@@ -2555,7 +2613,9 @@ export default function MessagesPage({
                           onTouchStart={(e) => {
                             if (!isSelectionMode) handleTouchStart(e, m);
                           }}
+                          onTouchMove={handleTouchMove}
                           onTouchEnd={handleTouchEnd}
+                          onTouchCancel={handleTouchEnd}
                         >
                           {/* Selection Checkbox in Multi-Select Mode */}
                           {isSelectionMode && (
@@ -2889,7 +2949,6 @@ export default function MessagesPage({
                           className="chat-input-field"
                           maxLength={1000}
                           disabled={uploadingMedia}
-                          autoFocus
                         />
 
                         <button
@@ -4186,31 +4245,69 @@ export default function MessagesPage({
         }
 
         .encrypted-audio-wrap {
-          min-width: 250px;
-          padding: 8px 10px;
+          width: 100%;
+          max-width: 290px;
+          min-width: 210px;
+          padding: 8px 10px 6px;
+          box-sizing: border-box;
         }
 
         .audio-note-header {
           display: flex;
           align-items: center;
+          justify-content: space-between;
           gap: 6px;
-          margin-bottom: 6px;
+          margin-bottom: 8px;
           font-size: 0.8rem;
           font-weight: 600;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .audio-header-left {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+          flex: 1;
+          overflow: hidden;
+        }
+
+        .audio-label {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-size: 0.8rem;
+        }
+
+        .audio-header-right {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-shrink: 0;
         }
 
         .audio-lock-tag {
           font-size: 0.68rem;
-          background: rgba(99, 102, 241, 0.15);
-          color: #818cf8;
-          padding: 1px 5px;
+          background: rgba(255, 255, 255, 0.15);
+          color: inherit;
+          padding: 2px 6px;
           border-radius: 6px;
-          margin-left: auto;
+          white-space: nowrap;
+          flex-shrink: 0;
+          line-height: 1.2;
+        }
+
+        .message-bubble:not(.mine) .audio-lock-tag {
+          background: rgba(99, 102, 241, 0.12);
+          color: #818cf8;
         }
 
         .encrypted-audio-player {
           width: 100%;
-          height: 36px;
+          height: 38px;
+          border-radius: 20px;
+          display: block;
         }
 
         .encrypted-media-loading {
@@ -5163,16 +5260,23 @@ export default function MessagesPage({
 
         /* Phase 4: Audio Speed Button */
         .audio-speed-btn {
-          font-size: 0.7rem;
+          font-size: 0.72rem;
           font-weight: 700;
           padding: 2px 7px;
           border-radius: 6px;
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          color: #818cf8;
+          background: rgba(255, 255, 255, 0.15);
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          color: inherit;
           cursor: pointer;
           transition: all 0.15s ease;
-          margin-left: auto;
+          flex-shrink: 0;
+          line-height: 1.2;
+        }
+
+        .message-bubble:not(.mine) .audio-speed-btn {
+          background: rgba(99, 102, 241, 0.12);
+          border-color: rgba(99, 102, 241, 0.25);
+          color: #6366f1;
         }
 
         .audio-speed-btn:hover {
@@ -5328,8 +5432,8 @@ export default function MessagesPage({
           position: absolute;
           top: calc(100% + 6px);
           right: 0;
-          background: #1e293b;
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: var(--card-bg, #1e293b);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
           border-radius: 12px;
           padding: 6px;
           min-width: 210px;
@@ -5348,7 +5452,7 @@ export default function MessagesPage({
           border-radius: 8px;
           background: transparent;
           border: none;
-          color: #e2e8f0;
+          color: var(--text-primary, #e2e8f0);
           font-size: 0.85rem;
           font-weight: 500;
           cursor: pointer;
@@ -5357,8 +5461,8 @@ export default function MessagesPage({
         }
 
         .conv-dropdown-item:hover {
-          background: rgba(255, 255, 255, 0.08);
-          color: #ffffff;
+          background: var(--hover-bg, rgba(255, 255, 255, 0.08));
+          color: var(--text-primary, #ffffff);
         }
 
         .conv-dropdown-item.text-danger {
@@ -5372,7 +5476,7 @@ export default function MessagesPage({
 
         .conv-dropdown-divider {
           height: 1px;
-          background: rgba(255, 255, 255, 0.08);
+          background: var(--border-color, rgba(255, 255, 255, 0.08));
           margin: 6px 0;
         }
 
@@ -5569,12 +5673,70 @@ export default function MessagesPage({
           .desktop-action-only {
             display: none !important;
           }
-          .chat-header-actions {
+          .chat-header {
+            padding: 8px 10px;
             gap: 6px;
           }
+          .chat-header-user {
+            min-width: 0;
+            flex: 1;
+            overflow: hidden;
+            gap: 8px;
+          }
+          .chat-header-avatar-wrap {
+            flex-shrink: 0;
+          }
+          .chat-header-avatar {
+            width: 36px;
+            height: 36px;
+          }
+          .chat-header-names {
+            min-width: 0;
+            flex: 1;
+            overflow: hidden;
+          }
+          .chat-header-title-row {
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+          }
+          .chat-header-username {
+            font-size: 0.95rem;
+            max-width: 105px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex-shrink: 1;
+          }
+          .btn-safety-badge {
+            padding: 3px 5px;
+            flex-shrink: 0;
+            border-radius: 50%;
+          }
+          .safety-badge-text {
+            display: none;
+          }
+          .chat-header-actions {
+            gap: 4px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+          }
           .btn-chat-action {
-            width: 34px;
-            height: 34px;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            flex-shrink: 0;
+          }
+          .btn-chat-back-mobile {
+            padding: 4px 6px;
+            margin-right: 2px;
+            flex-shrink: 0;
+          }
+          .conv-dropdown-menu {
+            right: 0;
+            max-width: calc(100vw - 20px);
           }
           .chat-composer-bar {
             padding: 4px 6px 4px 8px;

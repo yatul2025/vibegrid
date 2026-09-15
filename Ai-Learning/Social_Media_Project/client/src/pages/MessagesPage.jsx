@@ -363,6 +363,7 @@ export default function MessagesPage({
   const docFileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const longPressTimerRef = useRef(null);
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
   const activePartnerRef = useRef(activePartner);
   activePartnerRef.current = activePartner;
 
@@ -1264,14 +1265,33 @@ export default function MessagesPage({
   };
 
   const handleTouchStart = (e, msg) => {
-    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
     const touch = e.touches?.[0];
     if (!touch) return;
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
     const clientX = touch.clientX;
     const clientY = touch.clientY;
+
     longPressTimerRef.current = setTimeout(() => {
+      longPressTimerRef.current = null;
       handleContextMenu({ clientX, clientY, preventDefault: () => {}, stopPropagation: () => {} }, msg);
-    }, 450);
+    }, 500);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!longPressTimerRef.current) return;
+    const touch = e.touches?.[0];
+    if (!touch) return;
+    const deltaX = Math.abs(touch.clientX - touchStartPosRef.current.x);
+    const deltaY = Math.abs(touch.clientY - touchStartPosRef.current.y);
+    // If finger moves more than 8px, it is a scroll gesture — cancel long press immediately
+    if (deltaX > 8 || deltaY > 8) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
   };
 
   const handleTouchEnd = () => {
@@ -2499,7 +2519,13 @@ export default function MessagesPage({
               )}
 
               {/* Chat Message Stream */}
-              <div className="chat-stream" ref={chatStreamRef}>
+              <div
+                className="chat-stream"
+                ref={chatStreamRef}
+                onScroll={() => {
+                  if (contextMenu) setContextMenu(null);
+                }}
+              >
                 {/* E2EE Security Disclaimer Banner */}
                 <div className="e2ee-stream-banner">
                   <div className="e2ee-banner-icon-badge">
@@ -2587,7 +2613,9 @@ export default function MessagesPage({
                           onTouchStart={(e) => {
                             if (!isSelectionMode) handleTouchStart(e, m);
                           }}
+                          onTouchMove={handleTouchMove}
                           onTouchEnd={handleTouchEnd}
+                          onTouchCancel={handleTouchEnd}
                         >
                           {/* Selection Checkbox in Multi-Select Mode */}
                           {isSelectionMode && (
