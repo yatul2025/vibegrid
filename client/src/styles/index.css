@@ -10435,3 +10435,26 @@ select.form-input option,
   white-space: nowrap;
 }
 
+/* ==========================================================================
+   Phase 5: Direct Messaging Status & Micro-interactions
+   ========================================================================== */
+.message-receipt-tick {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.receipt-check-read {
+  color: #38bdf8 !important;
+  filter: drop-shadow(0 0 2px rgba(56, 189, 248, 0.45));
+}
+
+.receipt-check-delivered {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.receipt-check-sent {
+  color: rgba(255, 255, 255, 0.6);
+}
+

@@ -3135,6 +3135,7 @@ export default function MessagesPage({
                                 <span
                                   className="message-receipt-tick"
                                   title={m.is_read ? 'Read' : m.delivered_at ? 'Delivered' : 'Sent'}
+                                  aria-label={m.is_read ? 'Read receipt: Read' : m.delivered_at ? 'Read receipt: Delivered' : 'Read receipt: Sent'}
                                 >
                                   {m.is_read ? (
                                     <CheckCheck size={14} className="receipt-check-read" />
@@ -4315,8 +4316,10 @@ export default function MessagesPage({
         }
 
         .btn-chat-action {
-          width: 38px;
-          height: 38px;
+          width: 40px;
+          height: 40px;
+          min-width: 40px;
+          min-height: 40px;
           border-radius: 10px;
           border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
           background: rgba(255, 255, 255, 0.04);
@@ -4776,7 +4779,7 @@ export default function MessagesPage({
           background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
           color: #ffffff;
           border-radius: 18px 18px 4px 18px;
-          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+          box-shadow: 0 3px 12px rgba(99, 102, 241, 0.28);
         }
 
         .message-bubble-row.incoming .message-bubble {
@@ -4784,6 +4787,7 @@ export default function MessagesPage({
           color: var(--text-primary, #f8fafc);
           border-radius: 18px 18px 18px 4px;
           border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         }
 
         .message-text {
@@ -4806,11 +4810,16 @@ export default function MessagesPage({
         }
 
         .receipt-check-read {
-          color: #38bdf8;
+          color: #38bdf8 !important;
+          filter: drop-shadow(0 0 2px rgba(56, 189, 248, 0.45));
         }
 
         .receipt-check-delivered {
-          opacity: 0.7;
+          color: rgba(255, 255, 255, 0.75);
+        }
+
+        .receipt-check-sent {
+          color: rgba(255, 255, 255, 0.6);
         }
 
         .message-bubble.has-media {
@@ -4925,18 +4934,31 @@ export default function MessagesPage({
 
         .typing-dots-bubble {
           padding: 10px 16px;
-          border-radius: 18px;
+          border-radius: 18px 18px 18px 4px;
           background: var(--bg-card, #1a202c);
           border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
           display: inline-flex;
           align-items: center;
-          gap: 4px;
+          gap: 5px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+          animation: typingBubbleEnter 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes typingBubbleEnter {
+          from {
+            opacity: 0;
+            transform: scale(0.85) translateY(4px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
         }
 
         .typing-dots-bubble .dot {
           width: 7px;
           height: 7px;
-          background: #94a3b8;
+          background: var(--primary, #6366f1);
           border-radius: 50%;
           animation: typingDotPulse 1.4s infinite ease-in-out both;
         }
@@ -4945,8 +4967,8 @@ export default function MessagesPage({
         .typing-dots-bubble .dot:nth-child(2) { animation-delay: -0.16s; }
 
         @keyframes typingDotPulse {
-          0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-          40% { transform: scale(1); opacity: 1; }
+          0%, 80%, 100% { transform: scale(0.65); opacity: 0.35; }
+          40% { transform: scale(1.15); opacity: 1; }
         }
 
         @keyframes slideDown {
@@ -5284,12 +5306,19 @@ export default function MessagesPage({
           color: var(--text-primary, #f8fafc);
           font-size: 0.75rem;
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          animation: reactionPop 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes reactionPop {
+          0% { transform: scale(0.8); }
+          50% { transform: scale(1.15); }
+          100% { transform: scale(1); }
         }
 
         .reaction-pill:hover {
           background: rgba(255, 255, 255, 0.15);
-          transform: scale(1.05);
+          transform: scale(1.08);
         }
 
         .reaction-pill.my-reaction {
@@ -6328,10 +6357,10 @@ export default function MessagesPage({
             align-items: center;
           }
           .btn-chat-action {
-            width: 36px;
-            height: 36px;
-            min-width: 36px;
-            min-height: 36px;
+            width: 40px;
+            height: 40px;
+            min-width: 40px;
+            min-height: 40px;
             padding: 0;
             flex-shrink: 0;
             display: inline-flex;
