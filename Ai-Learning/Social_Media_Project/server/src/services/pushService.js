@@ -131,8 +131,8 @@ async function sendPushNotification(userId, notification) {
 
     const isCall = type === 'call';
     const options = {
-      TTL: isCall ? 60 : 86400, // Calls expire in 60s if not delivered; other notifications persist 24h
-      urgency: isCall ? 'high' : 'normal'
+      TTL: isCall ? 300 : 86400, // 5 min TTL for calls to allow mobile wake-up without dropping; 24h for other alerts
+      urgency: 'high'
     };
 
     if (!webpush) {

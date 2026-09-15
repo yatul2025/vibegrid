@@ -9,7 +9,7 @@
  * 4. Automatic cache cleanup on deployment and immediate client claiming
  */
 
-const CACHE_NAME = 'vibegrid-pwa-v6';
+const CACHE_NAME = 'vibegrid-pwa-v7';
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_ASSETS = [
@@ -172,23 +172,45 @@ self.addEventListener('push', (event) => {
   const notificationType = payload.data?.type || 'general';
   const isCall = notificationType === 'call';
 
-  const title = payload.title || 'VibeGrid Notification';
-  const options = {
-    body: payload.body || 'You have a new activity alert on VibeGrid.',
+  const title = payload.title || (isCall ? '📞 Incoming Call' : 'VibeGrid Notification');
+
+  // Base options supported universally across Android, Desktop, and iOS Safari Web Push
+  const baseOptions = {
+    body: payload.body || (isCall ? 'Incoming call on VibeGrid...' : 'You have a new activity alert on VibeGrid.'),
     icon: payload.icon || '/icons/icon-192.png',
     badge: payload.badge || '/icons/icon-192.png',
-    tag: payload.tag || `vg-${notificationType}-${Date.now()}`,
+    tag: payload.tag || (isCall ? `vg-call-${payload.data?.callId || Date.now()}` : `vg-${notificationType}-${Date.now()}`),
     data: payload.data || {},
-    renotify: true,
-    vibrate: isCall ? [300, 200, 300, 200, 500] : [200, 100, 200],
-    requireInteraction: isCall, // Calls stay on screen until user interacts
-    actions: isCall ? [
-      { action: 'answer', title: '📞 Answer' },
-      { action: 'decline', title: '✕ Decline' }
-    ] : []
+    renotify: true
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  // Rich options with vibration, requireInteraction, and actions where supported
+  const richOptions = {
+    ...baseOptions,
+    vibrate: isCall ? [300, 200, 300, 200, 500] : [200, 100, 200],
+    requireInteraction: isCall
+  };
+
+  if (isCall && ('actions' in Notification.prototype)) {
+    try {
+      richOptions.actions = [
+        { action: 'answer', title: '📞 Answer' },
+        { action: 'decline', title: '✕ Decline' }
+      ];
+    } catch (e) {
+      // Ignore if actions assignment fails
+    }
+  }
+
+  // Attempt rich notification; fallback to baseOptions if rejected (e.g., iOS Safari or strict Android ROMs)
+  event.waitUntil(
+    self.registration.showNotification(title, richOptions).catch((err) => {
+      console.warn('[SW Push] Rich notification failed, displaying base notification:', err?.message || err);
+      return self.registration.showNotification(title, baseOptions).catch((fallbackErr) => {
+        console.error('[SW Push] Base notification also failed:', fallbackErr?.message || fallbackErr);
+      });
+    })
+  );
 });
 
 // ============================================================================
