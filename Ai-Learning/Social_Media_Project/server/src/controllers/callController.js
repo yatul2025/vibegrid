@@ -478,6 +478,52 @@ const endCall = async (req, res, next) => {
 };
 
 /**
+ * @desc    Cancel an outgoing call before recipient answers
+ * @route   POST /api/calls/:id/cancel
+ * @access  Private (Authenticated)
+ */
+const cancelCall = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const callId = req.params.id;
+    const { targetUserId } = req.body;
+
+    await query(
+      `UPDATE calls SET status = 'cancelled', ended_at = CURRENT_TIMESTAMP WHERE id = $1 AND status NOT IN ('ended', 'connected')`,
+      [callId]
+    );
+
+    const callRes = await query('SELECT conversation_id, call_type FROM calls WHERE id = $1 LIMIT 1', [callId]);
+    if (callRes.rows.length > 0 && callRes.rows[0].conversation_id) {
+      const convId = callRes.rows[0].conversation_id;
+      const callType = callRes.rows[0].call_type || 'audio';
+      const callText = `⚠️ Missed ${callType} call`;
+      await query(`
+        INSERT INTO messages (conversation_id, sender_id, recipient_id, content, message_type)
+        VALUES ($1, $2, $3, $4, 'call_log')
+      `, [convId, userId, targetUserId, callText]);
+    }
+
+    if (targetUserId) {
+      await query(
+        `INSERT INTO call_signals (call_id, from_user_id, to_user_id, signal_type, payload)
+         VALUES ($1, $2, $3, 'cancelled', '{}')`,
+        [callId, userId, targetUserId]
+      );
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user:${targetUserId}`).emit('call:cancelled', { callId, callerId: userId });
+      }
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * @desc    Send WebRTC SDP Offer / Answer or ICE candidate via HTTP
  * @route   POST /api/calls/:id/signal
  * @access  Private (Authenticated)
@@ -510,6 +556,8 @@ const sendSignal = async (req, res, next) => {
         io.to(`user:${toUserId}`).emit('signal:answer', { calleeId: fromUserId, sdp: answerSdp, callId });
       } else if (signalType === 'ice-candidate') {
         io.to(`user:${toUserId}`).emit('signal:ice-candidate', { fromUserId, candidate: payload, callId });
+      } else if (signalType === 'ringing') {
+        io.to(`user:${toUserId}`).emit('call:ringing', { callId, calleeId: fromUserId });
       }
     }
 
@@ -557,6 +605,7 @@ module.exports = {
   acceptCall,
   rejectCall,
   endCall,
+  cancelCall,
   sendSignal,
   getSignals
 };

@@ -172,6 +172,23 @@ class SocketService {
           await apiClient.post(`/calls/${callId}/reject`, { reason: data.reason || 'declined' });
           this.stopSignalPolling();
         }
+      } else if (event === 'call:ringing') {
+        const callId = data.callId || this.activeCallId;
+        const callerId = data.callerId || data.targetUserId;
+        if (callId && callerId) {
+          await apiClient.post(`/calls/${callId}/signal`, {
+            toUserId: callerId,
+            signalType: 'ringing',
+            payload: {}
+          });
+        }
+      } else if (event === 'call:cancel') {
+        const callId = data.callId || this.activeCallId;
+        const targetUserId = data.targetUserId;
+        if (callId) {
+          await apiClient.post(`/calls/${callId}/cancel`, { targetUserId });
+          this.stopSignalPolling();
+        }
       } else if (event === 'call:end') {
         const callId = data.callId || this.activeCallId;
         if (callId) {
