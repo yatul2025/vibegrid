@@ -140,6 +140,7 @@ export default function NotificationsModal({
               className="modal-close-btn"
               onClick={onClose}
               title="Close notifications"
+              aria-label="Close notifications"
             >
               ✕
             </button>
@@ -252,6 +253,7 @@ export default function NotificationsModal({
                       className="notification-dismiss-btn"
                       onClick={(e) => handleDeleteNotification(notif.id, e)}
                       title="Dismiss notification"
+                      aria-label="Dismiss notification"
                     >
                       ✕
                     </button>

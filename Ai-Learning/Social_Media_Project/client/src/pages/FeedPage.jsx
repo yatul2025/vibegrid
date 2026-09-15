@@ -777,6 +777,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                               handleToggleCloseFriend(post.user_id, post.username);
                             }}
                             title={isCloseFriend ? 'Close Friend (Click to remove)' : 'Add to Close Friends'}
+                            aria-label={isCloseFriend ? 'Remove from Close Friends' : 'Add to Close Friends'}
                           >
                             ★
                           </button>
@@ -795,6 +796,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                       onClick={() => handleModeratePost(post.id)}
                       disabled={moderatingId === post.id}
                       title="Hide Post (Content Moderation)"
+                      aria-label="Hide Post (Content Moderation)"
                       style={{
                         background: 'rgba(239, 68, 68, 0.12)',
                         border: '1px solid rgba(239, 68, 68, 0.35)',
@@ -826,6 +828,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                       onClick={() => handleDeletePost(post.id)}
                       disabled={deletingId === post.id}
                       title="Delete post"
+                      aria-label="Delete post"
                     >
                       {deletingId === post.id ? '⏳' : '🗑️'}
                     </button>
@@ -861,6 +864,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     className={`post-action-btn ${post.is_liked ? 'liked' : ''}`}
                     onClick={() => handleToggleLike(post.id)}
                     title={post.is_liked ? 'Unlike post' : 'Like post'}
+                    aria-label={post.is_liked ? 'Unlike post' : 'Like post'}
                   >
                     <span className="heart-icon-wrapper">
                       {post.is_liked ? '❤️' : '🤍'}
@@ -876,6 +880,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                       setActiveCommentPost(post);
                     }}
                     title="View comments thread"
+                    aria-label={`View comments thread, ${post.comments_count} comments`}
                   >
                     💬
                     <span className="action-counter">{post.comments_count}</span>
@@ -888,6 +893,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     className={`post-action-btn post-save-btn ${post.is_saved ? 'saved' : ''}`}
                     onClick={() => handleToggleSave(post.id)}
                     title={post.is_saved ? 'Remove from saved' : 'Save post'}
+                    aria-label={post.is_saved ? 'Remove from saved' : 'Save post'}
                   >
                     {post.is_saved ? '🔖' : '📑'}
                   </button>
@@ -923,6 +929,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                       className="feed-quick-emoji-btn"
                       onClick={() => handleEmojiInsert(post.id, em)}
                       title={`Add ${em} to comment`}
+                      aria-label={`Insert ${em} emoji`}
                     >
                       {em}
                     </button>

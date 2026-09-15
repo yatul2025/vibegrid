@@ -1296,6 +1296,7 @@ export default function ProfilePage({
                     className="btn-profile-secondary"
                     onClick={() => onOpenSettings && onOpenSettings('privacy')}
                     title="Settings & Privacy"
+                    aria-label="Settings & Privacy"
                   >
                     ⚙️ Settings
                   </button>
@@ -1315,6 +1316,7 @@ export default function ProfilePage({
                     className="btn-profile-secondary"
                     onClick={() => onOpenDirectMessage && onOpenDirectMessage(profile.username)}
                     title={`Send direct message to @${profile.username}`}
+                    aria-label={`Send direct message to @${profile.username}`}
                   >
                     💬 Message
                   </button>
@@ -1769,7 +1771,15 @@ export default function ProfilePage({
                 )}
                 <strong>@{selectedPost.username || profile.username}</strong>
               </div>
-              <button type="button" className="modal-close-btn" onClick={() => setSelectedPost(null)}>✕</button>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setSelectedPost(null)}
+                title="Close post details"
+                aria-label="Close post details"
+              >
+                ✕
+              </button>
             </div>
 
             <div className="detail-modal-media">
@@ -1797,6 +1807,7 @@ export default function ProfilePage({
                     className={`post-action-btn ${selectedPost.is_liked ? 'liked' : ''}`}
                     onClick={() => handleToggleLike(selectedPost.id)}
                     title={selectedPost.is_liked ? 'Unlike post' : 'Like post'}
+                    aria-label={selectedPost.is_liked ? 'Unlike post' : 'Like post'}
                   >
                     {selectedPost.is_liked ? '❤️' : '🤍'}{' '}
                     <span className="action-counter">{selectedPost.likes_count}</span>
@@ -1806,6 +1817,7 @@ export default function ProfilePage({
                     className="post-action-btn"
                     onClick={() => setCommentsPost(selectedPost)}
                     title="View comments"
+                    aria-label={`View comments thread, ${selectedPost.comments_count} comments`}
                   >
                     💬{' '}
                     <span className="action-counter">{selectedPost.comments_count}</span>
@@ -1815,6 +1827,7 @@ export default function ProfilePage({
                     className={`post-action-btn post-save-btn ${selectedPost.is_saved ? 'saved' : ''}`}
                     onClick={() => handleToggleSave(selectedPost.id)}
                     title={selectedPost.is_saved ? 'Remove from saved' : 'Save post'}
+                    aria-label={selectedPost.is_saved ? 'Remove from saved' : 'Save post'}
                   >
                     {selectedPost.is_saved ? '🔖' : '📑'}
                   </button>
@@ -1825,6 +1838,8 @@ export default function ProfilePage({
                     className="btn-secondary"
                     style={{ color: 'var(--danger)', fontSize: '0.85rem' }}
                     onClick={() => handleDeletePost(selectedPost.id)}
+                    title="Delete post"
+                    aria-label="Delete post"
                   >
                     🗑️ Delete Post
                   </button>

@@ -6328,12 +6328,22 @@ export default function MessagesPage({
             align-items: center;
           }
           .btn-chat-action {
-            width: 32px;
-            height: 32px;
+            width: 36px;
+            height: 36px;
+            min-width: 36px;
+            min-height: 36px;
             padding: 0;
             flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
           }
           .btn-chat-back-mobile {
+            min-width: 44px;
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             padding: 4px 6px;
             margin-right: 2px;
             flex-shrink: 0;
@@ -6351,8 +6361,13 @@ export default function MessagesPage({
             border-radius: 20px;
           }
           .btn-composer-icon {
-            width: 32px;
-            height: 32px;
+            width: 36px;
+            height: 36px;
+            min-width: 36px;
+            min-height: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             flex-shrink: 0;
             margin-bottom: 1px;
           }
@@ -6365,8 +6380,10 @@ export default function MessagesPage({
             flex-shrink: 0;
           }
           .btn-chat-send-circle {
-            width: 38px;
-            height: 38px;
+            width: 42px;
+            height: 42px;
+            min-width: 42px;
+            min-height: 42px;
             margin-bottom: 1px;
           }
           .btn-chat-send {

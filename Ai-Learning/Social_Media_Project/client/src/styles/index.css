@@ -12,7 +12,7 @@
   
   --text-primary: #0f172a;
   --text-secondary: #64748b;
-  --text-muted: #94a3b8;
+  --text-muted: #64748b;
   --text-main: #0f172a;
 
   --primary: #6366f1;
@@ -50,7 +50,7 @@
 
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-muted: #8899ac;
   --text-main: #f8fafc;
 
   --primary: #818cf8;
@@ -3284,7 +3284,12 @@ a.nav-tab-btn {
   font-size: 1.2rem;
   cursor: pointer;
   color: var(--text-secondary);
-  padding: 4px;
+  padding: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: var(--radius-sm);
   transition: var(--transition);
 }
@@ -4331,10 +4336,16 @@ a.nav-tab-btn {
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   cursor: pointer;
-  padding: 0;
+  padding: 6px 8px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-weight: 600;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
 .comment-delete-link:hover {
@@ -4678,8 +4689,13 @@ a.nav-tab-btn {
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 0.9rem;
-  padding: 2px 6px;
+  font-size: 0.95rem;
+  padding: 4px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: var(--radius-full);
   transition: var(--transition);
 }
@@ -6134,18 +6150,33 @@ a.nav-tab-btn {
 
 .notification-dismiss-btn {
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
   background: none;
   border: none;
   color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: 6px;
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
 }
 
-.notification-item:hover .notification-dismiss-btn {
+.notification-item:hover .notification-dismiss-btn,
+.notification-dismiss-btn:focus-visible {
   opacity: 1;
+}
+
+@media (hover: none), (max-width: 768px) {
+  .notification-dismiss-btn {
+    opacity: 0.75;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+  }
 }
 
 .notification-dismiss-btn:hover {
@@ -6911,8 +6942,9 @@ a.mobile-nav-item {
 }
 
 .mobile-nav-create-btn {
-  flex: 0 0 42px;
-  height: 42px;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: var(--accent-gradient);
   color: #ffffff;
@@ -7133,8 +7165,9 @@ a.mobile-nav-item {
 
   .post-action-btn {
     font-size: 1.25rem;
-    padding: 6px 4px;
-    min-height: 40px;
+    padding: 6px 8px;
+    min-height: 44px;
+    min-width: 44px;
   }
 
   .actions-left {

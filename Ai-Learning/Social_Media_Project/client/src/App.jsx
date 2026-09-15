@@ -585,6 +585,7 @@ function AppContent() {
                       className="nav-tab-btn btn-create-nav"
                       onClick={openCreatePost}
                       title="Create and share a new post"
+                      aria-label="Create and share a new post"
                     >
                       <PlusSquare size={18} />
                       <span>Create</span>
@@ -600,6 +601,7 @@ function AppContent() {
                         else openNotifications();
                       }}
                       title="Activity Notifications"
+                      aria-label={`Activity Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
                     >
                       <Bell size={18} />
                       <span className="nav-notifications-label">Notifications</span>
@@ -620,6 +622,7 @@ function AppContent() {
                         navigateToTab('messages');
                       }}
                       title="Direct Messages"
+                      aria-label={`Direct Messages${unreadMessagesCount > 0 ? `, ${unreadMessagesCount} unread` : ''}`}
                     >
                       <MessageSquare size={18} />
                       <span className="nav-messages-label">Messages</span>
@@ -640,6 +643,7 @@ function AppContent() {
                       aria-expanded={isProfileMenuOpen}
                       aria-haspopup="true"
                       title="Account & Settings"
+                      aria-label={`Account menu for @${user.username}`}
                     >
                       {user.avatar_url ? (
                         <img src={user.avatar_url} alt="" className="nav-avatar-mini" />
@@ -994,6 +998,7 @@ function AppContent() {
                 className="mobile-nav-item mobile-nav-create-btn"
                 onClick={openCreatePost}
                 title="Create Post"
+                aria-label="Create new post"
               >
                 <span className="mobile-nav-create-icon"><PlusSquare size={20} /></span>
               </button>
@@ -1008,6 +1013,7 @@ function AppContent() {
                   else openNotifications();
                 }}
                 title="Activity Notifications"
+                aria-label={`Activity Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
               >
                 <span className="mobile-nav-icon">
                   <Bell size={20} />

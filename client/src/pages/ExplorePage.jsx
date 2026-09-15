@@ -256,6 +256,7 @@ export default function ExplorePage({ onNavigateToProfile }) {
                 setShowDropdown(false);
               }}
               title="Clear search"
+              aria-label="Clear search query"
             >
               ✕
             </button>
@@ -424,7 +425,13 @@ export default function ExplorePage({ onNavigateToProfile }) {
                     {moderatingId === selectedPost.id ? '⏳' : '🛡️ Hide Post'}
                   </button>
                 )}
-                <button type="button" className="modal-close-btn" onClick={() => setSelectedPost(null)}>
+                <button
+                  type="button"
+                  className="modal-close-btn"
+                  onClick={() => setSelectedPost(null)}
+                  title="Close photo details"
+                  aria-label="Close photo details"
+                >
                   ✕
                 </button>
               </div>
@@ -464,6 +471,7 @@ export default function ExplorePage({ onNavigateToProfile }) {
                     className={`post-action-btn ${selectedPost.is_liked ? 'liked' : ''}`}
                     onClick={() => handleToggleLike(selectedPost.id)}
                     title={selectedPost.is_liked ? 'Unlike post' : 'Like post'}
+                    aria-label={selectedPost.is_liked ? 'Unlike post' : 'Like post'}
                   >
                     {selectedPost.is_liked ? '❤️' : '🤍'}{' '}
                     <span className="action-counter">{selectedPost.likes_count}</span>
@@ -473,6 +481,7 @@ export default function ExplorePage({ onNavigateToProfile }) {
                     className="post-action-btn"
                     onClick={() => setActiveCommentsPost(selectedPost)}
                     title="View comments"
+                    aria-label={`View comments thread, ${selectedPost.comments_count} comments`}
                   >
                     💬{' '}
                     <span className="action-counter">{selectedPost.comments_count}</span>
@@ -482,6 +491,7 @@ export default function ExplorePage({ onNavigateToProfile }) {
                     className={`post-action-btn post-save-btn ${selectedPost.is_saved ? 'saved' : ''}`}
                     onClick={() => handleToggleSave(selectedPost.id)}
                     title={selectedPost.is_saved ? 'Remove from saved' : 'Save post'}
+                    aria-label={selectedPost.is_saved ? 'Remove from saved' : 'Save post'}
                   >
                     {selectedPost.is_saved ? '🔖' : '📑'}
                   </button>
