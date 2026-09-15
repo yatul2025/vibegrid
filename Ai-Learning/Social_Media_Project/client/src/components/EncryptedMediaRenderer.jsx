@@ -34,6 +34,7 @@ function EncryptedMediaRenderer({ mediaPayload }) {
   });
   const [error, setError] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [loadedDuration, setLoadedDuration] = useState(null);
   const audioRef = useRef(null);
 
   useEffect(() => {
@@ -134,23 +135,46 @@ function EncryptedMediaRenderer({ mediaPayload }) {
   }
 
   if (payloadType === 'audio') {
+    const rawSecs = mediaPayload?.durationSeconds;
+    const hasValidPayloadDuration = typeof rawSecs === 'number' && rawSecs > 0;
+    const durationNum = hasValidPayloadDuration
+      ? rawSecs
+      : (loadedDuration && isFinite(loadedDuration) && loadedDuration > 0 ? loadedDuration : null);
+
     return (
       <div className="encrypted-audio-wrap">
         <div className="audio-note-header">
-          <span className="audio-mic-icon">🎙️</span>
-          <span className="audio-label">Voice Note ({mediaPayload.durationSeconds || 0}s)</span>
-          <button
-            type="button"
-            className="audio-speed-btn"
-            onClick={handleToggleSpeed}
-            title="Cycle playback speed"
-            data-testid="audio-speed-btn"
-          >
-            {playbackSpeed}x
-          </button>
-          <span className="audio-lock-tag" title="Decrypted client-side with AES-256-GCM">🔒 E2EE</span>
+          <div className="audio-header-left">
+            <span className="audio-mic-icon">🎙️</span>
+            <span className="audio-label">
+              Voice Note{durationNum ? ` (${durationNum}s)` : ''}
+            </span>
+          </div>
+          <div className="audio-header-right">
+            <button
+              type="button"
+              className="audio-speed-btn"
+              onClick={handleToggleSpeed}
+              title="Cycle playback speed"
+              data-testid="audio-speed-btn"
+            >
+              {playbackSpeed}x
+            </button>
+            <span className="audio-lock-tag" title="Decrypted client-side with AES-256-GCM">🔒 E2EE</span>
+          </div>
         </div>
-        <audio ref={audioRef} controls src={objectUrl} className="encrypted-audio-player" />
+        <audio
+          ref={audioRef}
+          controls
+          src={objectUrl}
+          className="encrypted-audio-player"
+          preload="metadata"
+          onLoadedMetadata={(e) => {
+            if (e.target.duration && isFinite(e.target.duration) && e.target.duration > 0) {
+              setLoadedDuration(Math.round(e.target.duration));
+            }
+          }}
+        />
       </div>
     );
   }

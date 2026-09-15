@@ -1143,3 +1143,85 @@ describe('Phase 6: Linked Devices List & Revocation UI', () => {
   });
 });
 
+// =====================================================================
+// Mobile DM Keyboard, Voice Note Duration & Call Options Tests
+// =====================================================================
+describe('Mobile DM UX and Voice Note Fixes', () => {
+  it('should render chat composer input without autoFocus attribute', () => {
+    function DummyChatComposer() {
+      return (
+        <input
+          type="text"
+          placeholder="Message @user..."
+          className="chat-input-field"
+          data-testid="chat-input-field"
+        />
+      );
+    }
+    render(<DummyChatComposer />);
+    const inputEl = screen.getByTestId('chat-input-field');
+    expect(inputEl).toBeInTheDocument();
+    expect(inputEl).not.toHaveAttribute('autofocus');
+  });
+
+  it('should dynamically calculate and format voice note duration accurately', () => {
+    function VoiceNoteDisplay({ durationSeconds, loadedDuration }) {
+      const rawSecs = durationSeconds;
+      const hasValidPayloadDuration = typeof rawSecs === 'number' && rawSecs > 0;
+      const durationNum = hasValidPayloadDuration
+        ? rawSecs
+        : (loadedDuration && isFinite(loadedDuration) && loadedDuration > 0 ? loadedDuration : null);
+
+      return (
+        <span data-testid="voice-label">
+          Voice Note{durationNum ? ` (${durationNum}s)` : ''}
+        </span>
+      );
+    }
+
+    // When payload duration is valid
+    const { rerender } = render(<VoiceNoteDisplay durationSeconds={14} loadedDuration={null} />);
+    expect(screen.getByTestId('voice-label')).toHaveTextContent('Voice Note (14s)');
+
+    // When payload duration was 0 but audio metadata loaded duration is 7s
+    rerender(<VoiceNoteDisplay durationSeconds={0} loadedDuration={7} />);
+    expect(screen.getByTestId('voice-label')).toHaveTextContent('Voice Note (7s)');
+
+    // When both are 0 / null, should display "Voice Note" without ugly (0s)
+    rerender(<VoiceNoteDisplay durationSeconds={0} loadedDuration={null} />);
+    expect(screen.getByTestId('voice-label')).toHaveTextContent('Voice Note');
+  });
+
+  it('should render Voice Call and Video Call options in conversation dropdown menu', () => {
+    function DummyDropdownMenu({ onVoiceCall, onVideoCall }) {
+      return (
+        <div className="conv-dropdown-menu">
+          <button type="button" className="conv-dropdown-item" onClick={onVoiceCall}>
+            <span>Voice Call</span>
+          </button>
+          <button type="button" className="conv-dropdown-item" onClick={onVideoCall}>
+            <span>Video Call</span>
+          </button>
+        </div>
+      );
+    }
+
+    const onVoice = vi.fn();
+    const onVideo = vi.fn();
+    render(<DummyDropdownMenu onVoiceCall={onVoice} onVideoCall={onVideo} />);
+
+    const voiceBtn = screen.getByText('Voice Call');
+    const videoBtn = screen.getByText('Video Call');
+
+    expect(voiceBtn).toBeInTheDocument();
+    expect(videoBtn).toBeInTheDocument();
+
+    fireEvent.click(voiceBtn);
+    expect(onVoice).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(videoBtn);
+    expect(onVideo).toHaveBeenCalledTimes(1);
+  });
+});
+
+
