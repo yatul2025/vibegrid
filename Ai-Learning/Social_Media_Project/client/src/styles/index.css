@@ -6410,11 +6410,19 @@ a.nav-tab-btn {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 16px 20px;
+  padding: 16px 20px 32px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   scroll-behavior: smooth;
+}
+
+.chat-stream-bottom-anchor {
+  height: 32px;
+  min-height: 32px;
+  width: 100%;
+  flex-shrink: 0;
+  pointer-events: none;
 }
 
 .chat-loading,

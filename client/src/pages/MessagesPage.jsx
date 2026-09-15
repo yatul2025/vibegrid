@@ -365,6 +365,7 @@ export default function MessagesPage({
   const docFileInputRef = useRef(null);
   const chatInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const partnerTypingTimeoutRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const touchStartPosRef = useRef({ x: 0, y: 0 });
   const activePartnerRef = useRef(activePartner);
@@ -573,18 +574,36 @@ export default function MessagesPage({
   };
 
   // Auto-scroll to bottom of message thread (isolated to chat-stream container to prevent window shifting)
-  const scrollToBottom = (smooth = true) => {
-    if (chatStreamRef.current) {
-      if (smooth) {
-        chatStreamRef.current.scrollTo({
-          top: chatStreamRef.current.scrollHeight,
-          behavior: 'smooth'
-        });
-      } else {
+  const scrollToBottom = useCallback((smooth = true) => {
+    const doScroll = () => {
+      if (messagesEndRef.current) {
+        try {
+          messagesEndRef.current.scrollIntoView({
+            behavior: smooth ? 'smooth' : 'auto',
+            block: 'end'
+          });
+        } catch {
+          if (chatStreamRef.current) {
+            chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
+          }
+        }
+      } else if (chatStreamRef.current) {
         chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
       }
+    };
+
+    doScroll();
+    requestAnimationFrame(doScroll);
+    setTimeout(doScroll, 60);
+    setTimeout(doScroll, 180);
+  }, []);
+
+  // Whenever new messages arrive or partner starts/stops typing, ensure thread is scrolled above typing bar
+  useEffect(() => {
+    if (messages.length > 0) {
+      scrollToBottom(true);
     }
-  };
+  }, [messages.length, isPartnerTyping, scrollToBottom]);
 
   // ==========================================================================
   // 1. Initial Data Fetching (Conversations List)
@@ -832,6 +851,14 @@ export default function MessagesPage({
       const currentPartner = activePartnerRef.current;
       if (currentPartner && Number(userId) === Number(currentPartner.id)) {
         setIsPartnerTyping(Boolean(isTyping));
+        if (partnerTypingTimeoutRef.current) {
+          clearTimeout(partnerTypingTimeoutRef.current);
+        }
+        if (isTyping) {
+          partnerTypingTimeoutRef.current = setTimeout(() => {
+            setIsPartnerTyping(false);
+          }, 3500);
+        }
       }
     };
 
@@ -1028,9 +1055,12 @@ export default function MessagesPage({
 
   useEffect(() => {
     adjustChatInputHeight();
-    const rafId = requestAnimationFrame(adjustChatInputHeight);
+    const rafId = requestAnimationFrame(() => {
+      adjustChatInputHeight();
+      scrollToBottom(false);
+    });
     return () => cancelAnimationFrame(rafId);
-  }, [messageInput]);
+  }, [messageInput, scrollToBottom]);
 
   // Submit on Enter without Shift, allow Shift+Enter for newlines
   const handleInputKeyDown = (e) => {
@@ -2356,7 +2386,7 @@ export default function MessagesPage({
                     </div>
                     <span className="chat-header-sub">
                       {isPartnerTyping ? (
-                        <span className="typing-sub-label">typing...</span>
+                        <span className="typing-sub-label">{activePartner.full_name || activePartner.username} is typing...</span>
                       ) : isCurrentPartnerOnline ? (
                         <span className="online-sub-label">
                           <span className="online-dot-pulse" /> Active now
@@ -3013,7 +3043,7 @@ export default function MessagesPage({
                   </div>
                 )}
 
-                <div ref={messagesEndRef} />
+                <div ref={messagesEndRef} className="chat-stream-bottom-anchor" />
               </div>
 
               {/* Chat Composer Bar */}
@@ -3216,7 +3246,11 @@ export default function MessagesPage({
                             rows={1}
                             placeholder={uploadingMedia ? "Encrypting..." : `Message @${activePartner.username}...`}
                             value={messageInput}
-                            onFocus={() => setIsInputFocused(true)}
+                            onFocus={() => {
+                              setIsInputFocused(true);
+                              setTimeout(() => scrollToBottom(true), 120);
+                              setTimeout(() => scrollToBottom(true), 320);
+                            }}
                             onBlur={() => {
                               if (!messageInput.trim()) {
                                 setIsInputFocused(false);
@@ -4346,6 +4380,18 @@ export default function MessagesPage({
         .call-log-time {
           font-size: 0.72rem;
           opacity: 0.75;
+        }
+
+        .chat-stream {
+          padding-bottom: 32px !important;
+        }
+
+        .chat-stream-bottom-anchor {
+          height: 32px;
+          min-height: 32px;
+          width: 100%;
+          flex-shrink: 0;
+          pointer-events: none;
         }
 
         .chat-composer-container {
