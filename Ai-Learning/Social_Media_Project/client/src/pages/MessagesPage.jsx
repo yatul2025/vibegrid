@@ -560,6 +560,19 @@ export default function MessagesPage({
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Jump and highlight a quoted reply message
+  const scrollToMessage = (messageId) => {
+    if (!messageId) return;
+    const el = document.getElementById(`msg-${messageId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('pulse-highlight');
+      setTimeout(() => {
+        el.classList.remove('pulse-highlight');
+      }, 1500);
+    }
+  };
+
   // Auto-scroll to bottom of message thread (isolated to chat-stream container to prevent window shifting)
   const scrollToBottom = useCallback((smooth = true) => {
     const doScroll = () => {
@@ -591,49 +604,6 @@ export default function MessagesPage({
       scrollToBottom(true);
     }
   }, [messages.length, isPartnerTyping, scrollToBottom]);
-
-  // Manage body class for active chat to optimize mobile viewport & hide bottom navigation
-  useEffect(() => {
-    if (activePartner) {
-      document.body.classList.add('has-active-chat');
-    } else {
-      document.body.classList.remove('has-active-chat');
-    }
-    return () => {
-      document.body.classList.remove('has-active-chat');
-    };
-  }, [activePartner]);
-
-  // Handle mobile visualViewport resize when virtual keyboard opens or closes
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.visualViewport) return;
-
-    const handleVisualViewportChange = () => {
-      if (activePartnerRef.current) {
-        scrollToBottom(false);
-      }
-    };
-
-    window.visualViewport.addEventListener('resize', handleVisualViewportChange);
-    window.visualViewport.addEventListener('scroll', handleVisualViewportChange);
-    return () => {
-      window.visualViewport.removeEventListener('resize', handleVisualViewportChange);
-      window.visualViewport.removeEventListener('scroll', handleVisualViewportChange);
-    };
-  }, [scrollToBottom]);
-
-  // Jump and highlight a quoted reply message
-  const scrollToMessage = (messageId) => {
-    if (!messageId) return;
-    const el = document.getElementById(`msg-${messageId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('pulse-highlight');
-      setTimeout(() => {
-        el.classList.remove('pulse-highlight');
-      }, 1500);
-    }
-  };
 
   // ==========================================================================
   // 1. Initial Data Fetching (Conversations List)
@@ -3278,14 +3248,8 @@ export default function MessagesPage({
                             value={messageInput}
                             onFocus={() => {
                               setIsInputFocused(true);
-                              setTimeout(() => {
-                                chatInputRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-                                scrollToBottom(true);
-                              }, 100);
-                              setTimeout(() => {
-                                chatInputRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-                                scrollToBottom(true);
-                              }, 300);
+                              setTimeout(() => scrollToBottom(true), 120);
+                              setTimeout(() => scrollToBottom(true), 320);
                             }}
                             onBlur={() => {
                               if (!messageInput.trim()) {
@@ -6253,59 +6217,6 @@ export default function MessagesPage({
             font-size: 0.82rem;
             flex-shrink: 0;
             margin-bottom: 1px;
-          }
-
-          body.has-active-chat .mobile-bottom-navbar,
-          body.has-active-chat .app-header {
-            display: none !important;
-          }
-
-          body.has-active-chat .main-content {
-            padding: 0 !important;
-            margin: 0 !important;
-            height: 100dvh !important;
-            height: 100vh !important;
-            max-height: 100dvh !important;
-            max-height: 100vh !important;
-          }
-
-          body.has-active-chat .messages-page-wrapper {
-            padding: 0 !important;
-            margin: 0 !important;
-            height: 100dvh !important;
-            height: 100vh !important;
-            max-height: 100dvh !important;
-            max-height: 100vh !important;
-            border-radius: 0 !important;
-            border: none !important;
-            overflow: hidden !important;
-          }
-
-          body.has-active-chat .messages-layout-container {
-            height: 100% !important;
-            max-height: 100% !important;
-            border-radius: 0 !important;
-            border: none !important;
-          }
-
-          body.has-active-chat .messages-chat-panel {
-            height: 100% !important;
-            max-height: 100% !important;
-            min-height: 0 !important;
-            display: flex !important;
-            flex-direction: column !important;
-            position: relative !important;
-          }
-
-          body.has-active-chat .chat-composer-container {
-            position: sticky !important;
-            bottom: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            z-index: 40 !important;
-            background: var(--card-bg, #131722) !important;
-            padding: 8px 10px 10px !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
           }
         }
 
