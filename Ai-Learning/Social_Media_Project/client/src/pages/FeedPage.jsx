@@ -24,6 +24,18 @@ import FeedSidebar from '../components/FeedSidebar';
 import ConfirmModal from '../components/ConfirmModal';
 import HidePostModal from '../components/HidePostModal';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
+import {
+  Heart,
+  MessageCircle,
+  Bookmark,
+  Star,
+  Globe,
+  Shield,
+  Trash2,
+  RotateCw,
+  PlusSquare,
+  Sparkles
+} from 'lucide-react';
 
 // Relative time formatting helper (e.g., "Just now", "5m ago", "2h ago")
 function formatTimeAgo(dateString) {
@@ -570,7 +582,9 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                   role="tab"
                   aria-selected={feedMode === 'closeFriends'}
                 >
-                  <span>★ Close Friends</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <Star size={13} fill="currentColor" strokeWidth={0} /> Close Friends
+                  </span>
                   {closeFriendIds.size > 0 && (
                     <span className="feed-cf-pill-count">{closeFriendIds.size}</span>
                   )}
@@ -586,9 +600,10 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     fetchStories(true);
                   }}
                   title="Refresh feed"
+                  aria-label="Refresh feed"
                   disabled={isRefreshing}
                 >
-                  <span className={`refresh-icon ${isRefreshing ? 'spinning' : ''}`}>🔄</span>
+                  <RotateCw size={14} className={`refresh-icon ${isRefreshing ? 'spinning' : ''}`} />
                   <span className="desktop-only">{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
                 </button>
                 {user && (
@@ -597,8 +612,9 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     className="feed-control-btn feed-create-btn desktop-only"
                     onClick={onOpenCreatePost}
                     title="Create a new post"
+                    aria-label="Create a new post"
                   >
-                    <span>➕</span>
+                    <PlusSquare size={15} />
                     <span>Post</span>
                   </button>
                 )}
@@ -645,7 +661,8 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
           onClick={handleRefreshNewPosts}
           title="Click to view new posts"
         >
-          ✨ {newPostsAvailable.length} new {newPostsAvailable.length === 1 ? 'post' : 'posts'} available — Tap to view
+          <Sparkles size={14} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '6px' }} />
+          {newPostsAvailable.length} new {newPostsAvailable.length === 1 ? 'post' : 'posts'} available — Tap to view
         </button>
       )}
 
@@ -779,7 +796,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                             title={isCloseFriend ? 'Close Friend (Click to remove)' : 'Add to Close Friends'}
                             aria-label={isCloseFriend ? 'Remove from Close Friends' : 'Add to Close Friends'}
                           >
-                            ★
+                            <Star size={14} fill={isCloseFriend ? 'currentColor' : 'none'} color="currentColor" strokeWidth={isCloseFriend ? 0 : 2} />
                           </button>
                         )}
                       </div>
@@ -813,7 +830,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     >
                       {moderatingId === post.id ? '⏳' : (
                         <>
-                          <span>🛡️</span>
+                          <Shield size={13} style={{ verticalAlign: 'middle' }} />
                           <span className="desktop-only">Hide Post</span>
                         </>
                       )}
@@ -830,7 +847,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                       title="Delete post"
                       aria-label="Delete post"
                     >
-                      {deletingId === post.id ? '⏳' : '🗑️'}
+                      {deletingId === post.id ? '⏳' : <Trash2 size={16} />}
                     </button>
                   )}
                 </div>
@@ -851,7 +868,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                 {/* Animated Heart Overlay on Double-Tap */}
                 {animatingPostId === post.id && (
                   <div className="double-tap-heart-overlay">
-                    ❤️
+                    <Heart size={76} fill="#ef4444" color="#ffffff" strokeWidth={1.5} />
                   </div>
                 )}
               </div>
@@ -867,7 +884,12 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     aria-label={post.is_liked ? 'Unlike post' : 'Like post'}
                   >
                     <span className="heart-icon-wrapper">
-                      {post.is_liked ? '❤️' : '🤍'}
+                      <Heart
+                        size={22}
+                        fill={post.is_liked ? '#ef4444' : 'none'}
+                        color={post.is_liked ? '#ef4444' : 'currentColor'}
+                        strokeWidth={2}
+                      />
                     </span>
                     <span className="action-counter">{post.likes_count}</span>
                   </button>
@@ -882,7 +904,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     title="View comments thread"
                     aria-label={`View comments thread, ${post.comments_count} comments`}
                   >
-                    💬
+                    <MessageCircle size={22} color="currentColor" strokeWidth={2} />
                     <span className="action-counter">{post.comments_count}</span>
                   </button>
                 </div>
@@ -895,7 +917,12 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                     title={post.is_saved ? 'Remove from saved' : 'Save post'}
                     aria-label={post.is_saved ? 'Remove from saved' : 'Save post'}
                   >
-                    {post.is_saved ? '🔖' : '📑'}
+                    <Bookmark
+                      size={22}
+                      fill={post.is_saved ? 'currentColor' : 'none'}
+                      color="currentColor"
+                      strokeWidth={2}
+                    />
                   </button>
                 </div>
               </div>

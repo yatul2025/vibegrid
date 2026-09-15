@@ -17,6 +17,7 @@ import CommentsModal from '../components/CommentsModal';
 import HashtagFeedModal from '../components/HashtagFeedModal';
 import HidePostModal from '../components/HidePostModal';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
+import { Heart, MessageCircle, Bookmark } from 'lucide-react';
 
 export default function ExplorePage({ onNavigateToProfile }) {
   const { user } = useAuth();
@@ -373,8 +374,12 @@ export default function ExplorePage({ onNavigateToProfile }) {
               <div className="explore-grid-overlay">
                 <div className="overlay-author">@{post.username}</div>
                 <div className="overlay-metrics">
-                  <span>❤️ {post.likes_count}</span>
-                  <span>💬 {post.comments_count}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <Heart size={14} fill="currentColor" strokeWidth={0} /> {post.likes_count}
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <MessageCircle size={14} fill="currentColor" strokeWidth={0} /> {post.comments_count}
+                  </span>
                 </div>
               </div>
             </div>
@@ -473,7 +478,14 @@ export default function ExplorePage({ onNavigateToProfile }) {
                     title={selectedPost.is_liked ? 'Unlike post' : 'Like post'}
                     aria-label={selectedPost.is_liked ? 'Unlike post' : 'Like post'}
                   >
-                    {selectedPost.is_liked ? '❤️' : '🤍'}{' '}
+                    <span className="heart-icon-wrapper">
+                      <Heart
+                        size={20}
+                        fill={selectedPost.is_liked ? '#ef4444' : 'none'}
+                        color={selectedPost.is_liked ? '#ef4444' : 'currentColor'}
+                        strokeWidth={2}
+                      />
+                    </span>
                     <span className="action-counter">{selectedPost.likes_count}</span>
                   </button>
                   <button
@@ -483,7 +495,7 @@ export default function ExplorePage({ onNavigateToProfile }) {
                     title="View comments"
                     aria-label={`View comments thread, ${selectedPost.comments_count} comments`}
                   >
-                    💬{' '}
+                    <MessageCircle size={20} color="currentColor" strokeWidth={2} />
                     <span className="action-counter">{selectedPost.comments_count}</span>
                   </button>
                   <button
@@ -493,7 +505,12 @@ export default function ExplorePage({ onNavigateToProfile }) {
                     title={selectedPost.is_saved ? 'Remove from saved' : 'Save post'}
                     aria-label={selectedPost.is_saved ? 'Remove from saved' : 'Save post'}
                   >
-                    {selectedPost.is_saved ? '🔖' : '📑'}
+                    <Bookmark
+                      size={20}
+                      fill={selectedPost.is_saved ? 'currentColor' : 'none'}
+                      color="currentColor"
+                      strokeWidth={2}
+                    />
                   </button>
                 </div>
               </div>

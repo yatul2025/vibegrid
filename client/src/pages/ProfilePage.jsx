@@ -20,6 +20,7 @@ import HashtagFeedModal from '../components/HashtagFeedModal';
 import ConfirmModal from '../components/ConfirmModal';
 import PasswordToggleButton from '../components/PasswordToggleIcon';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
+import { Heart, MessageCircle, Bookmark, Trash2 } from 'lucide-react';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -1679,8 +1680,12 @@ export default function ProfilePage({
                       loading="lazy"
                     />
                     <div className="grid-post-overlay">
-                      <span>❤️ {post.likes_count}</span>
-                      <span>💬 {post.comments_count}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <Heart size={14} fill="currentColor" strokeWidth={0} /> {post.likes_count}
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <MessageCircle size={14} fill="currentColor" strokeWidth={0} /> {post.comments_count}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -1726,8 +1731,12 @@ export default function ProfilePage({
                       loading="lazy"
                     />
                     <div className="grid-post-overlay">
-                      <span>❤️ {post.likes_count}</span>
-                      <span>💬 {post.comments_count}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <Heart size={14} fill="currentColor" strokeWidth={0} /> {post.likes_count}
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <MessageCircle size={14} fill="currentColor" strokeWidth={0} /> {post.comments_count}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -1809,7 +1818,14 @@ export default function ProfilePage({
                     title={selectedPost.is_liked ? 'Unlike post' : 'Like post'}
                     aria-label={selectedPost.is_liked ? 'Unlike post' : 'Like post'}
                   >
-                    {selectedPost.is_liked ? '❤️' : '🤍'}{' '}
+                    <span className="heart-icon-wrapper">
+                      <Heart
+                        size={20}
+                        fill={selectedPost.is_liked ? '#ef4444' : 'none'}
+                        color={selectedPost.is_liked ? '#ef4444' : 'currentColor'}
+                        strokeWidth={2}
+                      />
+                    </span>
                     <span className="action-counter">{selectedPost.likes_count}</span>
                   </button>
                   <button
@@ -1819,7 +1835,7 @@ export default function ProfilePage({
                     title="View comments"
                     aria-label={`View comments thread, ${selectedPost.comments_count} comments`}
                   >
-                    💬{' '}
+                    <MessageCircle size={20} color="currentColor" strokeWidth={2} />
                     <span className="action-counter">{selectedPost.comments_count}</span>
                   </button>
                   <button
@@ -1829,19 +1845,25 @@ export default function ProfilePage({
                     title={selectedPost.is_saved ? 'Remove from saved' : 'Save post'}
                     aria-label={selectedPost.is_saved ? 'Remove from saved' : 'Save post'}
                   >
-                    {selectedPost.is_saved ? '🔖' : '📑'}
+                    <Bookmark
+                      size={20}
+                      fill={selectedPost.is_saved ? 'currentColor' : 'none'}
+                      color="currentColor"
+                      strokeWidth={2}
+                    />
                   </button>
                 </div>
                 {currentUser && currentUser.id === selectedPost.user_id && (
                   <button
                     type="button"
                     className="btn-secondary"
-                    style={{ color: 'var(--danger)', fontSize: '0.85rem' }}
+                    style={{ color: 'var(--danger)', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                     onClick={() => handleDeletePost(selectedPost.id)}
                     title="Delete post"
                     aria-label="Delete post"
                   >
-                    🗑️ Delete Post
+                    <Trash2 size={15} />
+                    <span>Delete Post</span>
                   </button>
                 )}
               </div>
