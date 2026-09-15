@@ -864,6 +864,7 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                   alt={post.caption || 'User post'}
                   className="post-image"
                   loading="lazy"
+                  decoding="async"
                 />
                 {/* Animated Heart Overlay on Double-Tap */}
                 {animatingPostId === post.id && (

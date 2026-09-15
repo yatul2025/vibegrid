@@ -9936,6 +9936,8 @@ select.form-input option,
 
 /* 1. PWA Network Status Banner (Offline notification) */
 .pwa-network-status-banner {
+  position: sticky;
+  top: 0;
   width: 100%;
   padding: 8px 16px;
   font-size: 0.85rem;
@@ -9946,16 +9948,21 @@ select.form-input option,
   gap: 8px;
   text-align: center;
   z-index: 1100;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   transition: all 0.3s ease;
 }
 
 .pwa-network-status-banner.offline {
-  background: linear-gradient(90deg, #b45309 0%, #d97706 100%);
+  background: linear-gradient(90deg, rgba(180, 83, 9, 0.94) 0%, rgba(217, 119, 6, 0.94) 100%);
   color: #ffffff;
   box-shadow: 0 2px 8px rgba(217, 119, 6, 0.25);
 }
 
 .pwa-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 1rem;
 }
 
@@ -9974,7 +9981,18 @@ select.form-input option,
   align-items: center;
   gap: 16px;
   z-index: 2000;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   animation: slideUpPwa 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (max-width: 768px) {
+  .pwa-update-banner {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    width: calc(100% - 32px);
+    max-width: 400px;
+    justify-content: space-between;
+  }
 }
 
 @keyframes slideUpPwa {

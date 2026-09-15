@@ -1711,6 +1711,7 @@ export default function ProfilePage({
                       alt={post.caption || 'User photo'}
                       className="grid-post-img"
                       loading="lazy"
+                      decoding="async"
                     />
                     <div className="grid-post-overlay">
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -1764,6 +1765,7 @@ export default function ProfilePage({
                       alt={post.caption || 'Saved photo'}
                       className="grid-post-img"
                       loading="lazy"
+                      decoding="async"
                     />
                     <div className="grid-post-overlay">
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>

@@ -9,7 +9,7 @@
  * 4. Automatic cache cleanup on deployment and immediate client claiming
  */
 
-const CACHE_NAME = 'vibegrid-pwa-v24';
+const CACHE_NAME = 'vibegrid-pwa-v25';
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_ASSETS = [

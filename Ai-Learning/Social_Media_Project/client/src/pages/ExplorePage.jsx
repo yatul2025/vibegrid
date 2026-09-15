@@ -370,6 +370,7 @@ export default function ExplorePage({ onNavigateToProfile }) {
                 alt={post.caption || 'Community photo'}
                 className="explore-grid-img"
                 loading="lazy"
+                decoding="async"
               />
               <div className="explore-grid-overlay">
                 <div className="overlay-author">@{post.username}</div>
