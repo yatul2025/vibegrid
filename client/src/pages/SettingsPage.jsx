@@ -23,6 +23,19 @@ import { getDefaultAvatar, isDefaultAvatar } from '../utils/avatar';
 import ConfirmModal from '../components/ConfirmModal';
 import PasswordToggleButton from '../components/PasswordToggleIcon';
 import pushNotificationService from '../services/pushNotificationService';
+import {
+  User,
+  Mail,
+  Lock,
+  ShieldCheck,
+  Bell,
+  AlertTriangle,
+  ArrowLeft,
+  ChevronRight,
+  X,
+  CheckCircle2,
+  AlertCircle
+} from 'lucide-react';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -910,12 +923,12 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
 
   // Navigation category definitions
   const categories = [
-    { id: 'profile', label: 'Edit Profile', icon: '👤', description: 'Photo, name, bio & links' },
-    { id: 'contact', label: 'Account & Contact', icon: '📧', description: 'Email & phone verification' },
-    { id: 'security', label: 'Password & Security', icon: '🔒', description: 'Password, sessions & devices' },
-    { id: 'privacy', label: 'Privacy & Permissions', icon: '🛡️', description: 'Account privacy, DMs & comments' },
-    { id: 'notifications', label: 'Notifications', icon: '🔔', description: 'Push & email preferences' },
-    { id: 'danger', label: 'Account Status', icon: '⚠️', description: 'Deactivate or delete account' }
+    { id: 'profile', label: 'Edit Profile', icon: <User size={18} strokeWidth={1.75} />, description: 'Photo, name, bio & links' },
+    { id: 'contact', label: 'Account & Contact', icon: <Mail size={18} strokeWidth={1.75} />, description: 'Email & phone verification' },
+    { id: 'security', label: 'Password & Security', icon: <Lock size={18} strokeWidth={1.75} />, description: 'Password, sessions & devices' },
+    { id: 'privacy', label: 'Privacy & Permissions', icon: <ShieldCheck size={18} strokeWidth={1.75} />, description: 'Account privacy, DMs & comments' },
+    { id: 'notifications', label: 'Notifications', icon: <Bell size={18} strokeWidth={1.75} />, description: 'Push & email preferences' },
+    { id: 'danger', label: 'Account Status', icon: <AlertTriangle size={18} strokeWidth={1.75} />, description: 'Deactivate or delete account' }
   ];
 
   const currentPassStrength = getPasswordStrength(newPassword);
@@ -943,8 +956,9 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
                 className="settings-back-btn"
                 onClick={() => setMobileViewingSection(false)}
                 title="Back to Settings menu"
+                aria-label="Back to Settings menu"
               >
-                ←
+                <ArrowLeft size={18} />
               </button>
             )}
             <div className="settings-header-titles">
@@ -975,13 +989,16 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
         {/* Global Floating Notification Message */}
         {feedbackMsg && (
           <div className={`settings-alert-banner ${feedbackMsg.type}`}>
-            <span>{feedbackMsg.type === 'success' ? '✅' : '⚠️'} {feedbackMsg.text}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              {feedbackMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />} {feedbackMsg.text}
+            </span>
             <button
               type="button"
               className="alert-close-btn"
               onClick={() => setFeedbackMsg(null)}
+              aria-label="Dismiss alert"
             >
-              ×
+              <X size={15} />
             </button>
           </div>
         )}
@@ -1050,12 +1067,14 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
                           <span className="settings-nav-label">
                             {cat.label}
                             {isDemoUser && (
-                              <span style={{ fontSize: '11px', color: '#f87171', marginLeft: '6px' }}>🔒</span>
+                              <span style={{ fontSize: '11px', color: '#f87171', marginLeft: '6px', display: 'inline-flex', alignItems: 'center' }} title="Locked on demo accounts">
+                                <Lock size={11} />
+                              </span>
                             )}
                           </span>
                           <span className="settings-nav-desc">{cat.description}</span>
                         </div>
-                        {isMobile && <span className="settings-nav-chevron">›</span>}
+                        {isMobile && <span className="settings-nav-chevron"><ChevronRight size={16} /></span>}
                       </a>
                     </li>
                   ))}
@@ -2483,7 +2502,7 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
               </div>
               <div className="diagnostics-row">
                 <span className="diagnostics-label">PWA Version</span>
-                <span className="diagnostics-value">vibegrid-pwa-v23</span>
+                <span className="diagnostics-value">vibegrid-pwa-v24</span>
               </div>
               <div className="diagnostics-row">
                 <span className="diagnostics-label">Platform Notes</span>

@@ -3154,7 +3154,7 @@ a.nav-tab-btn {
 .profile-tabs-bar {
   display: flex;
   justify-content: center;
-  gap: 40px;
+  gap: 32px;
   border-top: 1px solid var(--border-color);
   margin-top: 24px;
 }
@@ -3170,10 +3170,10 @@ a.nav-tab-btn {
   letter-spacing: 1.2px;
   padding: 16px 14px;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  transition: var(--transition);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .tab-item:hover {
@@ -3183,6 +3183,22 @@ a.nav-tab-btn {
 .tab-item.active {
   color: var(--text-primary);
   border-top-color: var(--text-primary);
+}
+
+.tab-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  letter-spacing: 0;
+  transition: all 0.2s ease;
+}
+
+.tab-item.active .tab-badge {
+  background: var(--primary-glow, rgba(99, 102, 241, 0.15));
+  color: var(--primary);
 }
 
 /* Empty Posts State */
@@ -3196,8 +3212,16 @@ a.nav-tab-btn {
 }
 
 .empty-camera-icon {
-  font-size: 3rem;
-  margin-bottom: 4px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.03));
 }
 
 .profile-posts-empty h3 {
@@ -8703,8 +8727,19 @@ a.mobile-nav-item {
 }
 
 .settings-nav-icon {
-  font-size: 1.22rem;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.settings-nav-item:hover .settings-nav-icon,
+.settings-nav-item.active .settings-nav-icon {
+  color: var(--primary);
 }
 
 .settings-nav-info {
@@ -8730,8 +8765,11 @@ a.mobile-nav-item {
 }
 
 .settings-nav-chevron {
-  font-size: 1.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 /* Settings Content Panel */

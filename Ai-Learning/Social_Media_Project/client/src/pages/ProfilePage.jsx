@@ -20,7 +20,25 @@ import HashtagFeedModal from '../components/HashtagFeedModal';
 import ConfirmModal from '../components/ConfirmModal';
 import PasswordToggleButton from '../components/PasswordToggleIcon';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
-import { Heart, MessageCircle, Bookmark, Trash2 } from 'lucide-react';
+import {
+  Heart,
+  MessageCircle,
+  Bookmark,
+  Trash2,
+  Grid,
+  Edit3,
+  Settings,
+  Calendar,
+  Mail,
+  Phone,
+  ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
+  Camera,
+  Upload,
+  Lock,
+  Check
+} from 'lucide-react';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -1226,7 +1244,7 @@ export default function ProfilePage({
             )}
             {isOwnProfile && (
               <div className="profile-avatar-overlay">
-                <span className="overlay-camera-icon">📷</span>
+                <Camera size={22} className="overlay-camera-icon" />
                 <span className="overlay-text">Edit Photo</span>
               </div>
             )}
@@ -1240,7 +1258,7 @@ export default function ProfilePage({
               title={isDemoUser ? 'Profile photo is locked on demo accounts' : 'Change or remove profile picture'}
               onClick={() => {
                 if (isDemoUser) {
-                  setAvatarError('🔒 Profile photo cannot be changed on official demo accounts.');
+                  setAvatarError('Profile photo cannot be changed on official demo accounts.');
                   return;
                 }
                 setShowAvatarModal(true);
@@ -1250,7 +1268,7 @@ export default function ProfilePage({
               {uploadingAvatar || removingAvatar ? (
                 <span className="badge-spinner" />
               ) : (
-                <span className="badge-camera-icon">{isDemoUser ? '🔒' : '📷'}</span>
+                <span className="badge-camera-icon">{isDemoUser ? <Lock size={12} /> : <Camera size={13} />}</span>
               )}
             </button>
           )}
@@ -1270,7 +1288,7 @@ export default function ProfilePage({
             <div className="profile-username-wrap">
               <h1 className="profile-username">@{profile.username}</h1>
               {profile.is_private && (
-                <span className="profile-badge-private" title="Private Account">🔒</span>
+                <span className="profile-badge-private" title="Private Account"><Lock size={12} /></span>
               )}
             </div>
 
@@ -1280,26 +1298,28 @@ export default function ProfilePage({
                   <button
                     type="button"
                     className="btn-profile-primary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                     onClick={() => {
                       if (guardDemoAction('edit_profile')) return;
                       if (isDemoUser) {
-                        setAvatarError('🔒 Profile editing is locked on official demo accounts.');
+                        setAvatarError('Profile editing is locked on official demo accounts.');
                         return;
                       }
                       setIsEditing(!isEditing);
                     }}
                     title="Edit profile details"
                   >
-                    {isEditing ? 'Cancel' : '✏️ Edit Profile'}
+                    {isEditing ? 'Cancel' : <><Edit3 size={14} /> Edit Profile</>}
                   </button>
                   <button
                     type="button"
                     className="btn-profile-secondary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                     onClick={() => onOpenSettings && onOpenSettings('privacy')}
                     title="Settings & Privacy"
                     aria-label="Settings & Privacy"
                   >
-                    ⚙️ Settings
+                    <Settings size={14} /> Settings
                   </button>
                 </>
               ) : (
@@ -1315,11 +1335,12 @@ export default function ProfilePage({
                   <button
                     type="button"
                     className="btn-profile-secondary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                     onClick={() => onOpenDirectMessage && onOpenDirectMessage(profile.username)}
                     title={`Send direct message to @${profile.username}`}
                     aria-label={`Send direct message to @${profile.username}`}
                   >
-                    💬 Message
+                    <MessageCircle size={14} /> Message
                   </button>
                 </div>
               )}
@@ -1400,12 +1421,12 @@ export default function ProfilePage({
               {/* Metadata Pills */}
               <div className="profile-meta-pills">
                 <span className="profile-meta-pill">
-                  <span className="pill-icon">🗓️</span>
+                  <span className="pill-icon"><Calendar size={13} /></span>
                   <span>Joined {new Date(profile.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</span>
                 </span>
                 {profile.date_of_birth && isOwnProfile && (
                   <span className="profile-meta-pill">
-                    <span className="pill-icon">🎂</span>
+                    <span className="pill-icon"><Calendar size={13} /></span>
                     <span>Born {new Date(profile.date_of_birth).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                   </span>
                 )}
@@ -1415,9 +1436,11 @@ export default function ProfilePage({
                     onClick={() => (onOpenSettings ? onOpenSettings('contact') : setIsEditing(true))}
                     title={profile.is_email_verified ? 'Email is verified - Manage in Settings' : 'Email is unverified - Click to verify'}
                   >
-                    <span className="pill-icon">✉️</span>
+                    <span className="pill-icon"><Mail size={13} /></span>
                     <span className="pill-text">{profile.email || currentUser?.email}</span>
-                    <span className="pill-badge">{profile.is_email_verified ? '✓ Verified' : '⚠️ Verify'}</span>
+                    <span className="pill-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                      {profile.is_email_verified ? <><Check size={11} /> Verified</> : <><AlertCircle size={11} /> Verify</>}
+                    </span>
                   </span>
                 )}
                 {isOwnProfile && profile.phone_number && (
@@ -1426,13 +1449,15 @@ export default function ProfilePage({
                     onClick={() => (onOpenSettings ? onOpenSettings('contact') : setIsEditing(true))}
                     title={profile.is_phone_verified ? 'Phone is verified - Manage in Settings' : 'Phone is unverified - Click to verify'}
                   >
-                    <span className="pill-icon">📱</span>
+                    <span className="pill-icon"><Phone size={13} /></span>
                     <span className="pill-text">{profile.phone_number}</span>
-                    <span className="pill-badge">{profile.is_phone_verified ? '✓ Verified' : '⚠️ Unverified'}</span>
+                    <span className="pill-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                      {profile.is_phone_verified ? <><Check size={11} /> Verified</> : <><AlertCircle size={11} /> Unverified</>}
+                    </span>
                   </span>
                 )}
                 <span className="profile-meta-pill pill-security">
-                  <span className="pill-icon">🛡️</span>
+                  <span className="pill-icon"><ShieldCheck size={13} /></span>
                   <span>Verified Session</span>
                 </span>
               </div>
@@ -1632,8 +1657,11 @@ export default function ProfilePage({
           type="button"
           className={`tab-item ${activeTab === 'posts' ? 'active' : ''}`}
           onClick={() => setActiveTab('posts')}
+          aria-label={`Posts (${userPosts.length})`}
         >
-          📷 POSTS ({userPosts.length})
+          <Grid size={15} />
+          <span>POSTS</span>
+          <span className="tab-badge">{userPosts.length}</span>
         </button>
         {isOwnProfile && (
           <button
@@ -1643,8 +1671,11 @@ export default function ProfilePage({
               setActiveTab('saved');
               fetchSavedPosts();
             }}
+            aria-label={`Saved posts (${savedPosts.length})`}
           >
-            🔖 SAVED ({savedPosts.length})
+            <Bookmark size={15} />
+            <span>SAVED</span>
+            <span className="tab-badge">{savedPosts.length}</span>
           </button>
         )}
       </div>
@@ -1652,7 +1683,9 @@ export default function ProfilePage({
       {/* Locked Private Account Banner for Non-Followers */}
       {profile.is_locked ? (
         <div className="private-profile-locked">
-          <div className="private-lock-icon">🔒</div>
+          <div className="private-lock-icon">
+            <Lock size={32} strokeWidth={1.75} />
+          </div>
           <h3 className="private-lock-title">This Account is Private</h3>
           <p className="private-lock-desc">Follow this account to see their photos and videos.</p>
         </div>
@@ -1692,7 +1725,9 @@ export default function ProfilePage({
               </div>
             ) : (
               <div className="profile-posts-empty">
-                <div className="empty-camera-icon">📸</div>
+                <div className="empty-camera-icon">
+                  <Camera size={32} strokeWidth={1.5} />
+                </div>
                 <h3>No Posts Yet</h3>
                 <p>When {isOwnProfile ? 'you share photos' : `@${profile.username} shares photos`}, they will appear here.</p>
                 {isOwnProfile && onOpenCreatePost && (
@@ -1743,7 +1778,9 @@ export default function ProfilePage({
               </div>
             ) : (
               <div className="profile-posts-empty">
-                <div className="empty-camera-icon">🔖</div>
+                <div className="empty-camera-icon">
+                  <Bookmark size={32} strokeWidth={1.5} />
+                </div>
                 <h3>Save Photos</h3>
                 <p>Save photos you want to see again. No one is notified, and only you can see what you've saved.</p>
               </div>
@@ -2094,9 +2131,10 @@ export default function ProfilePage({
               <button
                 type="button"
                 className="avatar-modal-btn btn-photo-upload"
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                 onClick={() => {
                   if (isDemoUser) {
-                    setAvatarError('🔒 Profile photo cannot be changed on official demo accounts.');
+                    setAvatarError('Profile photo cannot be changed on official demo accounts.');
                     setShowAvatarModal(false);
                     return;
                   }
@@ -2105,16 +2143,17 @@ export default function ProfilePage({
                 }}
                 disabled={isDemoUser}
               >
-                <span>📸</span> Upload New Photo
+                <Upload size={16} /> Upload New Photo
               </button>
 
               {profile.avatar_url && !profile.avatar_url.includes('default-') && (
                 <button
                   type="button"
                   className="avatar-modal-btn btn-photo-remove"
+                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                   onClick={() => {
                     if (isDemoUser) {
-                      setAvatarError('🔒 Profile photo cannot be removed on official demo accounts.');
+                      setAvatarError('Profile photo cannot be removed on official demo accounts.');
                       setShowAvatarModal(false);
                       return;
                     }
@@ -2123,7 +2162,7 @@ export default function ProfilePage({
                   }}
                   disabled={removingAvatar || isDemoUser}
                 >
-                  <span>🗑️</span> Remove Current Photo
+                  <Trash2 size={16} /> Remove Current Photo
                 </button>
               )}
 
