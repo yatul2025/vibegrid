@@ -489,25 +489,30 @@ function initSocket(httpServer) {
     });
 
     // 5. WebRTC Peer-to-Peer SDP Offer / Answer Relay
-    socket.on('signal:offer', ({ targetUserId, sdp, callId, callType }) => {
+    socket.on('signal:offer', ({ targetUserId, sdp, callId, callType, isIceRestart }) => {
+      if (!targetUserId || !sdp) return;
       socket.to(`user:${targetUserId}`).emit('signal:offer', {
         callerId: userId,
         sdp,
         callId,
-        callType
+        callType,
+        isIceRestart: Boolean(isIceRestart)
       });
     });
 
-    socket.on('signal:answer', ({ targetUserId, sdp, callId }) => {
+    socket.on('signal:answer', ({ targetUserId, sdp, callId, isIceRestart }) => {
+      if (!targetUserId || !sdp) return;
       socket.to(`user:${targetUserId}`).emit('signal:answer', {
         calleeId: userId,
         sdp,
-        callId
+        callId,
+        isIceRestart: Boolean(isIceRestart)
       });
     });
 
     // 6. WebRTC ICE Candidate Exchange
     socket.on('signal:ice-candidate', ({ targetUserId, candidate, callId }) => {
+      if (!targetUserId || !candidate) return;
       socket.to(`user:${targetUserId}`).emit('signal:ice-candidate', {
         fromUserId: userId,
         candidate,
@@ -515,8 +520,29 @@ function initSocket(httpServer) {
       });
     });
 
-    // 7. In-Call Real-Time Emoji Reaction Relay
+    // 7. WebRTC ICE Restart Request
+    socket.on('call:ice-restart', ({ targetUserId, callId }) => {
+      if (!targetUserId) return;
+      socket.to(`user:${targetUserId}`).emit('call:ice-restart', {
+        fromUserId: userId,
+        callId
+      });
+    });
+
+    // 8. In-Call Audio / Video Track Mute Sync
+    socket.on('call:track-state', ({ targetUserId, callId, audioMuted, videoMuted }) => {
+      if (!targetUserId) return;
+      socket.to(`user:${targetUserId}`).emit('call:track-state', {
+        fromUserId: userId,
+        callId,
+        audioMuted: Boolean(audioMuted),
+        videoMuted: Boolean(videoMuted)
+      });
+    });
+
+    // 9. In-Call Real-Time Emoji Reaction Relay
     socket.on('call:reaction', ({ targetUserId, emoji, callId }) => {
+      if (!targetUserId || !emoji) return;
       socket.to(`user:${targetUserId}`).emit('call:reaction', {
         fromUserId: userId,
         emoji,

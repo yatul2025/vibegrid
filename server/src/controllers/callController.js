@@ -63,9 +63,9 @@ const getCallHistory = async (req, res, next) => {
  */
 const getTurnCredentials = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id || 'guest';
 
-    // Standard STUN servers (always available with multi-region redundancy)
+    // 1. Standard Redundant STUN servers
     const iceServers = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
@@ -75,9 +75,51 @@ const getTurnCredentials = async (req, res, next) => {
       { urls: 'stun:stun.cloudflare.com:3478' }
     ];
 
-    // 2. If Metered TURN credentials are configured via environment variables
-    const meteredDomain = process.env.METERED_DOMAIN;
-    const meteredApiKey = process.env.METERED_API_KEY;
+    let hasTurn = false;
+
+    // 2. Coturn Self-Hosted Ephemeral HMAC-SHA1 Credentials
+    const turnSecret = config.turn?.secret || process.env.TURN_SECRET;
+    const turnDomain = config.turn?.domain || process.env.TURN_DOMAIN;
+    const turnPort = config.turn?.port || parseInt(process.env.TURN_PORT, 10) || 3478;
+    const turnTlsPort = config.turn?.tlsPort || parseInt(process.env.TURN_TLS_PORT, 10) || 5349;
+
+    if (turnSecret && turnDomain) {
+      try {
+        const ttl = 3600; // 1 hour validity
+        const timestamp = Math.floor(Date.now() / 1000) + ttl;
+        const username = `${timestamp}:${userId}`;
+        const hmac = crypto.createHmac('sha1', turnSecret);
+        hmac.setEncoding('base64');
+        hmac.write(username);
+        hmac.end();
+        const credential = hmac.read();
+
+        iceServers.unshift(
+          {
+            urls: `turn:${turnDomain}:${turnPort}?transport=udp`,
+            username,
+            credential
+          },
+          {
+            urls: `turn:${turnDomain}:${turnPort}?transport=tcp`,
+            username,
+            credential
+          },
+          {
+            urls: `turns:${turnDomain}:${turnTlsPort}?transport=tcp`,
+            username,
+            credential
+          }
+        );
+        hasTurn = true;
+      } catch (err) {
+        console.error('[CallController] Coturn HMAC credential generation failed:', err.message);
+      }
+    }
+
+    // 3. Metered Cloud TURN API
+    const meteredDomain = config.turn?.meteredDomain || process.env.METERED_DOMAIN;
+    const meteredApiKey = config.turn?.meteredApiKey || process.env.METERED_API_KEY;
 
     if (meteredDomain && meteredApiKey) {
       try {
@@ -85,7 +127,8 @@ const getTurnCredentials = async (req, res, next) => {
         if (meteredRes.ok) {
           const meteredIce = await meteredRes.json();
           if (Array.isArray(meteredIce) && meteredIce.length > 0) {
-            iceServers.push(...meteredIce);
+            iceServers.unshift(...meteredIce);
+            hasTurn = true;
           }
         }
       } catch (e) {
@@ -93,47 +136,31 @@ const getTurnCredentials = async (req, res, next) => {
       }
     }
 
-    // 3. If a coturn TURN secret is configured in environment, generate ephemeral HMAC-SHA1 credentials
-    const turnSecret = process.env.TURN_SECRET;
-    const turnDomain = process.env.TURN_DOMAIN || 'turn.vibegrid.com';
-
-    if (turnSecret) {
-      const ttl = 3600; // 1 hour validity
-      const timestamp = Math.floor(Date.now() / 1000) + ttl;
-      const username = `${timestamp}:${userId}`;
-      const hmac = crypto.createHmac('sha1', turnSecret);
-      hmac.setEncoding('base64');
-      hmac.write(username);
-      hmac.end();
-      const credential = hmac.read();
-
+    // 4. Free OpenRelay TURN Fallback (Ensures relay candidates exist in development/staging)
+    if (!hasTurn) {
       iceServers.push(
-        {
-          urls: `turn:${turnDomain}:3478?transport=udp`,
-          username,
-          credential
-        },
-        {
-          urls: `turn:${turnDomain}:3478?transport=tcp`,
-          username,
-          credential
-        },
-        {
-          urls: `turns:${turnDomain}:443?transport=tcp`,
-          username,
-          credential
-        }
+        { urls: 'stun:openrelay.metered.ca:80' },
+        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
       );
     }
 
     res.status(200).json({
       success: true,
       data: {
-        iceServers
+        iceServers,
+        iceTransportPolicy: 'all',
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require'
       }
     });
   } catch (error) {
-    next(error);
+    console.error('[CallController] getTurnCredentials error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to retrieve ICE credentials.'
+    });
   }
 };
 

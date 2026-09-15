@@ -173,6 +173,26 @@ function VoiceWaveIcon() {
   );
 }
 
+function FlipCameraIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
+      <path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="m18 22-3-3 3-3" />
+      <path d="m6 2 3 3-3 3" />
+    </svg>
+  );
+}
+
+function ActivityIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+    </svg>
+  );
+}
+
 export default function CallModal() {
   const { user } = useAuth();
 
@@ -195,6 +215,13 @@ export default function CallModal() {
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
   const [floatingReactions, setFloatingReactions] = useState([]);
+
+  // Production WebRTC Hardening States
+  const [networkStats, setNetworkStats] = useState(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [isRemoteAudioMuted, setIsRemoteAudioMuted] = useState(false);
+  const [isRemoteVideoMuted, setIsRemoteVideoMuted] = useState(false);
+  const [isCameraSwitching, setIsCameraSwitching] = useState(false);
 
   // Media Stream References
   const callCardRef = useRef(null);
@@ -360,6 +387,18 @@ export default function CallModal() {
       }
     };
 
+    // 9. Remote ICE Restart Notification
+    const handleRemoteIceRestart = async (data) => {
+      console.log('🔄 [Socket] Remote peer requested ICE restart:', data);
+      await webrtcService.restartIce();
+    };
+
+    // 10. Remote Audio / Video Track State Sync
+    const handleRemoteTrackState = (data) => {
+      setIsRemoteAudioMuted(Boolean(data.audioMuted));
+      setIsRemoteVideoMuted(Boolean(data.videoMuted));
+    };
+
     // Global custom event for initiating a call from chat or profile
     const handleCustomInitiateCall = async (event) => {
       const { targetUser, callType } = event.detail;
@@ -407,6 +446,8 @@ export default function CallModal() {
     socketService.on('signal:answer', handleSignalAnswer);
     socketService.on('signal:ice-candidate', handleSignalIce);
     socketService.on('call:reaction', handleRemoteReaction);
+    socketService.on('call:ice-restart', handleRemoteIceRestart);
+    socketService.on('call:track-state', handleRemoteTrackState);
 
     return () => {
       window.removeEventListener('vibegrid:initiate-call', handleCustomInitiateCall);
@@ -418,6 +459,8 @@ export default function CallModal() {
       socketService.off('signal:answer', handleSignalAnswer);
       socketService.off('signal:ice-candidate', handleSignalIce);
       socketService.off('call:reaction', handleRemoteReaction);
+      socketService.off('call:ice-restart', handleRemoteIceRestart);
+      socketService.off('call:track-state', handleRemoteTrackState);
     };
   }, [user, callData]);
 
@@ -509,12 +552,32 @@ export default function CallModal() {
       }
     }
 
+    webrtcService.onNetworkStats = (metrics) => {
+      setNetworkStats(metrics);
+    };
+
     bindStreams();
 
     return () => {
       webrtcService.onLocalStream = null;
       webrtcService.onRemoteStream = null;
       webrtcService.onConnectionStateChange = null;
+      webrtcService.onNetworkStats = null;
+    };
+  }, [callState]);
+
+  // Screen Wake Lock (Prevent display sleep on mobile during active calls)
+  useEffect(() => {
+    let wakeLock = null;
+    if (callState === 'connected' && 'wakeLock' in navigator) {
+      navigator.wakeLock.request('screen')
+        .then((wl) => { wakeLock = wl; })
+        .catch(() => {});
+    }
+    return () => {
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+      }
     };
   }, [callState]);
 
@@ -783,12 +846,44 @@ export default function CallModal() {
     const isMutedNow = !isAudioMuted;
     webrtcService.toggleAudio(!isMutedNow);
     setIsAudioMuted(isMutedNow);
+
+    if (callData?.peer?.id) {
+      socketService.emit('call:track-state', {
+        targetUserId: callData.peer.id,
+        callId: callData.callId,
+        audioMuted: isMutedNow,
+        videoMuted: isVideoMuted
+      });
+    }
   };
 
   const handleToggleVideo = () => {
     const isVideoOff = !isVideoMuted;
     webrtcService.toggleVideo(!isVideoOff);
     setIsVideoMuted(isVideoOff);
+
+    if (callData?.peer?.id) {
+      socketService.emit('call:track-state', {
+        targetUserId: callData.peer.id,
+        callId: callData.callId,
+        audioMuted: isAudioMuted,
+        videoMuted: isVideoOff
+      });
+    }
+  };
+
+  const handleSwitchCamera = async () => {
+    if (isCameraSwitching) return;
+    setIsCameraSwitching(true);
+    try {
+      await webrtcService.switchCamera();
+      if (localVideoRef.current && webrtcService.localStream) {
+        localVideoRef.current.srcObject = webrtcService.localStream;
+        localVideoRef.current.play().catch(() => {});
+      }
+    } finally {
+      setTimeout(() => setIsCameraSwitching(false), 500);
+    }
   };
 
   const handleToggleScreenShare = async () => {
@@ -909,13 +1004,18 @@ export default function CallModal() {
                 </div>
 
                 {/* Connection Quality Indicator */}
-                <div className="call-badge-chip quality-chip" title="Connection: HD (Fast, Low Latency)">
+                <div
+                  className={`call-badge-chip quality-chip ${networkStats?.qualityScore || 'excellent'}`}
+                  title={`Connection: ${networkStats?.qualityScore ? networkStats.qualityScore.toUpperCase() : 'HD'} (Click to toggle diagnostics)`}
+                  onClick={() => setShowDiagnostics((prev) => !prev)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <span className="signal-bars">
-                    <span className="bar bar-1" />
-                    <span className="bar bar-2" />
-                    <span className="bar bar-3" />
+                    <span className={`bar bar-1 ${networkStats?.qualityScore === 'poor' ? 'bar-danger' : ''}`} />
+                    <span className={`bar bar-2 ${networkStats?.qualityScore === 'poor' ? 'bar-inactive' : (networkStats?.qualityScore === 'good' ? 'bar-warning' : '')}`} />
+                    <span className={`bar bar-3 ${networkStats?.qualityScore !== 'excellent' ? 'bar-inactive' : ''}`} />
                   </span>
-                  <span>HD</span>
+                  <span>{networkStats?.qualityScore === 'poor' ? 'Poor' : networkStats?.qualityScore === 'good' ? 'Good' : 'HD'}</span>
                 </div>
 
                 {/* Picture in Picture Button (Video Call Only) */}
@@ -1190,7 +1290,32 @@ export default function CallModal() {
                 </button>
               )}
 
-              {/* 8. End Call Hangup Pill */}
+              {/* 8. Flip Camera (VIDEO ONLY, mobile friendly) */}
+              {isVideoMode && !isScreenSharing && (
+                <button
+                  type="button"
+                  className={`control-btn ${isCameraSwitching ? 'spinning' : ''}`}
+                  onClick={handleSwitchCamera}
+                  disabled={isCameraSwitching}
+                  title="Flip Camera (Front/Back)"
+                  aria-label="Flip Camera"
+                >
+                  <FlipCameraIcon />
+                </button>
+              )}
+
+              {/* 9. Network Diagnostics Toggle */}
+              <button
+                type="button"
+                className={`control-btn ${showDiagnostics ? 'active-primary' : ''}`}
+                onClick={() => setShowDiagnostics((prev) => !prev)}
+                title="Real-time Network Diagnostics"
+                aria-label="Network Diagnostics"
+              >
+                <ActivityIcon />
+              </button>
+
+              {/* 10. End Call Hangup Pill */}
               <button
                 type="button"
                 className="control-btn btn-end-call"
@@ -1202,6 +1327,65 @@ export default function CallModal() {
                 <span className="btn-end-call-label">Leave</span>
               </button>
             </div>
+
+            {/* Interactive Diagnostics Overlay Panel */}
+            {showDiagnostics && (
+              <div className="call-diagnostics-panel" role="dialog" aria-label="Call Diagnostics">
+                <div className="diag-header">
+                  <div className="diag-title">
+                    <ActivityIcon />
+                    <span>Real-time Network Diagnostics</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="diag-close-btn"
+                    onClick={() => setShowDiagnostics(false)}
+                    aria-label="Close Diagnostics"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="diagnostics-grid">
+                  <div className="diag-item">
+                    <span className="diag-label">ICE Route</span>
+                    <span className={`diag-val ${networkStats?.transportType?.includes('Relay') ? 'val-warning' : 'val-success'}`}>
+                      {networkStats?.transportType || 'Probing...'}
+                    </span>
+                  </div>
+                  <div className="diag-item">
+                    <span className="diag-label">Round Trip (RTT)</span>
+                    <span className="diag-val">{networkStats?.rtt !== undefined ? `${networkStats.rtt} ms` : 'Measuring...'}</span>
+                  </div>
+                  <div className="diag-item">
+                    <span className="diag-label">Packet Loss</span>
+                    <span className={`diag-val ${(networkStats?.packetLoss || 0) > 2 ? 'val-danger' : 'val-success'}`}>
+                      {networkStats?.packetLoss !== undefined ? `${networkStats.packetLoss}%` : '0%'}
+                    </span>
+                  </div>
+                  <div className="diag-item">
+                    <span className="diag-label">Audio Jitter</span>
+                    <span className="diag-val">{networkStats?.jitter !== undefined ? `${networkStats.jitter} ms` : '0 ms'}</span>
+                  </div>
+                  <div className="diag-item">
+                    <span className="diag-label">Bitrate (In / Out)</span>
+                    <span className="diag-val">{networkStats ? `↓ ${networkStats.inboundBitrate} / ↑ ${networkStats.outboundBitrate} kbps` : 'Calculating...'}</span>
+                  </div>
+                  <div className="diag-item">
+                    <span className="diag-label">Resolution & FPS</span>
+                    <span className="diag-val">{networkStats?.resolution || (isVideoMode ? '720p HD' : 'VoIP')} @ {networkStats?.fps || (isVideoMode ? 30 : 0)} fps</span>
+                  </div>
+                </div>
+                <div className="diag-actions">
+                  <button
+                    type="button"
+                    className="diag-restart-btn"
+                    onClick={() => webrtcService.restartIce()}
+                  >
+                    🔄 Force ICE Restart
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1491,6 +1675,22 @@ export default function CallModal() {
 
         .quality-chip {
           color: #10b981;
+          transition: all 0.2s ease;
+        }
+
+        .quality-chip.excellent {
+          color: #10b981;
+          border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .quality-chip.good {
+          color: #f59e0b;
+          border-color: rgba(245, 158, 11, 0.3);
+        }
+
+        .quality-chip.poor {
+          color: #ef4444;
+          border-color: rgba(239, 68, 68, 0.3);
         }
 
         .signal-bars {
@@ -1504,11 +1704,16 @@ export default function CallModal() {
           width: 2.5px;
           background: #10b981;
           border-radius: 1px;
+          transition: background 0.2s ease;
         }
 
         .signal-bars .bar-1 { height: 4px; }
         .signal-bars .bar-2 { height: 7px; }
         .signal-bars .bar-3 { height: 11px; }
+
+        .signal-bars .bar.bar-warning { background: #f59e0b; }
+        .signal-bars .bar.bar-danger { background: #ef4444; }
+        .signal-bars .bar.bar-inactive { background: rgba(255, 255, 255, 0.2); }
 
         .call-header-icon-btn {
           background: rgba(255, 255, 255, 0.08);
@@ -1968,6 +2173,132 @@ export default function CallModal() {
 
         .btn-end-call-label {
           letter-spacing: 0.3px;
+        }
+
+        .control-btn.spinning svg {
+          animation: spinCamera 0.6s ease;
+        }
+
+        @keyframes spinCamera {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(180deg); }
+        }
+
+        /* Diagnostics Overlay Panel */
+        .call-diagnostics-panel {
+          position: absolute;
+          top: 60px;
+          right: 16px;
+          width: 320px;
+          max-width: calc(100% - 32px);
+          background: rgba(15, 23, 42, 0.95);
+          backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          border-radius: 14px;
+          padding: 14px;
+          box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+          z-index: 50;
+          color: #e2e8f0;
+          font-size: 13px;
+          animation: fadeInDiag 0.2s ease;
+        }
+
+        @keyframes fadeInDiag {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .diag-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          padding-bottom: 8px;
+          margin-bottom: 10px;
+        }
+
+        .diag-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-weight: 700;
+          font-size: 13px;
+          color: #38bdf8;
+        }
+
+        .diag-close-btn {
+          background: none;
+          border: none;
+          color: #94a3b8;
+          font-size: 20px;
+          cursor: pointer;
+          padding: 0 4px;
+          line-height: 1;
+        }
+
+        .diag-close-btn:hover {
+          color: #ffffff;
+        }
+
+        .diagnostics-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .diag-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 3px 0;
+        }
+
+        .diag-label {
+          color: #94a3b8;
+          font-size: 12px;
+        }
+
+        .diag-val {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+          font-weight: 600;
+          font-size: 12px;
+          color: #f8fafc;
+        }
+
+        .diag-val.val-success {
+          color: #34d399;
+        }
+
+        .diag-val.val-warning {
+          color: #fbbf24;
+        }
+
+        .diag-val.val-danger {
+          color: #f87171;
+        }
+
+        .diag-actions {
+          margin-top: 12px;
+          padding-top: 10px;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .diag-restart-btn {
+          width: 100%;
+          padding: 8px 12px;
+          border-radius: 8px;
+          background: rgba(56, 189, 248, 0.15);
+          border: 1px solid rgba(56, 189, 248, 0.35);
+          color: #38bdf8;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .diag-restart-btn:hover {
+          background: rgba(56, 189, 248, 0.25);
+          border-color: #38bdf8;
         }
 
         /* Mobile responsiveness */

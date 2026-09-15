@@ -37,6 +37,14 @@ const config = {
     publicKey: process.env.VAPID_PUBLIC_KEY || 'BLVPwmEUJoZMU1ukVq-BkpOtiQKg3y0K0fjnxHj5JdzTdAHc8SzmPJ8Ktj46BdocS-zcz_Oj1Gk-WUEVwLuS0V8',
     privateKey: process.env.VAPID_PRIVATE_KEY || '_V5vcocKyq3Alceg0Nd1ED1JkPk7y2v5YmdOlURuhgA',
     subject: process.env.VAPID_SUBJECT || 'mailto:support@vibegrid.app'
+  },
+  turn: {
+    secret: process.env.TURN_SECRET || null,
+    domain: process.env.TURN_DOMAIN || 'turn.vibegrid.app',
+    port: parseInt(process.env.TURN_PORT, 10) || 3478,
+    tlsPort: parseInt(process.env.TURN_TLS_PORT, 10) || 5349,
+    meteredDomain: process.env.METERED_DOMAIN || null,
+    meteredApiKey: process.env.METERED_API_KEY || null
   }
 };
 
