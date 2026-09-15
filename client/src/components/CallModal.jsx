@@ -277,6 +277,40 @@ export default function CallModal() {
     } catch {}
   };
 
+  /**
+   * Unconditionally stops all media hardware and resets video elements
+   */
+  const stopAllMedia = () => {
+    stopRingtone();
+    webrtcService.endCall();
+
+    if (localVideoRef.current) {
+      if (localVideoRef.current.srcObject) {
+        try {
+          localVideoRef.current.srcObject.getTracks().forEach((t) => {
+            try { t.stop(); t.enabled = false; } catch {}
+          });
+        } catch {}
+      }
+      localVideoRef.current.srcObject = null;
+    }
+
+    if (remoteVideoRef.current) {
+      if (remoteVideoRef.current.srcObject) {
+        try {
+          remoteVideoRef.current.srcObject.getTracks().forEach((t) => {
+            try { t.stop(); t.enabled = false; } catch {}
+          });
+        } catch {}
+      }
+      remoteVideoRef.current.srcObject = null;
+    }
+
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
+  };
+
   // ==========================================================================
   // Socket Signaling Event Listeners
   // ==========================================================================
@@ -321,8 +355,7 @@ export default function CallModal() {
     // 3. Call Rejected / Busy
     const handleCallRejected = (data) => {
       console.log('❌ [Socket] Call rejected by peer:', data);
-      stopRingtone();
-      webrtcService.endCall();
+      stopAllMedia();
       setCallState(null);
       setCallData(null);
       setHasRemoteVideo(false);
@@ -330,10 +363,9 @@ export default function CallModal() {
     };
 
     // 4. Call Ended
-    const handleCallEnded = () => {
-      console.log('⏹️ [Socket] Call ended by peer');
-      stopRingtone();
-      webrtcService.endCall();
+    const handleCallEnded = (data) => {
+      console.log('⏹️ [Socket] Call ended by peer:', data?.reason || 'ended');
+      stopAllMedia();
       setCallState(null);
       setCallData(null);
       setHasRemoteVideo(false);
@@ -429,6 +461,7 @@ export default function CallModal() {
       }, (res) => {
         if (!res.success) {
           alert(res.error || 'Could not initiate call.');
+          stopAllMedia();
           setCallState(null);
           setCallData(null);
         } else {
@@ -534,8 +567,10 @@ export default function CallModal() {
       console.log('🔄 [CallModal] WebRTC connection state:', state);
       setConnectionStatus(state);
       if (state === 'connected' || state === 'completed') {
-        setCallState('connected');
         setTimeout(bindStreams, 50);
+      } else if (state === 'failed') {
+        alert('Call connection failed. Please check network connectivity.');
+        handleEndCall();
       }
     };
 
@@ -545,8 +580,7 @@ export default function CallModal() {
       if (
         pc.connectionState === 'connected' ||
         pc.iceConnectionState === 'connected' ||
-        pc.iceConnectionState === 'completed' ||
-        (webrtcService.remoteStream && webrtcService.remoteStream.getTracks().length > 0)
+        pc.iceConnectionState === 'completed'
       ) {
         setConnectionStatus('connected');
       }
@@ -609,43 +643,53 @@ export default function CallModal() {
     }
   }, [callState, isSwappedView, hasRemoteVideo, isSpeakerMuted]);
 
-  // Duration Timer
+  // Duration Timer (Only increments when call is genuinely connected)
   useEffect(() => {
-    if (callState === 'connected') {
-      setDurationSeconds(0);
+    if (callState === 'connected' && (connectionStatus === 'connected' || connectionStatus === 'completed')) {
       durationTimerRef.current = setInterval(() => {
         setDurationSeconds((prev) => prev + 1);
       }, 1000);
     } else {
       if (durationTimerRef.current) {
         clearInterval(durationTimerRef.current);
+        durationTimerRef.current = null;
+      }
+      if (callState !== 'connected') {
+        setDurationSeconds(0);
       }
     }
     return () => {
       if (durationTimerRef.current) {
         clearInterval(durationTimerRef.current);
+        durationTimerRef.current = null;
       }
     };
-  }, [callState]);
-
-  // Synchronize connected status once the call duration is active
-  useEffect(() => {
-    if (callState === 'connected' && durationSeconds >= 1 && connectionStatus !== 'connected') {
-      setConnectionStatus('connected');
-    }
-  }, [callState, durationSeconds, connectionStatus]);
+  }, [callState, connectionStatus]);
 
   // Consolidated live status for the active call
   const isLive =
     callState === 'connected' &&
-    (connectionStatus === 'connected' ||
-     connectionStatus === 'completed' ||
-     durationSeconds >= 1 ||
-     hasRemoteVideo ||
-     Boolean(webrtcService.remoteStream && webrtcService.remoteStream.getTracks().length > 0) ||
-     webrtcService.peerConnection?.connectionState === 'connected' ||
-     webrtcService.peerConnection?.iceConnectionState === 'connected' ||
-     webrtcService.peerConnection?.iceConnectionState === 'completed');
+    (connectionStatus === 'connected' || connectionStatus === 'completed');
+
+  // Window unload / pagehide listeners to stop camera if tab is closed or navigated
+  useEffect(() => {
+    const handleUnload = () => {
+      stopAllMedia();
+      if (callData?.callId && callData?.peer?.id) {
+        socketService.emit('call:end', {
+          callId: callData.callId,
+          targetUserId: callData.peer.id
+        });
+      }
+    };
+
+    window.addEventListener('beforeunload', handleUnload);
+    window.addEventListener('pagehide', handleUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload);
+      window.removeEventListener('pagehide', handleUnload);
+    };
+  }, [callData]);
 
   // Fullscreen event listener
   useEffect(() => {
@@ -812,7 +856,7 @@ export default function CallModal() {
   };
 
   const handleDeclineCall = () => {
-    stopRingtone();
+    stopAllMedia();
     socketService.emit('call:reject', {
       callId: callData?.callId,
       callerId: callData?.peer?.id,
@@ -820,19 +864,20 @@ export default function CallModal() {
     });
     setCallState(null);
     setCallData(null);
+    setConnectionStatus('connecting');
   };
 
   const handleEndCall = () => {
-    stopRingtone();
     if (callData?.callId) {
       socketService.emit('call:end', {
         callId: callData.callId,
         targetUserId: callData.peer?.id
       });
     }
-    webrtcService.endCall();
+    stopAllMedia();
     setCallState(null);
     setCallData(null);
+    setConnectionStatus('connecting');
     setIsAudioMuted(false);
     setIsVideoMuted(false);
     setIsScreenSharing(false);
@@ -840,6 +885,7 @@ export default function CallModal() {
     setIsMaximized(false);
     setIsSwappedView(false);
     setShowReactions(false);
+    setShowDiagnostics(false);
   };
 
   const handleToggleMute = () => {

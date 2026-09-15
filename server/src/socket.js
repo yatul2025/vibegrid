@@ -25,6 +25,8 @@ const { COOKIE_NAME } = require('./utils/jwt');
 
 // Map of userId -> count of active socket connections
 const onlineUsers = new Map();
+// Map of userId -> { callId, peerId } for active call cleanup
+const activeUserCalls = new Map();
 
 // Helper to parse cookies from handshake header
 function parseCookies(cookieHeader) {
@@ -365,6 +367,9 @@ function initSocket(httpServer) {
           console.warn('[Call Push Service Error]:', pushErr.message);
         }
 
+        activeUserCalls.set(userId, { callId, peerId: targetUserId });
+        activeUserCalls.set(targetUserId, { callId, peerId: userId });
+
         if (typeof callback === 'function') {
           callback({
             success: true,
@@ -381,6 +386,9 @@ function initSocket(httpServer) {
     // 2. Accept Call
     socket.on('call:accept', async ({ callId, callerId }) => {
       try {
+        activeUserCalls.set(userId, { callId, peerId: callerId });
+        activeUserCalls.set(callerId, { callId, peerId: userId });
+
         await query(
           `UPDATE calls SET status = 'connected' WHERE id = $1`,
           [callId]
@@ -410,6 +418,9 @@ function initSocket(httpServer) {
           `UPDATE call_participants SET status = 'rejected', left_at = CURRENT_TIMESTAMP WHERE call_id = $1 AND user_id = $2`,
           [callId, userId]
         );
+
+        activeUserCalls.delete(userId);
+        activeUserCalls.delete(callerId);
 
         socket.to(`user:${callerId}`).emit('call:rejected', {
           callId,
@@ -458,6 +469,9 @@ function initSocket(httpServer) {
           `UPDATE call_participants SET left_at = CURRENT_TIMESTAMP, duration_seconds = $2 WHERE call_id = $1 AND user_id = $3`,
           [callId, durationSeconds, userId]
         );
+
+        activeUserCalls.delete(userId);
+        if (targetUserId) activeUserCalls.delete(targetUserId);
 
         if (targetUserId) {
           socket.to(`user:${targetUserId}`).emit('call:ended', {
@@ -520,7 +534,18 @@ function initSocket(httpServer) {
       });
     });
 
-    // 7. WebRTC ICE Restart Request
+    // 7. Mid-Call Track State Synchronization (Mute / Camera Toggle)
+    socket.on('call:track-state', ({ targetUserId, callId, audioMuted, videoMuted }) => {
+      if (!targetUserId) return;
+      socket.to(`user:${targetUserId}`).emit('call:track-state', {
+        fromUserId: userId,
+        callId,
+        audioMuted,
+        videoMuted
+      });
+    });
+
+    // 8. ICE Restart Signaling Relay
     socket.on('call:ice-restart', ({ targetUserId, callId }) => {
       if (!targetUserId) return;
       socket.to(`user:${targetUserId}`).emit('call:ice-restart', {
@@ -529,18 +554,7 @@ function initSocket(httpServer) {
       });
     });
 
-    // 8. In-Call Audio / Video Track Mute Sync
-    socket.on('call:track-state', ({ targetUserId, callId, audioMuted, videoMuted }) => {
-      if (!targetUserId) return;
-      socket.to(`user:${targetUserId}`).emit('call:track-state', {
-        fromUserId: userId,
-        callId,
-        audioMuted: Boolean(audioMuted),
-        videoMuted: Boolean(videoMuted)
-      });
-    });
-
-    // 9. In-Call Real-Time Emoji Reaction Relay
+    // 9. Floating Reactions Relay
     socket.on('call:reaction', ({ targetUserId, emoji, callId }) => {
       if (!targetUserId || !emoji) return;
       socket.to(`user:${targetUserId}`).emit('call:reaction', {
@@ -554,6 +568,27 @@ function initSocket(httpServer) {
     // Disconnect Handler
     // ========================================================================
     socket.on('disconnect', async () => {
+      // 1. Terminate any active in-flight or connected call immediately
+      if (activeUserCalls.has(userId)) {
+        const activeCall = activeUserCalls.get(userId);
+        const { callId, peerId } = activeCall;
+        activeUserCalls.delete(userId);
+        activeUserCalls.delete(peerId);
+
+        try {
+          await query(
+            `UPDATE calls SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE id = $1 AND status != 'ended'`,
+            [callId]
+          );
+          socket.to(`user:${peerId}`).emit('call:ended', {
+            callId,
+            reason: 'peer_disconnected'
+          });
+        } catch (callErr) {
+          console.error('[Socket] Error terminating call on disconnect:', callErr.message);
+        }
+      }
+
       const remainingCount = Math.max(0, (onlineUsers.get(userId) || 1) - 1);
       if (remainingCount === 0) {
         onlineUsers.delete(userId);
