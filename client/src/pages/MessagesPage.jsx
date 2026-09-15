@@ -560,6 +560,38 @@ export default function MessagesPage({
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Auto-scroll to bottom of message thread (isolated to chat-stream container to prevent window shifting)
+  const scrollToBottom = useCallback((smooth = true) => {
+    const doScroll = () => {
+      if (messagesEndRef.current) {
+        try {
+          messagesEndRef.current.scrollIntoView({
+            behavior: smooth ? 'smooth' : 'auto',
+            block: 'end'
+          });
+        } catch {
+          if (chatStreamRef.current) {
+            chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
+          }
+        }
+      } else if (chatStreamRef.current) {
+        chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
+      }
+    };
+
+    doScroll();
+    requestAnimationFrame(doScroll);
+    setTimeout(doScroll, 60);
+    setTimeout(doScroll, 180);
+  }, []);
+
+  // Whenever new messages arrive or partner starts/stops typing, ensure thread is scrolled above typing bar
+  useEffect(() => {
+    if (messages.length > 0) {
+      scrollToBottom(true);
+    }
+  }, [messages.length, isPartnerTyping, scrollToBottom]);
+
   // Manage body class for active chat to optimize mobile viewport & hide bottom navigation
   useEffect(() => {
     if (activePartner) {
@@ -602,38 +634,6 @@ export default function MessagesPage({
       }, 1500);
     }
   };
-
-  // Auto-scroll to bottom of message thread (isolated to chat-stream container to prevent window shifting)
-  const scrollToBottom = useCallback((smooth = true) => {
-    const doScroll = () => {
-      if (messagesEndRef.current) {
-        try {
-          messagesEndRef.current.scrollIntoView({
-            behavior: smooth ? 'smooth' : 'auto',
-            block: 'end'
-          });
-        } catch {
-          if (chatStreamRef.current) {
-            chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
-          }
-        }
-      } else if (chatStreamRef.current) {
-        chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
-      }
-    };
-
-    doScroll();
-    requestAnimationFrame(doScroll);
-    setTimeout(doScroll, 60);
-    setTimeout(doScroll, 180);
-  }, []);
-
-  // Whenever new messages arrive or partner starts/stops typing, ensure thread is scrolled above typing bar
-  useEffect(() => {
-    if (messages.length > 0) {
-      scrollToBottom(true);
-    }
-  }, [messages.length, isPartnerTyping, scrollToBottom]);
 
   // ==========================================================================
   // 1. Initial Data Fetching (Conversations List)
