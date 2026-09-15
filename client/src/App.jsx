@@ -17,6 +17,24 @@ import e2eeService from './services/crypto/e2eeService';
 import AuthPromptModal from './components/AuthPromptModal';
 import DemoModeIndicator from './components/DemoModeIndicator';
 import { usePWA } from './services/pwaManager';
+import {
+  Home,
+  Compass,
+  PlusSquare,
+  Bell,
+  MessageSquare,
+  User,
+  Settings,
+  Activity,
+  Sun,
+  Moon,
+  Smartphone,
+  LogOut,
+  ChevronDown,
+  ChevronUp,
+  WifiOff,
+  Sparkles
+} from 'lucide-react';
 
 function AppContent() {
   const { user, loading, logout, isDemoMode, authModalState, closeAuthModal, guardDemoAction } = useAuth();
@@ -463,14 +481,18 @@ function AppContent() {
       {/* PWA Network & Update Notifications */}
       {isOffline && (
         <div className="pwa-network-status-banner offline" role="status" aria-live="polite">
-          <span className="pwa-status-icon">📡</span>
+          <span className="pwa-status-icon">
+            <WifiOff size={16} />
+          </span>
           <span className="pwa-status-text">You are currently offline. Cached feed and assets remain accessible.</span>
         </div>
       )}
       {hasUpdate && (
         <div className="pwa-update-banner" role="alert">
           <div className="pwa-update-info">
-            <span className="pwa-update-icon">✨</span>
+            <span className="pwa-update-icon">
+              <Sparkles size={16} />
+            </span>
             <span className="pwa-update-text">A new version of VibeGrid is ready!</span>
           </div>
           <button type="button" onClick={applyUpdate} className="pwa-update-action-btn">
@@ -538,7 +560,8 @@ function AppContent() {
                         navigateToTab('feed');
                       }}
                     >
-                      🏠 Feed
+                      <Home size={18} />
+                      <span>Feed</span>
                     </a>
                   </li>
 
@@ -551,7 +574,8 @@ function AppContent() {
                         navigateToTab('explore');
                       }}
                     >
-                      🔍 Explore
+                      <Compass size={18} />
+                      <span>Explore</span>
                     </a>
                   </li>
 
@@ -562,7 +586,8 @@ function AppContent() {
                       onClick={openCreatePost}
                       title="Create and share a new post"
                     >
-                      ➕ Create
+                      <PlusSquare size={18} />
+                      <span>Create</span>
                     </button>
                   </li>
 
@@ -576,7 +601,7 @@ function AppContent() {
                       }}
                       title="Activity Notifications"
                     >
-                      <span>🔔</span>
+                      <Bell size={18} />
                       <span className="nav-notifications-label">Notifications</span>
                       {unreadCount > 0 && (
                         <span className="nav-unread-badge">
@@ -596,7 +621,7 @@ function AppContent() {
                       }}
                       title="Direct Messages"
                     >
-                      <span>💬</span>
+                      <MessageSquare size={18} />
                       <span className="nav-messages-label">Messages</span>
                       {unreadMessagesCount > 0 && (
                         <span className="nav-unread-badge">
@@ -624,7 +649,7 @@ function AppContent() {
                         </span>
                       )}
                       <span className="nav-profile-name">@{user.username}</span>
-                      <span className="nav-chevron">{isProfileMenuOpen ? '▲' : '▼'}</span>
+                      <span className="nav-chevron">{isProfileMenuOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
                     </button>
 
                     {isProfileMenuOpen && (
@@ -654,7 +679,7 @@ function AppContent() {
                             setIsProfileMenuOpen(false);
                           }}
                         >
-                          <span className="dropdown-icon">👤</span>
+                          <span className="dropdown-icon"><User size={16} /></span>
                           <span>My Profile</span>
                         </button>
 
@@ -667,7 +692,7 @@ function AppContent() {
                             setIsProfileMenuOpen(false);
                           }}
                         >
-                          <span className="dropdown-icon">⚙️</span>
+                          <span className="dropdown-icon"><Settings size={16} /></span>
                           <span>Settings & Privacy</span>
                         </button>
 
@@ -681,7 +706,7 @@ function AppContent() {
                               navigateToTab('status');
                             }}
                           >
-                            <span className="dropdown-icon">📊</span>
+                            <span className="dropdown-icon"><Activity size={16} /></span>
                             <span>System Status</span>
                           </button>
                         )}
@@ -692,7 +717,7 @@ function AppContent() {
                           role="menuitem"
                           onClick={toggleTheme}
                         >
-                          <span className="dropdown-icon">{theme === 'dark' ? '☀️' : '🌙'}</span>
+                          <span className="dropdown-icon">{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}</span>
                           <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
                         </button>
 
@@ -706,7 +731,7 @@ function AppContent() {
                               setIsProfileMenuOpen(false);
                             }}
                           >
-                            <span className="dropdown-icon">📲</span>
+                            <span className="dropdown-icon"><Smartphone size={16} /></span>
                             <span>Install VibeGrid App</span>
                           </button>
                         )}
@@ -722,7 +747,7 @@ function AppContent() {
                             logout();
                           }}
                         >
-                          <span className="dropdown-icon">🚪</span>
+                          <span className="dropdown-icon"><LogOut size={16} /></span>
                           <span>Sign Out</span>
                         </button>
                       </div>
@@ -740,7 +765,8 @@ function AppContent() {
                         navigateToTab('feed');
                       }}
                     >
-                      🏠 Feed
+                      <Home size={18} />
+                      <span>Feed</span>
                     </a>
                   </li>
 
@@ -753,7 +779,8 @@ function AppContent() {
                         navigateToTab('explore');
                       }}
                     >
-                      🔍 Explore
+                      <Compass size={18} />
+                      <span>Explore</span>
                     </a>
                   </li>
 
@@ -766,7 +793,8 @@ function AppContent() {
                         navigateToTab('auth');
                       }}
                     >
-                      👤 Sign In / Register
+                      <User size={18} />
+                      <span>Sign In / Register</span>
                     </a>
                   </li>
 
@@ -778,7 +806,8 @@ function AppContent() {
                         onClick={promptInstall}
                         title="Install VibeGrid as Progressive Web App"
                       >
-                        📲 Install App
+                        <Smartphone size={18} />
+                        <span>Install App</span>
                       </button>
                     </li>
                   )}
@@ -791,7 +820,7 @@ function AppContent() {
                       title="Toggle Dark/Light Mode"
                       aria-label="Toggle dark/light theme"
                     >
-                      {theme === 'dark' ? '☀️' : '🌙'}
+                      {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
                     </button>
                   </li>
                 </>
@@ -809,7 +838,8 @@ function AppContent() {
                 title="Install VibeGrid"
                 aria-label="Install App"
               >
-                📲 Install
+                <Smartphone size={14} />
+                <span>Install</span>
               </button>
             )}
 
@@ -819,7 +849,7 @@ function AppContent() {
               title="Toggle Dark/Light Mode"
               aria-label="Toggle dark/light theme"
             >
-              {theme === 'dark' ? '☀️' : '🌙'}
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
             {user ? (
@@ -830,7 +860,7 @@ function AppContent() {
                   title="Direct Messages"
                   aria-label="Direct Messages"
                 >
-                  <span>💬</span>
+                  <MessageSquare size={18} />
                   {unreadMessagesCount > 0 && (
                     <span className="nav-unread-badge-mobile">
                       {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
@@ -844,7 +874,7 @@ function AppContent() {
                   title="Settings & Privacy"
                   aria-label="Settings & Privacy"
                 >
-                  <span>⚙️</span>
+                  <Settings size={18} />
                 </button>
               </>
             ) : (
@@ -938,7 +968,7 @@ function AppContent() {
                 }}
                 title="Home Feed"
               >
-                <span className="mobile-nav-icon">🏠</span>
+                <span className="mobile-nav-icon"><Home size={20} /></span>
                 <span className="mobile-nav-label">Feed</span>
               </a>
             </li>
@@ -953,7 +983,7 @@ function AppContent() {
                 }}
                 title="Explore"
               >
-                <span className="mobile-nav-icon">🔍</span>
+                <span className="mobile-nav-icon"><Compass size={20} /></span>
                 <span className="mobile-nav-label">Explore</span>
               </a>
             </li>
@@ -965,7 +995,7 @@ function AppContent() {
                 onClick={openCreatePost}
                 title="Create Post"
               >
-                <span className="mobile-nav-create-icon">➕</span>
+                <span className="mobile-nav-create-icon"><PlusSquare size={20} /></span>
               </button>
             </li>
 
@@ -980,7 +1010,7 @@ function AppContent() {
                 title="Activity Notifications"
               >
                 <span className="mobile-nav-icon">
-                  🔔
+                  <Bell size={20} />
                   {unreadCount > 0 && (
                     <span className="mobile-nav-badge">
                       {unreadCount > 99 ? '99+' : unreadCount}

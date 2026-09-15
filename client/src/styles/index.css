@@ -6899,6 +6899,9 @@ a.mobile-nav-item {
 .mobile-nav-icon {
   font-size: 1.25rem;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .mobile-nav-label {
@@ -9906,6 +9909,9 @@ select.form-input option,
   font-size: 0.65rem;
   color: var(--text-secondary);
   margin-left: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .nav-profile-dropdown {
@@ -10026,6 +10032,7 @@ select.form-input option,
   width: 20px;
   display: inline-flex;
   justify-content: center;
+  align-items: center;
 }
 
 /* 5. Two-Level Feed Filter Hierarchy */

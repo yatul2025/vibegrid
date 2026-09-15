@@ -2483,7 +2483,7 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
               </div>
               <div className="diagnostics-row">
                 <span className="diagnostics-label">PWA Version</span>
-                <span className="diagnostics-value">vibegrid-pwa-v17</span>
+                <span className="diagnostics-value">vibegrid-pwa-v18</span>
               </div>
               <div className="diagnostics-row">
                 <span className="diagnostics-label">Platform Notes</span>

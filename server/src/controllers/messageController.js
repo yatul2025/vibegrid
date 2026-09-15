@@ -537,7 +537,11 @@ const sendMessage = async (req, res, next) => {
     // Update conversation timestamp
     await query('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [conversationId]);
     // Ephemeral typing cleanup: sender has sent message, so they are no longer typing
-    await query('DELETE FROM chat_typing WHERE user_id = $1', [senderId]).catch(() => {});
+    try {
+      await query('DELETE FROM chat_typing WHERE user_id = $1', [senderId]);
+    } catch (typingErr) {
+      // ignore typing cleanup failure
+    }
 
     // Real-time broadcast to recipient and conversation room
     const io = req.app.get('io');
