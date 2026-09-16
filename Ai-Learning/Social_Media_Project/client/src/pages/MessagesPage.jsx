@@ -80,7 +80,8 @@ import {
   Archive,
   ArchiveRestore,
   Flag,
-  PinOff
+  PinOff,
+  ChevronDown
 } from 'lucide-react';
 
 function playNotificationChime() {
@@ -257,6 +258,8 @@ export default function MessagesPage({
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [showMediaWhenTyping, setShowMediaWhenTyping] = useState(false);
+  const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
+  const [newMessagesWhileScrolledUp, setNewMessagesWhileScrolledUp] = useState(0);
 
   // Advanced Security & Media States
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
@@ -381,6 +384,9 @@ export default function MessagesPage({
   const isInitialPartnerLoadRef = useRef(true);
   const activePartnerUsernameRef = useRef(null);
   const prevMessagesLengthRef = useRef(0);
+  const isNearBottomRef = useRef(true);
+  const isInputFocusedRef = useRef(isInputFocused);
+  isInputFocusedRef.current = isInputFocused;
 
   // Ephemeral typing handlers with sticky hysteresis
   const handleIncomingTyping = useCallback((isTyping) => {
@@ -631,6 +637,9 @@ export default function MessagesPage({
     if (activePartner?.username !== activePartnerUsernameRef.current) {
       activePartnerUsernameRef.current = activePartner?.username || null;
       isInitialPartnerLoadRef.current = true;
+      isNearBottomRef.current = true;
+      setShowScrollBottomBtn(false);
+      setNewMessagesWhileScrolledUp(0);
       prevMessagesLengthRef.current = 0;
     }
   }, [activePartner?.username]);
@@ -661,6 +670,29 @@ export default function MessagesPage({
     setTimeout(doScroll, 120);
   }, []);
 
+  // Handle scroll events in chat stream: tracks isNearBottom and toggles floating jump-to-bottom button
+  const handleChatStreamScroll = useCallback(() => {
+    if (contextMenu) setContextMenu(null);
+    if (selectedMessageForActionRef.current) {
+      setSelectedMessageForAction(null);
+      setIsActionBarMoreOpen(false);
+    }
+
+    const el = chatStreamRef.current;
+    if (!el) return;
+
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = distFromBottom < 120;
+    isNearBottomRef.current = nearBottom;
+
+    if (nearBottom) {
+      setShowScrollBottomBtn(false);
+      setNewMessagesWhileScrolledUp(0);
+    } else {
+      setShowScrollBottomBtn(true);
+    }
+  }, [contextMenu]);
+
   // WhatsApp-grade instant bottom placement before browser paint on initial message load
   useLayoutEffect(() => {
     if (isInitialPartnerLoadRef.current && messages.length > 0 && !loadingMessages) {
@@ -678,17 +710,39 @@ export default function MessagesPage({
     }
 
     if (isInitialPartnerLoadRef.current) {
-      // Instant snap on initial load — do NOT animate down from top!
+      // Instant snap on initial load — start from bottom as WA does
       scrollToBottom(false);
       isInitialPartnerLoadRef.current = false;
       prevMessagesLengthRef.current = messages.length;
+      isNearBottomRef.current = true;
+      setShowScrollBottomBtn(false);
+      setNewMessagesWhileScrolledUp(0);
       return;
     }
 
-    // Only smooth scroll for subsequent incoming/outgoing messages or typing indicator updates
-    if (messages.length > prevMessagesLengthRef.current || isPartnerTyping) {
+    const hasNewMessages = messages.length > prevMessagesLengthRef.current;
+    const addedCount = hasNewMessages ? messages.length - prevMessagesLengthRef.current : 0;
+    const lastMsg = messages[messages.length - 1];
+
+    if (hasNewMessages && lastMsg?.is_mine) {
+      // Current user sent a message: scroll to bottom
       scrollToBottom(true);
+      isNearBottomRef.current = true;
+      setShowScrollBottomBtn(false);
+      setNewMessagesWhileScrolledUp(0);
+    } else if (isNearBottomRef.current) {
+      // User is currently at the bottom watching the conversation: keep them at bottom
+      if (hasNewMessages || isPartnerTyping) {
+        scrollToBottom(true);
+      }
+    } else {
+      // USER IS SCROLLED UP READING OLD SMS:
+      // DO NOT scroll to bottom! Preserve user's reading position!
+      if (hasNewMessages) {
+        setNewMessagesWhileScrolledUp((prev) => prev + addedCount);
+      }
     }
+
     prevMessagesLengthRef.current = messages.length;
   }, [messages.length, isPartnerTyping, scrollToBottom]);
 
@@ -716,20 +770,22 @@ export default function MessagesPage({
         if (vv) {
           document.documentElement.style.setProperty('--chat-viewport-height', `${vv.height}px`);
         }
-        scrollToBottom(false);
+        // Only scroll to bottom if user is already near bottom or actively typing in the input
+        if (isNearBottomRef.current || isInputFocusedRef.current) {
+          scrollToBottom(false);
+        }
       }
     };
 
     window.visualViewport.addEventListener('resize', handleVisualViewportChange);
-    window.visualViewport.addEventListener('scroll', handleVisualViewportChange);
+    // Note: Do NOT attach to visualViewport 'scroll' event, as user scrolling the chat fires it on mobile
     handleVisualViewportChange();
 
     return () => {
       window.visualViewport.removeEventListener('resize', handleVisualViewportChange);
-      window.visualViewport.removeEventListener('scroll', handleVisualViewportChange);
       document.documentElement.style.removeProperty('--chat-viewport-height');
     };
-  }, [scrollToBottom, activePartner]);
+  }, [scrollToBottom]);
 
   // ==========================================================================
   // 1. Initial Data Fetching (Conversations List)
@@ -839,6 +895,29 @@ export default function MessagesPage({
         setUnreadDividerCount(unreadCount);
 
         setMessages((prev) => {
+          if (!isInitialLoad && prev.length === decryptedMessages.length && prev.length > 0) {
+            const isUnchanged =
+              prev[0]?.id === decryptedMessages[0]?.id &&
+              prev[prev.length - 1]?.id === decryptedMessages[decryptedMessages.length - 1]?.id &&
+              !decryptedMessages.some((msg, idx) => {
+                const old = prev[idx];
+                return (
+                  !old ||
+                  old.id !== msg.id ||
+                  old.content !== msg.content ||
+                  old.is_read !== msg.is_read ||
+                  old.delivered_at !== msg.delivered_at ||
+                  old.is_deleted !== msg.is_deleted ||
+                  old.edited_at !== msg.edited_at ||
+                  old.is_starred !== msg.is_starred ||
+                  (old.reactions?.length || 0) !== (msg.reactions?.length || 0)
+                );
+              });
+            if (isUnchanged) {
+              return prev;
+            }
+          }
+
           if (!isInitialLoad && decryptedMessages.length > prev.length) {
             const lastMsg = decryptedMessages[decryptedMessages.length - 1];
             if (lastMsg && !lastMsg.is_mine) {
@@ -1253,7 +1332,9 @@ export default function MessagesPage({
     adjustChatInputHeight();
     const rafId = requestAnimationFrame(() => {
       adjustChatInputHeight();
-      scrollToBottom(false);
+      if (isNearBottomRef.current) {
+        scrollToBottom(false);
+      }
     });
     return () => cancelAnimationFrame(rafId);
   }, [messageInput, scrollToBottom]);
@@ -3186,10 +3267,7 @@ export default function MessagesPage({
               <div
                 className="chat-stream"
                 ref={chatStreamRef}
-                onScroll={() => {
-                  if (contextMenu) setContextMenu(null);
-                  if (selectedMessageForAction) handleDeselectMessage();
-                }}
+                onScroll={handleChatStreamScroll}
                 onClick={(e) => {
                   if (selectedMessageForAction && e.target === chatStreamRef.current) {
                     handleDeselectMessage();
@@ -3485,6 +3563,29 @@ export default function MessagesPage({
 
                 <div ref={messagesEndRef} className="chat-stream-bottom-anchor" />
               </div>
+
+              {/* WhatsApp-Style Floating Scroll-to-Bottom Button */}
+              {showScrollBottomBtn && (
+                <button
+                  type="button"
+                  className="btn-scroll-bottom-floating"
+                  onClick={() => {
+                    scrollToBottom(true);
+                    setShowScrollBottomBtn(false);
+                    setNewMessagesWhileScrolledUp(0);
+                  }}
+                  title="Scroll to latest messages"
+                  aria-label="Scroll to bottom"
+                  data-testid="scroll-to-bottom-btn"
+                >
+                  <ChevronDown size={20} />
+                  {newMessagesWhileScrolledUp > 0 && (
+                    <span className="scroll-bottom-badge">
+                      {newMessagesWhileScrolledUp}
+                    </span>
+                  )}
+                </button>
+              )}
 
               {/* Chat Composer Bar */}
               <div className="chat-composer-container">
@@ -5585,6 +5686,66 @@ export default function MessagesPage({
 
         .vg-wa-react-btn:active {
           transform: scale(0.95);
+        }
+
+        /* WhatsApp-style Floating Scroll-to-Bottom Button */
+        .btn-scroll-bottom-floating {
+          position: absolute;
+          right: 20px;
+          bottom: 84px;
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          background: var(--bg-card, #1e293b);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+          color: var(--text-primary, #ffffff);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+          cursor: pointer;
+          z-index: 35;
+          transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+          animation: waBtnFadeIn 0.18s ease-out;
+        }
+
+        .btn-scroll-bottom-floating:hover {
+          transform: translateY(-2px);
+          background: var(--bg-hover, #334155);
+          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+        }
+
+        .btn-scroll-bottom-floating:active {
+          transform: scale(0.92);
+        }
+
+        @keyframes waBtnFadeIn {
+          from {
+            opacity: 0;
+            transform: scale(0.8) translateY(8px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+
+        .scroll-bottom-badge {
+          position: absolute;
+          top: -6px;
+          right: -6px;
+          background: #22c55e;
+          color: #ffffff;
+          font-size: 0.72rem;
+          font-weight: 700;
+          min-width: 20px;
+          height: 20px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0 5px;
+          box-shadow: 0 2px 6px rgba(34, 197, 94, 0.5);
         }
 
         /* ===== Floating Context Menu ===== */

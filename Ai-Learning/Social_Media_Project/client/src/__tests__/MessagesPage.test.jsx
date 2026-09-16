@@ -1356,6 +1356,141 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
       expect(screen.getByText('Select Multiple')).toBeInTheDocument();
     });
   });
+
+  describe('Scroll Preservation & Floating Jump-to-Bottom Button', () => {
+    function ScrollPreservationComponent({
+      isNearBottom,
+      messages,
+      isPartnerTyping,
+      scrollToBottom = vi.fn()
+    }) {
+      const prevLengthRef = React.useRef(messages.length);
+      const [newCount, setNewCount] = React.useState(0);
+      const isNearBottomRef = React.useRef(isNearBottom);
+      isNearBottomRef.current = isNearBottom;
+
+      React.useEffect(() => {
+        const hasNew = messages.length > prevLengthRef.current;
+        const lastMsg = messages[messages.length - 1];
+
+        if (hasNew && lastMsg?.is_mine) {
+          scrollToBottom(true);
+        } else if (isNearBottomRef.current) {
+          if (hasNew || isPartnerTyping) {
+            scrollToBottom(true);
+          }
+        } else {
+          // Scrolled up: do not scroll!
+          if (hasNew) {
+            setNewCount((prev) => prev + (messages.length - prevLengthRef.current));
+          }
+        }
+        prevLengthRef.current = messages.length;
+      }, [messages, isPartnerTyping, scrollToBottom]);
+
+      return (
+        <div>
+          {!isNearBottom && (
+            <button
+              type="button"
+              data-testid="scroll-to-bottom-btn"
+              onClick={() => scrollToBottom(true)}
+              aria-label="Scroll to bottom"
+            >
+              ↓
+              {newCount > 0 && <span data-testid="badge">{newCount}</span>}
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    it('does NOT scroll to bottom when user is scrolled up reading old SMS during incoming messages or typing', () => {
+      const scrollToBottom = vi.fn();
+      const { rerender } = render(
+        <ScrollPreservationComponent
+          isNearBottom={false}
+          messages={[{ id: 1, content: 'Old SMS', is_mine: false }]}
+          isPartnerTyping={false}
+          scrollToBottom={scrollToBottom}
+        />
+      );
+
+      expect(scrollToBottom).not.toHaveBeenCalled();
+
+      // Partner starts typing while scrolled up
+      rerender(
+        <ScrollPreservationComponent
+          isNearBottom={false}
+          messages={[{ id: 1, content: 'Old SMS', is_mine: false }]}
+          isPartnerTyping={true}
+          scrollToBottom={scrollToBottom}
+        />
+      );
+      expect(scrollToBottom).not.toHaveBeenCalled();
+
+      // New incoming message from partner while scrolled up
+      rerender(
+        <ScrollPreservationComponent
+          isNearBottom={false}
+          messages={[
+            { id: 1, content: 'Old SMS', is_mine: false },
+            { id: 2, content: 'New SMS', is_mine: false }
+          ]}
+          isPartnerTyping={false}
+          scrollToBottom={scrollToBottom}
+        />
+      );
+      expect(scrollToBottom).not.toHaveBeenCalled();
+
+      // Floating button shows badge with 1 new message
+      expect(screen.getByTestId('badge')).toHaveTextContent('1');
+    });
+
+    it('scrolls to bottom when user clicks floating jump-to-bottom button', () => {
+      const scrollToBottom = vi.fn();
+      render(
+        <ScrollPreservationComponent
+          isNearBottom={false}
+          messages={[{ id: 1, content: 'Old SMS', is_mine: false }]}
+          isPartnerTyping={false}
+          scrollToBottom={scrollToBottom}
+        />
+      );
+
+      const scrollBtn = screen.getByTestId('scroll-to-bottom-btn');
+      expect(scrollBtn).toBeInTheDocument();
+      fireEvent.click(scrollBtn);
+
+      expect(scrollToBottom).toHaveBeenCalledWith(true);
+    });
+
+    it('scrolls to bottom on new incoming message when user is already at the bottom', () => {
+      const scrollToBottom = vi.fn();
+      const { rerender } = render(
+        <ScrollPreservationComponent
+          isNearBottom={true}
+          messages={[{ id: 1, content: 'Old SMS', is_mine: false }]}
+          isPartnerTyping={false}
+          scrollToBottom={scrollToBottom}
+        />
+      );
+
+      rerender(
+        <ScrollPreservationComponent
+          isNearBottom={true}
+          messages={[
+            { id: 1, content: 'Old SMS', is_mine: false },
+            { id: 2, content: 'New SMS', is_mine: false }
+          ]}
+          isPartnerTyping={false}
+          scrollToBottom={scrollToBottom}
+        />
+      );
+
+      expect(scrollToBottom).toHaveBeenCalledWith(true);
+    });
+  });
 });
 
 
