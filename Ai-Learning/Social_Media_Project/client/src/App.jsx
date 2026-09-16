@@ -55,7 +55,7 @@ function AppContent() {
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('vibegrid_theme') || 'light';
   });
-  const [settingsSection, setSettingsSection] = useState('profile');
+  const [settingsSection, setSettingsSection] = useState('privacy');
   const [a11yStatus, setA11yStatus] = useState('');
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
@@ -131,15 +131,24 @@ function AppContent() {
 
   // Centralized Navigation with Browser History integration
   const navigateToTab = (newTab, options = {}) => {
-    const { viewedUser = null, replace = false, targetDM = null, force = false } = options;
-    if (!force && newTab === currentTab && viewedUser === viewedUsername && targetDM === directMessageTarget) {
+    const { viewedUser = null, replace = false, targetDM = null, force = false, section = null, subSection = null } = options;
+    if (!force && newTab === currentTab && viewedUser === viewedUsername && targetDM === directMessageTarget && (!section || section === settingsSection)) {
       return;
     }
     setCurrentTab(newTab);
     setViewedUsername(viewedUser);
     setDirectMessageTarget(targetDM);
+    if (section) {
+      setSettingsSection(section);
+    }
     if (typeof window !== 'undefined' && window.history) {
-      const stateObj = { tab: newTab, viewedUsername: viewedUser, targetDM };
+      const stateObj = {
+        tab: newTab,
+        viewedUsername: viewedUser,
+        targetDM,
+        section: section || (newTab === 'settings' ? (options.section !== undefined ? options.section : settingsSection) : null),
+        subSection: subSection !== null ? subSection : (newTab === 'settings' && section && !['privacy', 'overview'].includes(section))
+      };
       if (replace) {
         window.history.replaceState(stateObj, '');
       } else {
@@ -150,8 +159,9 @@ function AppContent() {
 
   // Open Settings helper
   const openSettings = (section = 'privacy') => {
+    const isSub = Boolean(section && !['privacy', 'overview'].includes(section));
     setSettingsSection(section);
-    navigateToTab('settings', { viewedUser: null });
+    navigateToTab('settings', { viewedUser: null, section, subSection: isSub });
   };
 
   const openCreatePost = () => {
@@ -214,6 +224,9 @@ function AppContent() {
         setCurrentTab(e.state.tab);
         setViewedUsername(e.state.viewedUsername || null);
         setDirectMessageTarget(e.state.targetDM || null);
+        if (e.state.section) {
+          setSettingsSection(e.state.section);
+        }
       } else {
         // If popped beyond recorded history, check if on feed or sub-tab
         if (currentTab !== 'feed') {

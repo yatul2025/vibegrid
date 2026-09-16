@@ -45,9 +45,17 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
   // Active section: 'profile' | 'contact' | 'security' | 'privacy' | 'notifications' | 'danger'
   const [activeSection, setActiveSection] = useState(initialSection || 'privacy');
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  const [mobileViewingSection, setMobileViewingSection] = useState(
-    window.innerWidth > 768 || (initialSection && !['privacy', 'overview'].includes(initialSection))
-  );
+  const [mobileViewingSection, setMobileViewingSection] = useState(() => {
+    if (typeof window !== 'undefined' && window.history?.state?.tab === 'settings' && window.history?.state?.subSection !== undefined) {
+      return Boolean(window.history.state.subSection);
+    }
+    return window.innerWidth > 768 || (initialSection && !['privacy', 'overview'].includes(initialSection));
+  });
+
+  const mobileViewingSectionRef = useRef(mobileViewingSection);
+  useEffect(() => {
+    mobileViewingSectionRef.current = mobileViewingSection;
+  }, [mobileViewingSection]);
 
   // Global message banner for settings
   const [feedbackMsg, setFeedbackMsg] = useState(null);
@@ -201,12 +209,39 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Synchronize with native back gestures and browser history for settings sub-sections
+  useEffect(() => {
+    const handleSettingsPopState = (e) => {
+      if (mobileViewingSectionRef.current) {
+        if (!e.state || e.state.tab !== 'settings' || !e.state.subSection) {
+          setMobileViewingSection(false);
+          if (e.state?.section) {
+            setActiveSection(e.state.section);
+          }
+        } else if (e.state?.section) {
+          setActiveSection(e.state.section);
+        }
+      } else if (e.state && e.state.tab === 'settings' && e.state.subSection && e.state.section) {
+        setActiveSection(e.state.section);
+        setMobileViewingSection(true);
+      }
+    };
+
+    window.addEventListener('popstate', handleSettingsPopState);
+    return () => window.removeEventListener('popstate', handleSettingsPopState);
+  }, []);
+
   // Update section from props if provided
   useEffect(() => {
     if (initialSection) {
       setActiveSection(initialSection);
       if (isMobile) {
-        setMobileViewingSection(!['privacy', 'overview'].includes(initialSection));
+        const hasHistorySub = typeof window !== 'undefined' && window.history?.state?.tab === 'settings' && window.history?.state?.subSection !== undefined;
+        if (hasHistorySub) {
+          setMobileViewingSection(Boolean(window.history.state.subSection));
+        } else {
+          setMobileViewingSection(!['privacy', 'overview'].includes(initialSection));
+        }
       }
     }
   }, [initialSection, isMobile]);
@@ -933,6 +968,27 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
 
   const currentPassStrength = getPasswordStrength(newPassword);
 
+  const handleSelectSection = (catId) => {
+    setActiveSection(catId);
+    if (isMobile) {
+      setMobileViewingSection(true);
+      if (typeof window !== 'undefined' && window.history) {
+        window.history.pushState(
+          { tab: 'settings', section: catId, subSection: true },
+          ''
+        );
+      }
+    }
+  };
+
+  const handleBackToMenu = () => {
+    if (typeof window !== 'undefined' && window.history && window.history.state?.tab === 'settings' && window.history.state?.subSection) {
+      window.history.back();
+    } else {
+      setMobileViewingSection(false);
+    }
+  };
+
   if (loadingProfile && !profile) {
     return (
       <div className="settings-page-wrapper">
@@ -954,7 +1010,7 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
               <button
                 type="button"
                 className="settings-back-btn"
-                onClick={() => setMobileViewingSection(false)}
+                onClick={handleBackToMenu}
                 title="Back to Settings menu"
                 aria-label="Back to Settings menu"
               >
@@ -1057,8 +1113,7 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
                         className={`settings-nav-item ${activeSection === cat.id ? 'active' : ''}`}
                         onClick={(e) => {
                           e.preventDefault();
-                          setActiveSection(cat.id);
-                          if (isMobile) setMobileViewingSection(true);
+                          handleSelectSection(cat.id);
                         }}
                         style={{ textDecoration: 'none' }}
                       >
