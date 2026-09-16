@@ -109,4 +109,68 @@ describe('App Component Root Integration Test', () => {
     // Remains on Settings tab
     expect(sessionStorage.getItem('vibegrid_active_tab')).toBe('settings');
   });
+
+  it('correctly switches pages via swipe gestures (Feed -> Explore -> Messages -> Explore -> Feed)', async () => {
+    localStorage.setItem('vibegrid_user', JSON.stringify({
+      id: 1,
+      username: 'sophia_wander',
+      full_name: 'Sophia Laurent',
+      is_demo_session: true,
+      sessionType: 'demo'
+    }));
+
+    sessionStorage.setItem('vibegrid_active_tab', 'feed');
+    window.history.replaceState({ tab: 'feed', viewedUsername: null, root: true }, '');
+
+    const { container } = render(<App />);
+    expect(container).toBeDefined();
+
+    // 1. Swipe Left on Feed (Home -> Explore)
+    await act(async () => {
+      window.dispatchEvent(new TouchEvent('touchstart', {
+        touches: [{ clientX: 200, clientY: 300 }]
+      }));
+      window.dispatchEvent(new TouchEvent('touchend', {
+        changedTouches: [{ clientX: 100, clientY: 305 }]
+      }));
+    });
+
+    expect(sessionStorage.getItem('vibegrid_active_tab')).toBe('explore');
+
+    // 2. Swipe Left on Explore (Explore -> Messages)
+    await act(async () => {
+      window.dispatchEvent(new TouchEvent('touchstart', {
+        touches: [{ clientX: 200, clientY: 300 }]
+      }));
+      window.dispatchEvent(new TouchEvent('touchend', {
+        changedTouches: [{ clientX: 100, clientY: 305 }]
+      }));
+    });
+
+    expect(sessionStorage.getItem('vibegrid_active_tab')).toBe('messages');
+
+    // 3. Swipe Right on Messages (Messages -> Explore)
+    await act(async () => {
+      window.dispatchEvent(new TouchEvent('touchstart', {
+        touches: [{ clientX: 100, clientY: 300 }]
+      }));
+      window.dispatchEvent(new TouchEvent('touchend', {
+        changedTouches: [{ clientX: 220, clientY: 305 }]
+      }));
+    });
+
+    expect(sessionStorage.getItem('vibegrid_active_tab')).toBe('explore');
+
+    // 4. Swipe Right on Explore (Explore -> Feed)
+    await act(async () => {
+      window.dispatchEvent(new TouchEvent('touchstart', {
+        touches: [{ clientX: 100, clientY: 300 }]
+      }));
+      window.dispatchEvent(new TouchEvent('touchend', {
+        changedTouches: [{ clientX: 220, clientY: 305 }]
+      }));
+    });
+
+    expect(sessionStorage.getItem('vibegrid_active_tab')).toBe('feed');
+  });
 });

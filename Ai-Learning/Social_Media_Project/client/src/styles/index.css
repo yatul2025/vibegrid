@@ -10713,3 +10713,38 @@ select.form-input option,
   color: rgba(255, 255, 255, 0.6);
 }
 
+/* ==========================================================================
+   Mobile Tab Swipe Navigation Transitions
+   ========================================================================== */
+@keyframes slideInFromRight {
+  0% {
+    opacity: 0.88;
+    transform: translate3d(24px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes slideInFromLeft {
+  0% {
+    opacity: 0.88;
+    transform: translate3d(-24px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.slide-nav-left {
+  animation: slideInFromRight 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.slide-nav-right {
+  animation: slideInFromLeft 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+

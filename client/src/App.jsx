@@ -56,6 +56,8 @@ function AppContent() {
     return localStorage.getItem('vibegrid_theme') || 'light';
   });
   const [settingsSection, setSettingsSection] = useState('privacy');
+  const [slideDirection, setSlideDirection] = useState(null);
+  const touchStartRef = useRef({ x: 0, y: 0, time: 0, isIgnored: false });
   const [a11yStatus, setA11yStatus] = useState('');
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
@@ -257,6 +259,180 @@ function AppContent() {
       if (exitToastTimeoutRef.current) clearTimeout(exitToastTimeoutRef.current);
     };
   }, [isCreatePostOpen, isNotificationsOpen, isProfileMenuOpen, currentTab]);
+
+  // Mobile/PWA Swipe Navigation (Feed <-> Explore <-> Messages <-> Activity <-> Profile)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user) return;
+
+    const handleTouchStart = (e) => {
+      if (e.touches.length !== 1) {
+        touchStartRef.current.isIgnored = true;
+        return;
+      }
+
+      const touch = e.touches[0];
+      const x = touch.clientX;
+      const y = touch.clientY;
+      const target = e.target;
+
+      // Ignore if starting near extreme viewport edges to avoid OS back/forward edge gestures
+      if (x < 24 || x > window.innerWidth - 24) {
+        touchStartRef.current.isIgnored = true;
+        return;
+      }
+
+      // Ignore if active chat is open in MessagesPage
+      if (typeof document !== 'undefined' && document.body.classList.contains('has-active-chat')) {
+        touchStartRef.current.isIgnored = true;
+        return;
+      }
+
+      // Ignore if inside text inputs, horizontal scrollbars, sliders, or media carousels
+      const ignoredSelector = [
+        'input',
+        'textarea',
+        'select',
+        '[contenteditable="true"]',
+        '[role="slider"]',
+        '.stories-bar',
+        '.stories-container',
+        '.story-tray',
+        '.story-slider',
+        '.image-slider',
+        '.carousel',
+        '[data-no-swipe]',
+        '.message-composer',
+        '.chat-messages-container',
+        '.messages-chat-view',
+        '.confirm-modal-overlay',
+        '.share-modal-overlay',
+        '.forward-modal-overlay',
+        '.story-viewer-modal',
+        '.image-lightbox-modal'
+      ].join(', ');
+
+      if (target.closest && target.closest(ignoredSelector)) {
+        touchStartRef.current.isIgnored = true;
+        return;
+      }
+
+      // Ignore if Create Post modal is open
+      if (isCreatePostOpen) {
+        touchStartRef.current.isIgnored = true;
+        return;
+      }
+
+      touchStartRef.current = {
+        x,
+        y,
+        time: Date.now(),
+        isIgnored: false
+      };
+    };
+
+    const handleTouchMove = (e) => {
+      if (touchStartRef.current.isIgnored || e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - touchStartRef.current.x;
+      const deltaY = touch.clientY - touchStartRef.current.y;
+
+      // Cancel if user is primarily scrolling vertically
+      if (Math.abs(deltaY) > 35 && Math.abs(deltaY) > Math.abs(deltaX) * 1.2) {
+        touchStartRef.current.isIgnored = true;
+      }
+    };
+
+    const handleTouchEnd = (e) => {
+      if (touchStartRef.current.isIgnored) return;
+      const touch = e.changedTouches?.[0];
+      if (!touch) return;
+
+      const deltaX = touch.clientX - touchStartRef.current.x;
+      const deltaY = touch.clientY - touchStartRef.current.y;
+      const deltaTime = Date.now() - touchStartRef.current.time;
+
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+
+      // Must be a distinct horizontal gesture (>= 50px) completed within 650ms and predominantly horizontal
+      if (deltaTime > 650 || absX < 50 || absX < absY * 1.4) {
+        return;
+      }
+
+      // 0: Feed, 1: Explore, 2: Messages, 3: Activity, 4: Profile
+      let currentIndex = -1;
+      if (isNotificationsOpen) {
+        currentIndex = 3;
+      } else if (currentTab === 'feed') {
+        currentIndex = 0;
+      } else if (currentTab === 'explore') {
+        currentIndex = 1;
+      } else if (currentTab === 'messages') {
+        currentIndex = 2;
+      } else if (currentTab === 'profile') {
+        currentIndex = 4;
+      }
+
+      if (currentIndex === -1) return;
+
+      if (deltaX < -50) {
+        // Swipe Left -> Next Page (Feed -> Explore -> Messages -> Activity -> Profile)
+        if (currentIndex < 4) {
+          triggerTabSwitch(currentIndex + 1, 'left');
+        }
+      } else if (deltaX > 50) {
+        // Swipe Right -> Previous Page (Profile <- Activity <- Messages <- Explore <- Feed)
+        if (currentIndex > 0) {
+          triggerTabSwitch(currentIndex - 1, 'right');
+        }
+      }
+    };
+
+    const triggerTabSwitch = (targetIndex, direction) => {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate(12); } catch {}
+      }
+
+      setSlideDirection(direction === 'left' ? 'slide-nav-left' : 'slide-nav-right');
+      setTimeout(() => setSlideDirection(null), 250);
+
+      const hadNotifications = isNotificationsOpen;
+
+      switch (targetIndex) {
+        case 0: // Feed
+          if (hadNotifications) setIsNotificationsOpen(false);
+          navigateToTab('feed', { replace: hadNotifications && window.history.state?.modal === 'notifications' });
+          break;
+        case 1: // Explore
+          if (hadNotifications) setIsNotificationsOpen(false);
+          navigateToTab('explore', { replace: hadNotifications && window.history.state?.modal === 'notifications' });
+          break;
+        case 2: // Messages
+          if (hadNotifications) setIsNotificationsOpen(false);
+          navigateToTab('messages', { replace: hadNotifications && window.history.state?.modal === 'notifications' });
+          break;
+        case 3: // Activity
+          openNotifications();
+          break;
+        case 4: // Profile
+          if (hadNotifications) setIsNotificationsOpen(false);
+          navigateToProfile(null);
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [user, currentTab, isNotificationsOpen, isCreatePostOpen]);
 
   // Handle Deep Links from Web Push Notifications or external URLs
   useEffect(() => {
@@ -924,7 +1100,7 @@ function AppContent() {
       </header>
 
       {/* Main Content Area */}
-      <main className={`main-content ${user ? 'has-bottom-nav' : ''} ${isOffline ? 'has-offline-banner' : ''}`}>
+      <main className={`main-content ${user ? 'has-bottom-nav' : ''} ${isOffline ? 'has-offline-banner' : ''} ${slideDirection || ''}`}>
         <ErrorBoundary>
           {currentTab === 'status' && (
             isTestUser ? (
