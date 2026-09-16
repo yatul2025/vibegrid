@@ -617,7 +617,7 @@ function AppContent() {
   }, [theme]);
 
   const toggleTheme = () => {
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+    setTheme((prev) => (['light', 'pastel-light'].includes(prev) ? 'dark' : 'light'));
   };
 
   const navigateToProfile = (username = null) => {
@@ -1154,6 +1154,8 @@ function AppContent() {
               <SettingsPage
                 initialSection={settingsSection}
                 onNavigateToProfile={(username) => navigateToProfile(username)}
+                currentTheme={theme}
+                onThemeChange={setTheme}
               />
             ) : (
               <AuthPage initialTab={authPageTab} />

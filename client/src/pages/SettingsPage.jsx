@@ -23,6 +23,7 @@ import { getDefaultAvatar, isDefaultAvatar } from '../utils/avatar';
 import ConfirmModal from '../components/ConfirmModal';
 import PasswordToggleButton from '../components/PasswordToggleIcon';
 import pushNotificationService from '../services/pushNotificationService';
+import { THEMES, getThemeById } from '../constants/themes';
 import {
   User,
   Mail,
@@ -34,12 +35,19 @@ import {
   ChevronRight,
   X,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Palette,
+  Check
 } from 'lucide-react';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
-export default function SettingsPage({ initialSection = 'privacy', onNavigateToProfile }) {
+export default function SettingsPage({
+  initialSection = 'privacy',
+  onNavigateToProfile,
+  currentTheme = 'dark',
+  onThemeChange
+}) {
   const { user: currentUser, updateUser, logout } = useAuth();
 
   // Active section: 'profile' | 'contact' | 'security' | 'privacy' | 'notifications' | 'danger'
@@ -60,6 +68,32 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
   // Global message banner for settings
   const [feedbackMsg, setFeedbackMsg] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null);
+
+  // Theme selection state
+  const [selectedTheme, setSelectedTheme] = useState(() => currentTheme || (typeof window !== 'undefined' ? localStorage.getItem('vibegrid_theme') : null) || 'dark');
+
+  useEffect(() => {
+    if (currentTheme) {
+      setSelectedTheme(currentTheme);
+    }
+  }, [currentTheme]);
+
+  const handleThemeSelect = (themeId) => {
+    setSelectedTheme(themeId);
+    if (onThemeChange) {
+      onThemeChange(themeId);
+    } else {
+      try {
+        localStorage.setItem('vibegrid_theme', themeId);
+        document.documentElement.setAttribute('data-theme', themeId);
+      } catch {}
+    }
+    const t = THEMES.find((item) => item.id === themeId);
+    setFeedbackMsg({
+      type: 'success',
+      text: `Applied "${t?.name || themeId}" theme!`
+    });
+  };
 
   // Profile data & form states (initialized with currentUser to prevent flash of empty/undefined data)
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -959,6 +993,7 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
   // Navigation category definitions
   const categories = [
     { id: 'profile', label: 'Edit Profile', icon: <User size={18} strokeWidth={1.75} />, description: 'Photo, name, bio & links' },
+    { id: 'appearance', label: 'Appearance & Themes', icon: <Palette size={18} strokeWidth={1.75} />, description: '10 selectable custom app themes' },
     { id: 'contact', label: 'Account & Contact', icon: <Mail size={18} strokeWidth={1.75} />, description: 'Email & phone verification' },
     { id: 'security', label: 'Password & Security', icon: <Lock size={18} strokeWidth={1.75} />, description: 'Password, sessions & devices' },
     { id: 'privacy', label: 'Privacy & Permissions', icon: <ShieldCheck size={18} strokeWidth={1.75} />, description: 'Account privacy, DMs & comments' },
@@ -1350,6 +1385,130 @@ export default function SettingsPage({ initialSection = 'privacy', onNavigateToP
                       </button>
                     </div>
                   </form>
+                </div>
+              )}
+
+              {/* ========================================================== */}
+              {/* CATEGORY: APPEARANCE & THEMES                               */}
+              {/* ========================================================== */}
+              {activeSection === 'appearance' && (
+                <div className="settings-section-body appearance-section-wrapper">
+                  <div className="settings-panel-header">
+                    <h3>🎨 Appearance & Themes</h3>
+                    <p>Customize VibeGrid with 10 hand-crafted themes. Changes apply instantly across the entire application.</p>
+                  </div>
+
+                  <div className="appearance-banner">
+                    <div className="appearance-banner-icon">
+                      <Palette size={22} />
+                    </div>
+                    <div className="appearance-banner-text">
+                      <h3>Active Theme: {getThemeById(selectedTheme).name}</h3>
+                      <p>
+                        Selected theme persists across refreshes, app restarts, and mobile PWA sessions.
+                        Enjoy high contrast readability across Feed, Explore, SMS/Messages, and Chat.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="themes-grid" role="radiogroup" aria-label="Theme selection">
+                    {THEMES.map((t) => {
+                      const isSelected = selectedTheme === t.id;
+                      return (
+                        <div
+                          key={t.id}
+                          className={`theme-card ${isSelected ? 'is-active' : ''}`}
+                          style={{ '--card-accent': t.primary }}
+                          onClick={() => handleThemeSelect(t.id)}
+                          role="radio"
+                          aria-checked={isSelected}
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              handleThemeSelect(t.id);
+                            }
+                          }}
+                        >
+                          <div className="theme-card-header">
+                            <div className="theme-card-title-group">
+                              <span className="theme-card-name">{t.name}</span>
+                              <span className="theme-badge">{t.badge}</span>
+                            </div>
+                            {isSelected ? (
+                              <div className="theme-check-indicator" title="Currently Active">
+                                <Check size={14} strokeWidth={3} />
+                              </div>
+                            ) : (
+                              <div className="theme-uncheck-indicator" />
+                            )}
+                          </div>
+
+                          {/* Interactive Mini-UI Preview Box */}
+                          <div
+                            className="theme-preview-box"
+                            style={{
+                              background: t.bgPage,
+                              borderColor: t.borderColor
+                            }}
+                          >
+                            <div className="theme-preview-header">
+                              <div className="theme-preview-dot-group">
+                                <span className="theme-preview-dot" style={{ background: t.primary }} />
+                                <span className="theme-preview-dot" style={{ background: t.textSecondary, opacity: 0.5 }} />
+                              </div>
+                              <span className="theme-preview-bar" style={{ background: t.borderColor }} />
+                            </div>
+
+                            <div className="theme-preview-bubbles">
+                              <div
+                                className="theme-preview-bubble-incoming"
+                                style={{
+                                  background: t.incomingBubble,
+                                  color: t.textPrimary,
+                                  border: `1px solid ${t.borderColor}`
+                                }}
+                              >
+                                Hey there! 👋
+                              </div>
+                              <div
+                                className="theme-preview-bubble-outgoing"
+                                style={{
+                                  background: t.outgoingBubble,
+                                  color: '#ffffff'
+                                }}
+                              >
+                                Love this theme! ✨
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Swatches Row */}
+                          <div className="theme-swatches-row" title="Palette swatches">
+                            {t.swatches.map((color, i) => (
+                              <span
+                                key={i}
+                                className="theme-swatch-circle"
+                                style={{ background: color }}
+                              />
+                            ))}
+                          </div>
+
+                          <p className="theme-card-desc">{t.description}</p>
+
+                          <div className="theme-card-footer">
+                            {isSelected ? (
+                              <span className="theme-active-status">
+                                <Check size={13} strokeWidth={2.5} /> Active Theme
+                              </span>
+                            ) : (
+                              <span className="theme-apply-btn">Apply Theme</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

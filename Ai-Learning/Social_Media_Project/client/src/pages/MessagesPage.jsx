@@ -5537,17 +5537,17 @@ export default function MessagesPage({
         }
 
         .message-bubble-row.outgoing .message-bubble {
-          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-          color: #ffffff;
+          background: var(--outgoing-bubble-bg, linear-gradient(135deg, #6366f1 0%, #4f46e5 100%));
+          color: var(--outgoing-bubble-text, #ffffff);
           border-radius: 18px 18px 4px 18px;
           box-shadow: 0 3px 12px rgba(99, 102, 241, 0.28);
         }
 
         .message-bubble-row.incoming .message-bubble {
-          background: var(--card-bg, #1a202c);
-          color: var(--text-primary, #f8fafc);
+          background: var(--incoming-bubble-bg, var(--card-bg, #1a202c));
+          color: var(--incoming-bubble-text, var(--text-primary, #f8fafc));
           border-radius: 18px 18px 18px 4px;
-          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+          border: 1px solid var(--incoming-bubble-border, var(--border-color, rgba(255, 255, 255, 0.08)));
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         }
 
