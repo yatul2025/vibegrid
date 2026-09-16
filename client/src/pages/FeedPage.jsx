@@ -68,8 +68,21 @@ const FEED_CATEGORIES = [
 
 export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
   const { user, guardDemoAction } = useAuth();
-  const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [posts, setPosts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('vibegrid_cached_feed');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(() => {
+    try {
+      return !localStorage.getItem('vibegrid_cached_feed');
+    } catch {
+      return true;
+    }
+  });
   const [error, setError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [moderatingId, setModeratingId] = useState(null);
@@ -159,6 +172,11 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
       if (res.success && fetchedPosts) {
         setPosts(fetchedPosts);
         setNewPostsAvailable([]);
+        try {
+          if (cat === 'all') {
+            localStorage.setItem('vibegrid_cached_feed', JSON.stringify(fetchedPosts));
+          }
+        } catch {}
       } else {
         setError(res.error || 'Failed to load feed.');
       }
@@ -167,10 +185,25 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
         const fallback = await apiClient.get('/posts/feed');
         if (fallback.success && fallback.data?.posts) {
           setPosts(fallback.data.posts);
+          try {
+            localStorage.setItem('vibegrid_cached_feed', JSON.stringify(fallback.data.posts));
+          } catch {}
           return;
         }
       } catch (fbErr) {
         // ignore
+      }
+      // If offline or network error and we have cached posts, show cached posts without error
+      const cached = localStorage.getItem('vibegrid_cached_feed');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPosts(parsed);
+            setError(null);
+            return;
+          }
+        } catch {}
       }
       setError(err.message || 'Error connecting to feed.');
     } finally {

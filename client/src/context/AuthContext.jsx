@@ -30,6 +30,18 @@ export const AuthProvider = ({ children }) => {
 
   // Check if user has an active session on initial page load (via HTTP-Only cookie)
   const checkAuth = async () => {
+    // If the browser/device is currently offline, preserve any cached user session
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const savedUser = localStorage.getItem('vibegrid_user');
+      if (savedUser) {
+        try {
+          setUser(JSON.parse(savedUser));
+        } catch {}
+      }
+      setLoading(false);
+      return;
+    }
+
     let timeoutId;
     try {
       if (!user) setLoading(true);
@@ -54,12 +66,33 @@ export const AuthProvider = ({ children }) => {
           return;
         }
       }
-      setUser(null);
-      localStorage.removeItem('vibegrid_user');
+
+      // Explicit authentication failure from server (e.g. 401 Unauthorized or 403 Forbidden)
+      if (res && (res.status === 401 || res.status === 403)) {
+        setUser(null);
+        localStorage.removeItem('vibegrid_user');
+      }
     } catch (err) {
-      // Not logged in, timeout, or expired cookie
-      setUser(null);
-      localStorage.removeItem('vibegrid_user');
+      // Check if the failure is a network or offline error
+      const isNetworkOrOfflineError =
+        (typeof navigator !== 'undefined' && !navigator.onLine) ||
+        err.name === 'AbortError' ||
+        err instanceof TypeError ||
+        (err.message && /network|fetch|offline|failed/i.test(err.message));
+
+      if (isNetworkOrOfflineError) {
+        // Retain current session or restore from localStorage — DO NOT wipe user on network failure!
+        const savedUser = localStorage.getItem('vibegrid_user');
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser));
+          } catch {}
+        }
+      } else {
+        // Unexpected authentication failure
+        setUser(null);
+        localStorage.removeItem('vibegrid_user');
+      }
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
       setLoading(false);
@@ -126,6 +159,12 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     checkAuth();
 
+    // Re-verify session in the background when connectivity is restored
+    const handleOnline = () => {
+      checkAuth();
+    };
+    window.addEventListener('online', handleOnline);
+
     // Listen for 401 Unauthorized broadcasts across the app to prevent stale state
     const handleSessionExpired = () => {
       setUser(null);
@@ -145,6 +184,7 @@ export const AuthProvider = ({ children }) => {
     window.addEventListener('vibegrid:session-expired', handleSessionExpired);
     window.addEventListener('vibegrid:demo-restricted', handleDemoRestricted);
     return () => {
+      window.removeEventListener('online', handleOnline);
       window.removeEventListener('vibegrid:session-expired', handleSessionExpired);
       window.removeEventListener('vibegrid:demo-restricted', handleDemoRestricted);
     };

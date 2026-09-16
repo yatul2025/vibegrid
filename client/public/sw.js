@@ -9,7 +9,7 @@
  * 4. Automatic cache cleanup on deployment and immediate client claiming
  */
 
-const CACHE_NAME = 'vibegrid-pwa-v28';
+const CACHE_NAME = 'vibegrid-pwa-v29';
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_ASSETS = [
@@ -132,7 +132,13 @@ self.addEventListener('fetch', (event) => {
   }
 
   // E. Public Feeds & Discoveries -> Network-First with Cache Fallback
-  if (url.pathname.startsWith('/api/feed') || url.pathname.startsWith('/api/stories/active') || url.pathname.startsWith('/api/hashtags/trending')) {
+  if (
+    url.pathname.startsWith('/api/feed') ||
+    url.pathname.startsWith('/api/posts/feed') ||
+    url.pathname.startsWith('/api/posts/explore') ||
+    url.pathname.startsWith('/api/stories/active') ||
+    url.pathname.startsWith('/api/hashtags/trending')
+  ) {
     event.respondWith(
       fetch(request)
         .then((networkResponse) => {

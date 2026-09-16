@@ -31,8 +31,21 @@ export default function ExplorePage({ onNavigateToProfile }) {
   const debounceRef = useRef(null);
 
   // Explore Posts State
-  const [posts, setPosts] = useState([]);
-  const [loadingPosts, setLoadingPosts] = useState(true);
+  const [posts, setPosts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('vibegrid_cached_explore');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loadingPosts, setLoadingPosts] = useState(() => {
+    try {
+      return !localStorage.getItem('vibegrid_cached_explore');
+    } catch {
+      return true;
+    }
+  });
   const [error, setError] = useState(null);
 
   // Trending Topics State (Phase 13)
@@ -53,10 +66,24 @@ export default function ExplorePage({ onNavigateToProfile }) {
       const res = await apiClient.get('/posts/explore');
       if (res.success && res.data?.posts) {
         setPosts(res.data.posts);
+        try {
+          localStorage.setItem('vibegrid_cached_explore', JSON.stringify(res.data.posts));
+        } catch {}
       } else {
         setError(res.error || 'Failed to load explore feed.');
       }
     } catch (err) {
+      const cached = localStorage.getItem('vibegrid_cached_explore');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPosts(parsed);
+            setError(null);
+            return;
+          }
+        } catch {}
+      }
       setError(err.message || 'Error loading explore posts.');
     } finally {
       setLoadingPosts(false);

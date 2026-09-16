@@ -377,15 +377,30 @@ function AppContent() {
       try {
         socketService.disconnect();
       } catch {}
-      setCurrentTab('auth');
-      try {
-        sessionStorage.removeItem('vibegrid_active_tab');
-        sessionStorage.removeItem('vibegrid_viewed_username');
-      } catch {}
+      const isCurrentlyOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (!isCurrentlyOffline) {
+        setCurrentTab('auth');
+        try {
+          sessionStorage.removeItem('vibegrid_active_tab');
+          sessionStorage.removeItem('vibegrid_viewed_username');
+        } catch {}
+      } else {
+        // When offline, default to cached feed if currently on auth tab
+        setCurrentTab((prev) => (prev === 'auth' ? 'feed' : prev));
+      }
       setUnreadCount(0);
       setUnreadMessagesCount(0);
     }
   }, [user, loading]);
+
+  // When system goes offline, ensure app does NOT redirect to auth and user can view cached feed
+  useEffect(() => {
+    const handleOffline = () => {
+      setCurrentTab((prev) => (prev === 'auth' ? 'feed' : prev));
+    };
+    window.addEventListener('offline', handleOffline);
+    return () => window.removeEventListener('offline', handleOffline);
+  }, []);
 
   // Persist active tab changes
   useEffect(() => {
