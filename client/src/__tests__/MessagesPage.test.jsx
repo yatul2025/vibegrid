@@ -1491,6 +1491,148 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
       expect(scrollToBottom).toHaveBeenCalledWith(true);
     });
   });
+
+  // =====================================================================
+  // WhatsApp Classic Top Action Bar & Back Gesture Popstate Tests
+  // =====================================================================
+  describe('WhatsApp Classic Top Action Bar & Back Gesture Navigation', () => {
+    function TopActionBarTestComponent({
+      selectedMessage,
+      onDeselect,
+      onReply,
+      onStar,
+      onDelete,
+      onForward,
+      onCopy,
+      isMoreOpen,
+      onToggleMore
+    }) {
+      if (!selectedMessage) return <div data-testid="normal-header">Normal Header</div>;
+
+      return (
+        <div className="chat-header chat-top-action-bar" data-testid="chat-top-action-bar">
+          <div className="top-action-bar-left">
+            <button
+              type="button"
+              className="btn-action-bar-back"
+              onClick={onDeselect}
+              title="Deselect message"
+              aria-label="Deselect message"
+            >
+              Back
+            </button>
+            <span className="action-bar-count">
+              <span className="count-num" data-testid="count-num">1</span>
+              <span className="count-label" data-testid="count-label"> selected</span>
+            </span>
+          </div>
+
+          <div className="top-action-bar-right">
+            <button type="button" className="btn-action-icon" onClick={onReply} aria-label="Reply">Reply</button>
+            <button type="button" className="btn-action-icon" onClick={onStar} aria-label="Star">Star</button>
+            <button type="button" className="btn-action-icon btn-action-danger" onClick={onDelete} aria-label="Delete">Delete</button>
+            <button type="button" className="btn-action-icon" onClick={onForward} aria-label="Forward">Forward</button>
+            <button type="button" className="btn-action-icon" onClick={onCopy} aria-label="Copy text">Copy</button>
+            <div className="action-bar-more-wrap">
+              <button type="button" className="btn-action-icon" onClick={onToggleMore} aria-label="More options">More</button>
+              {isMoreOpen && (
+                <div className="action-bar-more-dropdown" data-testid="more-dropdown">
+                  <button type="button" onClick={onCopy}>Copy</button>
+                  <button type="button">Pin</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    it('renders all 6 top action buttons and count spans when a message is selected', () => {
+      const onDeselect = vi.fn();
+      const onReply = vi.fn();
+      const onStar = vi.fn();
+      const onDelete = vi.fn();
+      const onForward = vi.fn();
+      const onCopy = vi.fn();
+      const onToggleMore = vi.fn();
+
+      render(
+        <TopActionBarTestComponent
+          selectedMessage={{ id: 42, content: 'Test message', is_mine: true }}
+          onDeselect={onDeselect}
+          onReply={onReply}
+          onStar={onStar}
+          onDelete={onDelete}
+          onForward={onForward}
+          onCopy={onCopy}
+          isMoreOpen={false}
+          onToggleMore={onToggleMore}
+        />
+      );
+
+      expect(screen.getByTestId('chat-top-action-bar')).toBeInTheDocument();
+      expect(screen.getByTestId('count-num')).toHaveTextContent('1');
+      expect(screen.getByTestId('count-label')).toHaveTextContent('selected');
+
+      expect(screen.getByRole('button', { name: 'Deselect message' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Reply' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Star' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Forward' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Copy text' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
+    });
+
+    it('renders Copy option inside the More dropdown as fallback', () => {
+      render(
+        <TopActionBarTestComponent
+          selectedMessage={{ id: 42, content: 'Test message', is_mine: true }}
+          onDeselect={vi.fn()}
+          onReply={vi.fn()}
+          onStar={vi.fn()}
+          onDelete={vi.fn()}
+          onForward={vi.fn()}
+          onCopy={vi.fn()}
+          isMoreOpen={true}
+          onToggleMore={vi.fn()}
+        />
+      );
+
+      const moreDropdown = screen.getByTestId('more-dropdown');
+      expect(moreDropdown).toBeInTheDocument();
+      expect(moreDropdown).toHaveTextContent('Copy');
+    });
+
+    it('intercepts popstate back gesture when a message is selected without leaving the chat', () => {
+      let selectedMsg = { id: 99, content: 'Hello' };
+      let activePartner = { username: 'alice' };
+      const setActivePartner = vi.fn((p) => { activePartner = p; });
+      const setSelectedMsg = vi.fn((m) => { selectedMsg = m; });
+
+      // Simulates the handlePopState logic
+      const simulatePopState = (e) => {
+        if (selectedMsg) {
+          setSelectedMsg(null);
+          return;
+        }
+        if (activePartner) {
+          if (!e.state || e.state.inChatWith !== activePartner.username) {
+            setActivePartner(null);
+          }
+        }
+      };
+
+      // 1st back gesture while message is selected: deselects message, does NOT exit chat
+      simulatePopState({ state: { tab: 'messages', inChatWith: 'alice' } });
+      expect(setSelectedMsg).toHaveBeenCalledWith(null);
+      expect(setActivePartner).not.toHaveBeenCalled();
+
+      // 2nd back gesture after message is deselected: exits chat to conversation list
+      selectedMsg = null;
+      simulatePopState({ state: { tab: 'messages' } });
+      expect(setActivePartner).toHaveBeenCalledWith(null);
+    });
+  });
 });
 
 

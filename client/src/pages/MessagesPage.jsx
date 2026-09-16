@@ -463,6 +463,8 @@ export default function MessagesPage({
   isSelectionModeRef.current = isSelectionMode;
   const isSearchInChatOpenRef = useRef(isSearchInChatOpen);
   isSearchInChatOpenRef.current = isSearchInChatOpen;
+  const isActionBarMoreOpenRef = useRef(isActionBarMoreOpen);
+  isActionBarMoreOpenRef.current = isActionBarMoreOpen;
 
   const pushModalHistory = (modalName) => {
     if (typeof window !== 'undefined' && window.history) {
@@ -603,6 +605,14 @@ export default function MessagesPage({
       if (isSearchInChatOpenRef.current) {
         setIsSearchInChatOpen(false);
         setChatSearchQuery('');
+        return;
+      }
+      if (isActionBarMoreOpenRef.current) {
+        setIsActionBarMoreOpen(false);
+      }
+      if (selectedMessageForActionRef.current) {
+        setSelectedMessageForAction(null);
+        setIsActionBarMoreOpen(false);
         return;
       }
 
@@ -1799,12 +1809,18 @@ export default function MessagesPage({
     }
     justSelectedActionRef.current = Date.now();
     setIsActionBarMoreOpen(false);
+    if (!selectedMessageForActionRef.current) {
+      pushModalHistory('message_action');
+    }
     setSelectedMessageForAction(msg);
   };
 
   const handleDeselectMessage = () => {
     setSelectedMessageForAction(null);
     setIsActionBarMoreOpen(false);
+    if (typeof window !== 'undefined' && window.history && window.history.state?.modal === 'message_action') {
+      window.history.back();
+    }
   };
 
   const handleContextMenu = (e, msg) => {
@@ -2637,7 +2653,10 @@ export default function MessagesPage({
                     >
                       <ArrowLeft size={20} />
                     </button>
-                    <span className="action-bar-count">1 selected</span>
+                    <span className="action-bar-count">
+                      <span className="count-num">1</span>
+                      <span className="count-label"> selected</span>
+                    </span>
                   </div>
 
                   <div className="top-action-bar-right">
@@ -2736,6 +2755,19 @@ export default function MessagesPage({
 
                       {isActionBarMoreOpen && (
                         <div className="action-bar-more-dropdown" onClick={(e) => e.stopPropagation()}>
+                          {!selectedMessageForAction.is_deleted && (
+                            <button
+                              type="button"
+                              className="action-bar-dropdown-item"
+                              onClick={() => {
+                                const msg = selectedMessageForAction;
+                                handleDeselectMessage();
+                                handleCopyMessage(msg);
+                              }}
+                            >
+                              <Copy size={15} /> Copy
+                            </button>
+                          )}
                           {!selectedMessageForAction.is_deleted && (
                             <button
                               type="button"
@@ -5473,10 +5505,13 @@ export default function MessagesPage({
           justify-content: space-between;
           background: var(--bg-card, #1e293b);
           border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-          padding: 6px 12px;
+          padding: 6px 10px;
           min-height: 56px;
           animation: waBarSlideDown 0.14s ease-out;
           z-index: 100;
+          box-sizing: border-box;
+          width: 100%;
+          overflow: hidden;
         }
 
         @keyframes waBarSlideDown {
@@ -5493,21 +5528,27 @@ export default function MessagesPage({
         .top-action-bar-left {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 8px;
+          flex-shrink: 0;
+          min-width: 0;
         }
 
         .btn-action-bar-back {
           display: flex;
           align-items: center;
           justify-content: center;
-          min-width: 44px;
-          min-height: 44px;
+          width: 36px;
+          height: 36px;
+          min-width: 36px;
+          min-height: 36px;
+          padding: 0;
           border: none;
           background: transparent;
           color: var(--text-primary, #ffffff);
           border-radius: 50%;
           cursor: pointer;
           transition: background 0.15s ease;
+          flex-shrink: 0;
         }
 
         .btn-action-bar-back:hover,
@@ -5520,26 +5561,33 @@ export default function MessagesPage({
           font-weight: 600;
           color: var(--text-primary, #ffffff);
           letter-spacing: 0.2px;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .top-action-bar-right {
           display: flex;
           align-items: center;
           gap: 2px;
+          flex-shrink: 0;
         }
 
         .btn-action-icon {
           display: flex;
           align-items: center;
           justify-content: center;
-          min-width: 44px;
-          min-height: 44px;
+          width: 36px;
+          height: 36px;
+          min-width: 36px;
+          min-height: 36px;
+          padding: 0;
           border: none;
           background: transparent;
           color: var(--text-secondary, #94a3b8);
           border-radius: 50%;
           cursor: pointer;
           transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+          flex-shrink: 0;
         }
 
         .btn-action-icon:hover,
@@ -6924,6 +6972,26 @@ export default function MessagesPage({
         }
 
         @media (max-width: 640px) {
+          .chat-top-action-bar {
+            padding: 4px 6px;
+            gap: 2px;
+          }
+          .top-action-bar-left {
+            gap: 4px;
+          }
+          .top-action-bar-right {
+            gap: 1px;
+          }
+          .count-label {
+            display: none;
+          }
+          .btn-action-bar-back,
+          .btn-action-icon {
+            width: 35px;
+            height: 35px;
+            min-width: 35px;
+            min-height: 35px;
+          }
           .desktop-action-only {
             display: none !important;
           }
