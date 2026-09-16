@@ -18,6 +18,7 @@ import AuthPromptModal from './components/AuthPromptModal';
 import DemoModeIndicator from './components/DemoModeIndicator';
 import { usePWA } from './services/pwaManager';
 import VibiMascotGreeting from './components/VibiMascotGreeting';
+import ReturningUserWelcomeDrop from './components/ReturningUserWelcomeDrop';
 import {
   Home,
   Compass,
@@ -1301,6 +1302,9 @@ function AppContent() {
 
       {/* Phase 1 Delight Feature: Vibi Mascot & App Open Animation */}
       <VibiMascotGreeting user={user} />
+
+      {/* Phase 2 Delight Feature: Returning User Welcome Drop (Option 5) */}
+      <ReturningUserWelcomeDrop user={user} unreadCount={unreadCount + unreadMessagesCount} />
     </div>
   );
 }
