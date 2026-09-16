@@ -162,20 +162,25 @@ export async function unsubscribeFromPushNotifications() {
     const registration = await navigator.serviceWorker.ready;
     const subscription = await registration.pushManager.getSubscription();
 
-    if (subscription) {
-      const endpoint = subscription.endpoint;
-      await subscription.unsubscribe();
+      if (subscription) {
+        const endpoint = subscription.endpoint;
+        await subscription.unsubscribe();
 
-      // Notify backend to remove subscription
-      await apiClient.post('/notifications/push-unsubscribe', { endpoint });
-      console.log('✅ [Push Service] Successfully unsubscribed from Web Push.');
-      return true;
+        // Notify backend to remove subscription
+        try {
+          await apiClient.post('/notifications/push-unsubscribe', { endpoint });
+        } catch (backendErr) {
+          // If unauthenticated (401) or offline during logout, local unsubscription still succeeded
+          console.warn('[Push Service] Backend unsubscription notification skipped or failed:', backendErr?.message || backendErr);
+        }
+        console.log('✅ [Push Service] Successfully unsubscribed from Web Push.');
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn('[Push Service] Unsubscribe failed:', err?.message || err);
+      return false;
     }
-    return false;
-  } catch (err) {
-    console.error('[Push Service] Unsubscribe failed:', err);
-    throw err;
-  }
 }
 
 /**

@@ -51,6 +51,7 @@ const getConversations = async (req, res, next) => {
           m.recipient_id,
           m.is_read,
           m.is_deleted,
+          EXISTS(SELECT 1 FROM message_deletions md WHERE md.message_id = m.id AND md.user_id = $1) AS is_deleted_for_me,
           CASE WHEN m.sender_id = $1 THEN m.recipient_id ELSE m.sender_id END AS partner_id,
           ROW_NUMBER() OVER (
             PARTITION BY (CASE WHEN m.sender_id = $1 THEN m.recipient_id ELSE m.sender_id END)
@@ -59,7 +60,6 @@ const getConversations = async (req, res, next) => {
         FROM messages m
         WHERE (m.sender_id = $1 OR m.recipient_id = $1)
           AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
-          AND m.id NOT IN (SELECT message_id FROM message_deletions WHERE user_id = $1)
       ),
       unread_counts AS (
         SELECT 
@@ -73,13 +73,13 @@ const getConversations = async (req, res, next) => {
       )
       SELECT 
         rm.id,
-        CASE WHEN rm.is_deleted THEN 'This message was deleted' ELSE rm.content END AS last_message,
-        CASE WHEN rm.is_deleted THEN NULL ELSE rm.ciphertext END AS last_ciphertext,
-        CASE WHEN rm.is_deleted THEN NULL ELSE rm.iv_nonce END AS last_iv_nonce,
+        CASE WHEN (rm.is_deleted OR rm.is_deleted_for_me) THEN 'This message was deleted' ELSE rm.content END AS last_message,
+        CASE WHEN (rm.is_deleted OR rm.is_deleted_for_me) THEN NULL ELSE rm.ciphertext END AS last_ciphertext,
+        CASE WHEN (rm.is_deleted OR rm.is_deleted_for_me) THEN NULL ELSE rm.iv_nonce END AS last_iv_nonce,
         rm.conversation_id,
         rm.created_at AS last_message_at,
         rm.sender_id AS last_sender_id,
-        rm.is_deleted AS last_is_deleted,
+        (rm.is_deleted OR rm.is_deleted_for_me) AS last_is_deleted,
         u.id AS partner_id,
         u.username AS partner_username,
         u.full_name AS partner_full_name,
@@ -169,23 +169,39 @@ const getMessages = async (req, res, next) => {
     const isBlockedBy = blockRes.rows.some((b) => Number(b.blocker_id) === Number(partner.id));
 
     let pinnedMessage = null;
+    let pinnedMessages = [];
 
     if (convRes.rows.length > 0) {
       conversationId = convRes.rows[0].id;
       ephemeralTimerSeconds = convRes.rows[0].ephemeral_timer_seconds;
 
-      if (convRes.rows[0].pinned_message_id) {
-        const pinRes = await query(
-          `SELECT m.id, m.content, m.sender_id, m.created_at, u.username AS sender_username
-           FROM messages m
+      try {
+        const multiPinRes = await query(
+          `SELECT m.id, m.content, m.sender_id, m.created_at, u.username AS sender_username, cpm.pinned_at
+           FROM conversation_pinned_messages cpm
+           JOIN messages m ON cpm.message_id = m.id
            JOIN users u ON m.sender_id = u.id
-           WHERE m.id = $1 AND m.is_deleted = FALSE LIMIT 1`,
-          [convRes.rows[0].pinned_message_id]
+           WHERE cpm.conversation_id = $1 AND m.is_deleted = FALSE
+           ORDER BY cpm.pinned_at ASC`,
+          [conversationId]
         );
-        if (pinRes.rows.length > 0) {
-          pinnedMessage = pinRes.rows[0];
+        pinnedMessages = multiPinRes.rows;
+      } catch (pinTableErr) {
+        // Fallback to legacy single pin if table does not exist
+        if (convRes.rows[0].pinned_message_id) {
+          const pinRes = await query(
+            `SELECT m.id, m.content, m.sender_id, m.created_at, u.username AS sender_username
+             FROM messages m
+             JOIN users u ON m.sender_id = u.id
+             WHERE m.id = $1 AND m.is_deleted = FALSE LIMIT 1`,
+            [convRes.rows[0].pinned_message_id]
+          );
+          if (pinRes.rows.length > 0) {
+            pinnedMessages = [pinRes.rows[0]];
+          }
         }
       }
+      pinnedMessage = pinnedMessages.length > 0 ? pinnedMessages[pinnedMessages.length - 1] : null;
     } else {
       const newConv = await query(`INSERT INTO conversations (type) VALUES ('1to1') RETURNING id`);
       conversationId = newConv.rows[0].id;
@@ -195,7 +211,7 @@ const getMessages = async (req, res, next) => {
       );
     }
 
-    // 2. Query messages between users (excluding expired ephemeral messages and messages deleted for this user)
+    // 2. Query messages between users (including per-user deletion status via message_deletions)
     const messagesQuery = `
       SELECT 
         m.id,
@@ -216,6 +232,7 @@ const getMessages = async (req, res, next) => {
         m.read_at,
         m.created_at,
         (m.sender_id = $1) AS is_mine,
+        EXISTS(SELECT 1 FROM message_deletions md WHERE md.message_id = m.id AND md.user_id = $1) AS is_deleted_for_me,
         rm.id AS reply_id,
         rm.sender_id AS reply_sender_id,
         rmu.username AS reply_sender_username,
@@ -223,6 +240,7 @@ const getMessages = async (req, res, next) => {
         rm.ciphertext AS reply_ciphertext,
         rm.iv_nonce AS reply_iv_nonce,
         rm.is_deleted AS reply_is_deleted,
+        EXISTS(SELECT 1 FROM message_deletions rmd WHERE rmd.message_id = rm.id AND rmd.user_id = $1) AS reply_is_deleted_for_me,
         EXISTS(SELECT 1 FROM message_stars ms WHERE ms.message_id = m.id AND ms.user_id = $1) AS is_starred,
         COALESCE(
           (SELECT json_agg(json_build_object('id', mr.id, 'user_id', mr.user_id, 'username', mru.username, 'reaction', mr.reaction))
@@ -237,7 +255,6 @@ const getMessages = async (req, res, next) => {
       WHERE ((m.sender_id = $1 AND m.recipient_id = $2)
           OR (m.sender_id = $2 AND m.recipient_id = $1))
          AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
-         AND m.id NOT IN (SELECT message_id FROM message_deletions WHERE user_id = $1)
       ORDER BY m.created_at ASC
     `;
 
@@ -277,17 +294,22 @@ const getMessages = async (req, res, next) => {
     // 4. Format messages and resolve quoted replies
     const formattedMessages = messagesRes.rows.map((msg) => {
       const isMine = Boolean(msg.is_mine);
+      const isDeletedForMe = Boolean(msg.is_deleted_for_me);
+      const isDeletedForEveryone = Boolean(msg.is_deleted);
+      const isDeleted = isDeletedForMe || isDeletedForEveryone;
+
       let reply_to_message = null;
       if (msg.reply_to_id) {
         if (msg.reply_id) {
+          const isReplyDeleted = Boolean(msg.reply_is_deleted || msg.reply_is_deleted_for_me);
           reply_to_message = {
             id: msg.reply_id,
             sender_id: msg.reply_sender_id,
             sender_username: msg.reply_sender_username,
-            content: msg.reply_is_deleted ? 'Original message was deleted' : msg.reply_content,
-            ciphertext: msg.reply_is_deleted ? null : msg.reply_ciphertext,
-            iv_nonce: msg.reply_is_deleted ? null : msg.reply_iv_nonce,
-            is_deleted: Boolean(msg.reply_is_deleted)
+            content: isReplyDeleted ? 'Original message was deleted' : msg.reply_content,
+            ciphertext: isReplyDeleted ? null : msg.reply_ciphertext,
+            iv_nonce: isReplyDeleted ? null : msg.reply_iv_nonce,
+            is_deleted: isReplyDeleted
           };
         } else {
           reply_to_message = {
@@ -314,15 +336,17 @@ const getMessages = async (req, res, next) => {
         sender_id: msg.sender_id,
         recipient_id: msg.recipient_id,
         conversation_id: msg.conversation_id,
-        content: msg.is_deleted ? 'This message was deleted' : msg.content,
-        ciphertext: msg.is_deleted ? null : msg.ciphertext,
-        iv_nonce: msg.is_deleted ? null : msg.iv_nonce,
+        content: isDeleted ? 'This message was deleted' : msg.content,
+        ciphertext: isDeleted ? null : msg.ciphertext,
+        iv_nonce: isDeleted ? null : msg.iv_nonce,
         sender_device_id: msg.sender_device_id,
         message_type: msg.message_type || 'text',
         reply_to_id: msg.reply_to_id,
         reply_to_message,
         is_read: isRead,
-        is_deleted: Boolean(msg.is_deleted),
+        is_deleted: isDeleted,
+        is_deleted_for_everyone: isDeletedForEveryone,
+        is_deleted_for_me: isDeletedForMe,
         is_forwarded: Boolean(msg.is_forwarded),
         is_starred: Boolean(msg.is_starred),
         reactions: Array.isArray(msg.reactions) ? msg.reactions : [],
@@ -360,6 +384,7 @@ const getMessages = async (req, res, next) => {
         conversationId,
         ephemeralTimerSeconds,
         pinnedMessage,
+        pinnedMessages,
         isMuted,
         mutedUntil: cmRow?.muted_until || null,
         isPinned: Boolean(cmRow?.is_pinned),
@@ -714,7 +739,7 @@ const deleteMessage = async (req, res, next) => {
     const type = req.query.type || req.body.type || 'for_everyone';
 
     const msgRes = await query(
-      `SELECT id, sender_id, recipient_id, conversation_id, is_deleted 
+      `SELECT id, sender_id, recipient_id, conversation_id, is_deleted, created_at 
        FROM messages WHERE id = $1 LIMIT 1`,
       [id]
     );
@@ -732,10 +757,22 @@ const deleteMessage = async (req, res, next) => {
     }
 
     const io = req.app.get('io');
+    const DELETE_WINDOW_MINUTES = parseInt(process.env.MESSAGE_DELETE_TIME_LIMIT_MINUTES, 10) || 60;
+    const DELETE_WINDOW_MS = DELETE_WINDOW_MINUTES * 60 * 1000;
 
     if (type === 'for_everyone') {
       if (!isSender) {
         return res.status(403).json({ success: false, error: 'Only the sender can delete a message for everyone.' });
+      }
+
+      if (msg.created_at) {
+        const msgCreatedAt = new Date(msg.created_at).getTime();
+        if (!isNaN(msgCreatedAt) && Date.now() - msgCreatedAt > DELETE_WINDOW_MS) {
+          return res.status(400).json({
+            success: false,
+            error: `Messages can only be deleted for everyone within ${DELETE_WINDOW_MINUTES} minutes of sending.`
+          });
+        }
       }
 
       await query(
@@ -744,6 +781,11 @@ const deleteMessage = async (req, res, next) => {
          WHERE id = $1`,
         [id]
       );
+
+      // Also clean up from pinned messages if it was pinned
+      try {
+        await query(`DELETE FROM conversation_pinned_messages WHERE message_id = $1`, [id]);
+      } catch (e) {}
 
       if (io) {
         const payload = {
@@ -1075,8 +1117,8 @@ const forwardMessage = async (req, res, next) => {
         recipient.id,
         conversationId,
         orig.content,
-        orig.ciphertext || null,
-        orig.iv_nonce || null,
+        null,
+        null,
         orig.sender_device_id || null,
         orig.message_type || 'text',
         expiresAt
@@ -1304,10 +1346,13 @@ const togglePinMessage = async (req, res, next) => {
       return res.status(403).json({ success: false, error: 'Not authorized for this conversation.' });
     }
 
-    let targetPinId = null;
-    let pinnedMessage = null;
+    let isPinned = false;
 
-    if (messageId) {
+    if (!messageId) {
+      // Unpin all messages for this conversation if explicitly sent null/empty messageId
+      await query(`DELETE FROM conversation_pinned_messages WHERE conversation_id = $1`, [id]);
+      await query(`UPDATE conversations SET pinned_message_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [id]);
+    } else {
       const msgCheck = await query(
         `SELECT m.id, m.content, m.sender_id, m.created_at, u.username AS sender_username
          FROM messages m
@@ -1320,13 +1365,61 @@ const togglePinMessage = async (req, res, next) => {
         return res.status(404).json({ success: false, error: 'Message to pin not found.' });
       }
 
-      targetPinId = msgCheck.rows[0].id;
-      pinnedMessage = msgCheck.rows[0];
+      const existingPin = await query(
+        `SELECT id FROM conversation_pinned_messages WHERE conversation_id = $1 AND message_id = $2`,
+        [id, messageId]
+      );
+
+      if (typeof req.body.isPinned === 'boolean') {
+        isPinned = req.body.isPinned;
+        if (isPinned) {
+          await query(
+            `INSERT INTO conversation_pinned_messages (conversation_id, message_id, pinned_by) VALUES ($1, $2, $3) ON CONFLICT (conversation_id, message_id) DO NOTHING`,
+            [id, messageId, userId]
+          );
+        } else {
+          await query(
+            `DELETE FROM conversation_pinned_messages WHERE conversation_id = $1 AND message_id = $2`,
+            [id, messageId]
+          );
+        }
+      } else {
+        if (existingPin.rows.length > 0) {
+          // Unpin this message
+          await query(
+            `DELETE FROM conversation_pinned_messages WHERE conversation_id = $1 AND message_id = $2`,
+            [id, messageId]
+          );
+          isPinned = false;
+        } else {
+          // Pin this message
+          await query(
+            `INSERT INTO conversation_pinned_messages (conversation_id, message_id, pinned_by) VALUES ($1, $2, $3) ON CONFLICT (conversation_id, message_id) DO NOTHING`,
+            [id, messageId, userId]
+          );
+          isPinned = true;
+        }
+      }
     }
+
+    // Retrieve all currently pinned messages for this conversation
+    const allPinnedRes = await query(
+      `SELECT m.id, m.content, m.sender_id, m.created_at, u.username AS sender_username, cpm.pinned_at
+       FROM conversation_pinned_messages cpm
+       JOIN messages m ON cpm.message_id = m.id
+       JOIN users u ON m.sender_id = u.id
+       WHERE cpm.conversation_id = $1 AND m.is_deleted = FALSE
+       ORDER BY cpm.pinned_at DESC`,
+      [id]
+    );
+
+    const pinnedMessages = allPinnedRes.rows;
+    const latestPinned = pinnedMessages.length > 0 ? pinnedMessages[0] : null;
+    const latestPinId = latestPinned ? latestPinned.id : null;
 
     await query(
       `UPDATE conversations SET pinned_message_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-      [targetPinId, id]
+      [latestPinId, id]
     );
 
     // Socket broadcast to room
@@ -1334,8 +1427,11 @@ const togglePinMessage = async (req, res, next) => {
     if (io) {
       io.to(`conv:${id}`).emit('message:pin', {
         conversationId: id,
-        pinnedMessageId: targetPinId,
-        pinnedMessage
+        pinnedMessageId: latestPinId,
+        pinnedMessage: latestPinned,
+        pinnedMessages,
+        toggledMessageId: messageId || null,
+        isPinned
       });
     }
 
@@ -1343,8 +1439,10 @@ const togglePinMessage = async (req, res, next) => {
       success: true,
       data: {
         conversationId: id,
-        pinnedMessageId: targetPinId,
-        pinnedMessage
+        pinnedMessageId: latestPinId,
+        pinnedMessage: latestPinned,
+        pinnedMessages,
+        isPinned
       }
     });
   } catch (error) {
@@ -1376,7 +1474,7 @@ const bulkDeleteMessages = async (req, res, next) => {
     if (type === 'for_everyone') {
       // Must be sender of each message to delete for everyone
       const msgsRes = await query(
-        `SELECT id, sender_id, recipient_id, conversation_id FROM messages WHERE id = ANY($1::int[]) AND is_deleted = FALSE`,
+        `SELECT id, sender_id, recipient_id, conversation_id, created_at FROM messages WHERE id = ANY($1::int[]) AND is_deleted = FALSE`,
         [cleanIds]
       );
 
@@ -1388,8 +1486,29 @@ const bulkDeleteMessages = async (req, res, next) => {
         });
       }
 
+      // Check 60-minute time limit for deleting for everyone
+      const DELETE_LIMIT_MINUTES = parseInt(process.env.MESSAGE_DELETE_TIME_LIMIT_MINUTES, 10) || 60;
+      const now = Date.now();
+      const expiredMsgs = msgsRes.rows.filter((m) => {
+        const msgAgeMinutes = (now - new Date(m.created_at).getTime()) / (1000 * 60);
+        return msgAgeMinutes > DELETE_LIMIT_MINUTES;
+      });
+
+      if (expiredMsgs.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Messages can only be deleted for everyone within ${DELETE_LIMIT_MINUTES} minutes of sending.`
+        });
+      }
+
       await query(
         `UPDATE messages SET is_deleted = TRUE, content = 'This message was deleted', ciphertext = NULL, iv_nonce = NULL WHERE id = ANY($1::int[])`,
+        [cleanIds]
+      );
+
+      // Clean up from pinned messages
+      await query(
+        `DELETE FROM conversation_pinned_messages WHERE message_id = ANY($1::int[])`,
         [cleanIds]
       );
 
@@ -1408,7 +1527,7 @@ const bulkDeleteMessages = async (req, res, next) => {
         forEveryone: true
       });
     } else {
-      // Delete for me
+      // Delete for me (no time limit)
       for (const msgId of cleanIds) {
         await query(
           `INSERT INTO message_deletions (message_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
@@ -1559,8 +1678,8 @@ const bulkForwardMessages = async (req, res, next) => {
           recipient.id,
           conversationId,
           msg.content,
-          msg.ciphertext || null,
-          msg.iv_nonce || null,
+          null,
+          null,
           msg.sender_device_id || null,
           msg.message_type || 'text',
           expiresAt

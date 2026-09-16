@@ -146,6 +146,17 @@ CREATE TABLE IF NOT EXISTS message_deletions (
 );
 CREATE INDEX IF NOT EXISTS idx_message_deletions_user ON message_deletions(user_id, message_id);
 
+-- 8c. Conversation Pinned Messages (Support Multiple Pinned Messages)
+CREATE TABLE IF NOT EXISTS conversation_pinned_messages (
+    id SERIAL PRIMARY KEY,
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    pinned_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    pinned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(conversation_id, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pinned_messages_conv ON conversation_pinned_messages(conversation_id);
+
 -- 9. Saved Posts Table (Phase 12 - Bookmarks & Private Collections)
 CREATE TABLE IF NOT EXISTS saved_posts (
     id SERIAL PRIMARY KEY,

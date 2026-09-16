@@ -37,6 +37,30 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, loading, onClose]);
 
+  // Clean up object URL when previewUrl changes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  // Reset state and revoke preview when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedFile(null);
+      setPreviewUrl((prev) => {
+        if (prev && prev.startsWith('blob:')) {
+          URL.revokeObjectURL(prev);
+        }
+        return null;
+      });
+      setCaption('');
+      setError(null);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   // Handle file selection
@@ -56,6 +80,9 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
       return;
     }
 
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setError(null);
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
@@ -74,6 +101,9 @@ export default function CreatePostModal({ isOpen, onClose, onPostCreated }) {
 
   // Clear selected image
   const handleResetImage = () => {
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setSelectedFile(null);
     setPreviewUrl(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
