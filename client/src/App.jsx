@@ -17,6 +17,7 @@ import e2eeService from './services/crypto/e2eeService';
 import AuthPromptModal from './components/AuthPromptModal';
 import DemoModeIndicator from './components/DemoModeIndicator';
 import { usePWA } from './services/pwaManager';
+import VibiMascotGreeting from './components/VibiMascotGreeting';
 import {
   Home,
   Compass,
@@ -1297,6 +1298,9 @@ function AppContent() {
         onNavigateToSignup={handleNavigateToSignup}
         onNavigateToLogin={handleNavigateToLogin}
       />
+
+      {/* Phase 1 Delight Feature: Vibi Mascot & App Open Animation */}
+      <VibiMascotGreeting user={user} />
     </div>
   );
 }

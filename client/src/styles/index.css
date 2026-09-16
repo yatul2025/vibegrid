@@ -11262,4 +11262,213 @@ select.form-input option,
   border-color: var(--primary);
 }
 
+/* ==========================================================================
+   Phase 1: Vibi Mascot & App Open Animation (Option 2)
+   ========================================================================== */
+
+@keyframes vibiPeekIn {
+  0% {
+    transform: translateY(110px) scale(0.85);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(-8px) scale(1.03);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(2px) scale(0.99);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes vibiPeekOut {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(120px) scale(0.85);
+    opacity: 0;
+  }
+}
+
+@keyframes vibiPawWave {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(20deg);
+  }
+  40% {
+    transform: rotate(-10deg);
+  }
+  60% {
+    transform: rotate(16deg);
+  }
+  80% {
+    transform: rotate(-6deg);
+  }
+}
+
+@keyframes vibiEyesBlink {
+  0%, 90%, 100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+
+@keyframes vibiTailSway {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-8deg);
+  }
+}
+
+@keyframes vibiMascotFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.vibi-mascot-container {
+  position: fixed;
+  left: 16px;
+  bottom: 74px; /* Sits cleanly above mobile navigation bar */
+  z-index: 999;
+  pointer-events: none; /* Never blocks clicks on feed, buttons, or bottom tabs */
+}
+
+@media (min-width: 768px) {
+  .vibi-mascot-container {
+    left: 24px;
+    bottom: 24px;
+  }
+}
+
+.vibi-mascot-wrapper {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: auto; /* Tappable for instant dismissal */
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.vibi-mascot-wrapper.vibi-enter {
+  animation: vibiPeekIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.vibi-mascot-wrapper.vibi-exit {
+  animation: vibiPeekOut 0.4s cubic-bezier(0.55, 0.055, 0.675, 0.19) forwards;
+}
+
+.vibi-mascot-wrapper.reduced-motion.vibi-enter {
+  animation: fadeIn 0.3s ease-out forwards;
+  transform: none !important;
+}
+
+.vibi-mascot-wrapper.reduced-motion.vibi-exit {
+  animation: fadeOut 0.2s ease-in forwards;
+  transform: none !important;
+}
+
+.vibi-speech-bubble {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  border-radius: 16px 16px 16px 4px;
+  box-shadow: var(--shadow-lg), 0 8px 24px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  max-width: 220px;
+  animation: vibiMascotFloat 3.2s ease-in-out infinite;
+  transition: var(--transition);
+}
+
+.vibi-bubble-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.vibi-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #ea580c;
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+}
+
+.vibi-close-btn {
+  background: none;
+  border: none;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: var(--transition);
+}
+
+.vibi-close-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.vibi-bubble-text {
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.vibi-character-art {
+  width: 72px;
+  height: 84px;
+  flex-shrink: 0;
+  animation: vibiMascotFloat 3.2s ease-in-out infinite;
+}
+
+.vibi-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.vibi-paw-wave {
+  animation: vibiPawWave 1.5s ease-in-out infinite;
+  transform-origin: 22px 82px;
+}
+
+.vibi-eyes-blink {
+  animation: vibiEyesBlink 4.2s ease-in-out infinite;
+  transform-origin: 50px 52px;
+}
+
+.vibi-tail-sway {
+  animation: vibiTailSway 2.8s ease-in-out infinite;
+  transform-origin: 22px 85px;
+}
+
+
 
