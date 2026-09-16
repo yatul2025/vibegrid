@@ -147,6 +147,52 @@ describe('editMessage', () => {
     );
   });
 
+  it('should return 400 if message is older than 15 minutes', async () => {
+    // 20 minutes ago
+    const oldTimestamp = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+    query.mockResolvedValueOnce({
+      rows: [{
+        id: 100, sender_id: 1, recipient_id: 2, conversation_id: 10,
+        is_deleted: false, message_type: 'text', created_at: oldTimestamp
+      }]
+    });
+
+    const req = mockReq({ body: { content: 'updated text' } });
+    const res = mockRes();
+    await editMessage(req, res, mockNext);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Messages can only be edited within 15 minutes of sending.' })
+    );
+  });
+
+  it('should allow editing if message is within 15 minutes', async () => {
+    // 5 minutes ago
+    const recentTimestamp = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const updatedRow = {
+      id: 100, sender_id: 1, recipient_id: 2, conversation_id: 10,
+      content: 'recent edit', edited_at: new Date().toISOString()
+    };
+
+    query.mockResolvedValueOnce({
+      rows: [{
+        id: 100, sender_id: 1, recipient_id: 2, conversation_id: 10,
+        is_deleted: false, message_type: 'text', created_at: recentTimestamp
+      }]
+    });
+    query.mockResolvedValueOnce({ rows: [updatedRow] });
+
+    const req = mockReq({ body: { content: 'recent edit' } });
+    const res = mockRes();
+    await editMessage(req, res, mockNext);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ success: true, data: { message: updatedRow } })
+    );
+  });
+
   it('should successfully edit a message and return 200', async () => {
     const updatedRow = {
       id: 100, sender_id: 1, recipient_id: 2, conversation_id: 10,

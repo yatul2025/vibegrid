@@ -1395,6 +1395,14 @@ export default function MessagesPage({
     // Case A: Editing an existing message
     if (editingMessage) {
       const targetId = editingMessage.id;
+      if (editingMessage.created_at) {
+        const elapsed = Date.now() - new Date(editingMessage.created_at).getTime();
+        if (!isNaN(elapsed) && elapsed > 15 * 60 * 1000) {
+          alert('Messages can only be edited within 15 minutes of sending.');
+          setEditingMessage(null);
+          return;
+        }
+      }
       setEditingMessage(null);
       try {
         setSending(true);
@@ -1815,6 +1823,14 @@ export default function MessagesPage({
   // ==========================================================================
   // 6b. VibeGrid Message Action Handlers (WhatsApp Classic Selection & Actions)
   // ==========================================================================
+  const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+  const isMessageEditable = (msg) => {
+    if (!msg || !msg.is_mine || msg.is_deleted || msg.message_type === 'call_log') return false;
+    if (!msg.created_at) return true;
+    const elapsed = Date.now() - new Date(msg.created_at).getTime();
+    return !isNaN(elapsed) && elapsed <= FIFTEEN_MINUTES_MS;
+  };
+
   const handleSelectMessageForAction = (msg) => {
     if (typeof window !== 'undefined' && window.getSelection) {
       const sel = window.getSelection();
@@ -1884,7 +1900,6 @@ export default function MessagesPage({
   const handleDeleteSelected = () => {
     if (selectedMessagesForAction.length === 0) return;
     const msgs = [...selectedMessagesForAction];
-    handleDeselectMessage();
     if (msgs.length === 1) {
       handlePromptDelete(msgs[0]);
     } else {
@@ -2011,7 +2026,11 @@ export default function MessagesPage({
   const handleStartEdit = (msg) => {
     setContextMenu(null);
     setReplyingTo(null);
-    setEditingMessage({ id: msg.id, content: msg.content });
+    if (!isMessageEditable(msg)) {
+      alert('Messages can only be edited within 15 minutes of sending.');
+      return;
+    }
+    setEditingMessage({ id: msg.id, content: msg.content, created_at: msg.created_at });
     setMessageInput(msg.content);
   };
 
@@ -2037,6 +2056,15 @@ export default function MessagesPage({
     setContextMenu(null);
     setDeleteModalTarget(null);
 
+    if (!msg) return;
+
+    // If message is a pending / sending / failed optimistic message with a local temp ID
+    if (String(msg.id).startsWith('temp-') || msg.pending || msg.failed) {
+      setMessages((prev) => prev.filter((m) => String(m.id) !== String(msg.id)));
+      handleDeselectMessage();
+      return;
+    }
+
     if (type === 'for_everyone' && !msg.is_mine) {
       alert('You can only delete your own messages for everyone.');
       return;
@@ -2048,14 +2076,15 @@ export default function MessagesPage({
         if (type === 'for_everyone') {
           setMessages((prev) =>
             prev.map((m) =>
-              Number(m.id) === Number(msg.id)
+              String(m.id) === String(msg.id)
                 ? { ...m, is_deleted: true, content: 'This message was deleted', ciphertext: null, iv_nonce: null }
                 : m
             )
           );
         } else {
-          setMessages((prev) => prev.filter((m) => Number(m.id) !== Number(msg.id)));
+          setMessages((prev) => prev.filter((m) => String(m.id) !== String(msg.id)));
         }
+        handleDeselectMessage();
       }
     } catch (err) {
       alert(err.message || 'Failed to delete message.');
@@ -2904,7 +2933,7 @@ export default function MessagesPage({
                                 <Pin size={15} /> {pinnedMessage?.id === selectedMessagesForAction[0].id ? 'Unpin' : 'Pin'}
                               </button>
                             )}
-                            {selectedMessagesForAction.length === 1 && selectedMessagesForAction[0].is_mine && !selectedMessagesForAction[0].is_deleted && (
+                            {selectedMessagesForAction.length === 1 && isMessageEditable(selectedMessagesForAction[0]) && (
                               <button
                                 type="button"
                                 className="action-bar-dropdown-item"
@@ -4101,11 +4130,32 @@ export default function MessagesPage({
                 className="btn-secondary"
                 onClick={() => {
                   if (deleteModalTarget.isBulk) {
-                    const ids = deleteModalTarget.messages.map((m) => Number(m.id));
-                    apiClient.post('/messages/bulk/delete', { messageIds: ids, type: 'for_me' }).then(() => {
-                      setMessages((prev) => prev.filter((m) => !ids.includes(Number(m.id))));
+                    const localMsgs = deleteModalTarget.messages.filter(
+                      (m) => String(m.id).startsWith('temp-') || m.pending || m.failed
+                    );
+                    const serverMsgs = deleteModalTarget.messages.filter(
+                      (m) => !String(m.id).startsWith('temp-') && !m.pending && !m.failed
+                    );
+                    const localIds = localMsgs.map((m) => String(m.id));
+                    const serverIds = serverMsgs.map((m) => Number(m.id));
+
+                    if (localIds.length > 0) {
+                      setMessages((prev) => prev.filter((m) => !localIds.includes(String(m.id))));
+                    }
+
+                    if (serverIds.length > 0) {
+                      apiClient
+                        .post('/messages/bulk/delete', { messageIds: serverIds, type: 'for_me' })
+                        .then(() => {
+                          setMessages((prev) => prev.filter((m) => !serverIds.includes(Number(m.id))));
+                          setDeleteModalTarget(null);
+                          handleDeselectMessage();
+                        })
+                        .catch((err) => alert(err.message || 'Bulk delete failed.'));
+                    } else {
                       setDeleteModalTarget(null);
-                    }).catch((err) => alert(err.message || 'Bulk delete failed.'));
+                      handleDeselectMessage();
+                    }
                   } else {
                     handleDeleteMessage(deleteModalTarget.message, 'for_me');
                   }
@@ -4120,17 +4170,44 @@ export default function MessagesPage({
                   className="btn-danger"
                   onClick={() => {
                     if (deleteModalTarget.isBulk) {
-                      const ids = deleteModalTarget.messages.filter((m) => m.is_mine).map((m) => Number(m.id));
-                      apiClient.post('/messages/bulk/delete', { messageIds: ids, type: 'for_everyone' }).then(() => {
-                        setMessages((prev) =>
-                          prev.map((m) =>
-                            ids.includes(Number(m.id))
-                              ? { ...m, is_deleted: true, content: 'This message was deleted', ciphertext: null, iv_nonce: null }
-                              : m
-                          )
-                        );
+                      const localMsgs = deleteModalTarget.messages.filter(
+                        (m) => (String(m.id).startsWith('temp-') || m.pending || m.failed) && m.is_mine
+                      );
+                      const serverMsgs = deleteModalTarget.messages.filter(
+                        (m) => !String(m.id).startsWith('temp-') && !m.pending && !m.failed && m.is_mine
+                      );
+                      const localIds = localMsgs.map((m) => String(m.id));
+                      const serverIds = serverMsgs.map((m) => Number(m.id));
+
+                      if (localIds.length > 0) {
+                        setMessages((prev) => prev.filter((m) => !localIds.includes(String(m.id))));
+                      }
+
+                      if (serverIds.length > 0) {
+                        apiClient
+                          .post('/messages/bulk/delete', { messageIds: serverIds, type: 'for_everyone' })
+                          .then(() => {
+                            setMessages((prev) =>
+                              prev.map((m) =>
+                                serverIds.includes(Number(m.id))
+                                  ? {
+                                      ...m,
+                                      is_deleted: true,
+                                      content: 'This message was deleted',
+                                      ciphertext: null,
+                                      iv_nonce: null
+                                    }
+                                  : m
+                              )
+                            );
+                            setDeleteModalTarget(null);
+                            handleDeselectMessage();
+                          })
+                          .catch((err) => alert(err.message || 'Bulk delete failed.'));
+                      } else {
                         setDeleteModalTarget(null);
-                      }).catch((err) => alert(err.message || 'Bulk delete failed.'));
+                        handleDeselectMessage();
+                      }
                     } else {
                       handleDeleteMessage(deleteModalTarget.message, 'for_everyone');
                     }

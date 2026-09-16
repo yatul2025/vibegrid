@@ -618,7 +618,7 @@ const editMessage = async (req, res, next) => {
     const { content, ciphertext, ivNonce } = req.body;
 
     const msgRes = await query(
-      `SELECT id, sender_id, recipient_id, conversation_id, message_type, is_deleted 
+      `SELECT id, sender_id, recipient_id, conversation_id, message_type, is_deleted, created_at 
        FROM messages WHERE id = $1 LIMIT 1`,
       [id]
     );
@@ -640,6 +640,18 @@ const editMessage = async (req, res, next) => {
 
     if (msg.message_type === 'call_log') {
       return res.status(400).json({ success: false, error: 'Call logs cannot be edited.' });
+    }
+
+    // 15-minute edit window enforcement
+    if (msg.created_at) {
+      const msgCreatedAt = new Date(msg.created_at).getTime();
+      const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+      if (!isNaN(msgCreatedAt) && Date.now() - msgCreatedAt > FIFTEEN_MINUTES_MS) {
+        return res.status(400).json({
+          success: false,
+          error: 'Messages can only be edited within 15 minutes of sending.'
+        });
+      }
     }
 
     const cleanContent = ciphertext

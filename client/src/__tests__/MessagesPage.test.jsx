@@ -1777,6 +1777,93 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
       handleGlobalKeyDown({ key: 'Escape' });
       expect(onCloseChat).toHaveBeenCalledTimes(1);
     });
+
+    it('enforces 15-minute edit window logic correctly', () => {
+      const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+      const isMessageEditable = (msg) => {
+        if (!msg || !msg.is_mine || msg.is_deleted || msg.message_type === 'call_log') return false;
+        if (!msg.created_at) return true;
+        const elapsed = Date.now() - new Date(msg.created_at).getTime();
+        return !isNaN(elapsed) && elapsed <= FIFTEEN_MINUTES_MS;
+      };
+
+      // Message created 5 minutes ago (editable)
+      const recentMsg = {
+        id: 1,
+        is_mine: true,
+        is_deleted: false,
+        created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString()
+      };
+      expect(isMessageEditable(recentMsg)).toBe(true);
+
+      // Message created 16 minutes ago (not editable)
+      const oldMsg = {
+        id: 2,
+        is_mine: true,
+        is_deleted: false,
+        created_at: new Date(Date.now() - 16 * 60 * 1000).toISOString()
+      };
+      expect(isMessageEditable(oldMsg)).toBe(false);
+
+      // Not mine (not editable even if recent)
+      const othersMsg = {
+        id: 3,
+        is_mine: false,
+        is_deleted: false,
+        created_at: new Date(Date.now() - 2 * 60 * 1000).toISOString()
+      };
+      expect(isMessageEditable(othersMsg)).toBe(false);
+
+      // Deleted message (not editable)
+      const deletedMsg = {
+        id: 4,
+        is_mine: true,
+        is_deleted: true,
+        created_at: new Date(Date.now() - 2 * 60 * 1000).toISOString()
+      };
+      expect(isMessageEditable(deletedMsg)).toBe(false);
+    });
+
+    it('handles deletion of pending / sending messages with temp- IDs locally without API error', async () => {
+      let messages = [
+        { id: 10, content: 'Normal message', is_mine: true },
+        { id: 'temp-12345', content: 'Sending / pending SMS', is_mine: true, pending: true }
+      ];
+      let selectedMessages = [{ id: 'temp-12345', content: 'Sending / pending SMS', is_mine: true, pending: true }];
+      const onDeselect = vi.fn(() => { selectedMessages = []; });
+
+      const handleDeleteMessage = async (msg) => {
+        if (String(msg.id).startsWith('temp-') || msg.pending || msg.failed) {
+          messages = messages.filter((m) => String(m.id) !== String(msg.id));
+          onDeselect();
+          return;
+        }
+      };
+
+      await handleDeleteMessage(selectedMessages[0]);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].id).toBe(10);
+      expect(onDeselect).toHaveBeenCalledTimes(1);
+    });
+
+    it('supports delete for me on sender sent messages', async () => {
+      let messages = [
+        { id: 101, content: 'My sent message', is_mine: true },
+        { id: 102, content: 'Another message', is_mine: false }
+      ];
+      let selectedMessages = [{ id: 101, content: 'My sent message', is_mine: true }];
+      const onDeselect = vi.fn(() => { selectedMessages = []; });
+
+      const handleDeleteMessageForMe = (msg) => {
+        messages = messages.filter((m) => String(m.id) !== String(msg.id));
+        onDeselect();
+      };
+
+      handleDeleteMessageForMe(selectedMessages[0]);
+      expect(messages).toHaveLength(1);
+      expect(messages[0].id).toBe(102);
+      expect(onDeselect).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
