@@ -1222,6 +1222,140 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
     fireEvent.click(videoBtn);
     expect(onVideo).toHaveBeenCalledTimes(1);
   });
+
+  describe('Style 1: WhatsApp Classic Top Action Bar & Floating Reaction Pill', () => {
+    function WhatsAppActionBarComponent({
+      selectedMessage,
+      onDeselect = vi.fn(),
+      onReply = vi.fn(),
+      onStar = vi.fn(),
+      onDelete = vi.fn(),
+      onForward = vi.fn(),
+      onCopy = vi.fn(),
+      onToggleReaction = vi.fn()
+    }) {
+      const [isMoreOpen, setIsMoreOpen] = React.useState(false);
+      return (
+        <div>
+          {selectedMessage && (
+            <div className="chat-header chat-top-action-bar" data-testid="chat-top-action-bar">
+              <div className="top-action-bar-left">
+                <button
+                  type="button"
+                  className="btn-action-bar-back"
+                  onClick={onDeselect}
+                  aria-label="Deselect message"
+                >
+                  ←
+                </button>
+                <span className="action-bar-count">1 selected</span>
+              </div>
+              <div className="top-action-bar-right">
+                <button type="button" className="btn-action-icon" onClick={() => onReply(selectedMessage)} aria-label="Reply">Reply</button>
+                <button type="button" className="btn-action-icon" onClick={() => onStar(selectedMessage)} aria-label="Star">Star</button>
+                <button type="button" className="btn-action-icon btn-action-danger" onClick={() => onDelete(selectedMessage)} aria-label="Delete">Delete</button>
+                <button type="button" className="btn-action-icon" onClick={() => onForward(selectedMessage)} aria-label="Forward">Forward</button>
+                <button type="button" className="btn-action-icon" onClick={() => onCopy(selectedMessage)} aria-label="Copy text">Copy</button>
+                <button type="button" className="btn-action-icon" onClick={() => setIsMoreOpen(!isMoreOpen)} aria-label="More options">More</button>
+              </div>
+              {isMoreOpen && (
+                <div className="action-bar-more-dropdown" data-testid="more-dropdown">
+                  <button type="button" className="action-bar-dropdown-item">Pin</button>
+                  {selectedMessage.is_mine && <button type="button" className="action-bar-dropdown-item">Edit</button>}
+                  {selectedMessage.is_mine && <button type="button" className="action-bar-dropdown-item">Message Info</button>}
+                  <button type="button" className="action-bar-dropdown-item">Select Multiple</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className={`message-bubble ${selectedMessage?.id === 42 ? 'is-highlighted-bubble' : ''}`}>
+            {selectedMessage?.id === 42 && (
+              <div className="vg-wa-floating-reactions" data-testid="wa-floating-reactions">
+                {['❤️', '😂', '👍', '😮', '😢', '🙏'].map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    className="vg-wa-react-btn"
+                    onClick={() => {
+                      onToggleReaction(42, emoji);
+                      onDeselect();
+                    }}
+                    aria-label={`React ${emoji}`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+            Hello World
+          </div>
+        </div>
+      );
+    }
+
+    it('renders top action bar with "1 selected" and action buttons when a message is selected', () => {
+      const onDeselect = vi.fn();
+      const onReply = vi.fn();
+      render(
+        <WhatsAppActionBarComponent
+          selectedMessage={{ id: 42, content: 'Hello World', is_mine: true }}
+          onDeselect={onDeselect}
+          onReply={onReply}
+        />
+      );
+
+      expect(screen.getByTestId('chat-top-action-bar')).toBeInTheDocument();
+      expect(screen.getByText('1 selected')).toBeInTheDocument();
+      expect(screen.getByLabelText('Reply')).toBeInTheDocument();
+      expect(screen.getByLabelText('Star')).toBeInTheDocument();
+      expect(screen.getByLabelText('Delete')).toBeInTheDocument();
+      expect(screen.getByLabelText('Forward')).toBeInTheDocument();
+      expect(screen.getByLabelText('Copy text')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByLabelText('Deselect message'));
+      expect(onDeselect).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders floating reaction pill on the selected message bubble and reacts on click', () => {
+      const onDeselect = vi.fn();
+      const onToggleReaction = vi.fn();
+      render(
+        <WhatsAppActionBarComponent
+          selectedMessage={{ id: 42, content: 'Hello World', is_mine: false }}
+          onDeselect={onDeselect}
+          onToggleReaction={onToggleReaction}
+        />
+      );
+
+      const reactionPill = screen.getByTestId('wa-floating-reactions');
+      expect(reactionPill).toBeInTheDocument();
+
+      const heartBtn = screen.getByLabelText('React ❤️');
+      expect(heartBtn).toBeInTheDocument();
+      fireEvent.click(heartBtn);
+
+      expect(onToggleReaction).toHaveBeenCalledWith(42, '❤️');
+      expect(onDeselect).toHaveBeenCalledTimes(1);
+    });
+
+    it('toggles More dropdown with secondary actions (Pin, Edit, Info, Select)', () => {
+      render(
+        <WhatsAppActionBarComponent
+          selectedMessage={{ id: 42, content: 'Hello World', is_mine: true }}
+        />
+      );
+
+      expect(screen.queryByTestId('more-dropdown')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByLabelText('More options'));
+
+      expect(screen.getByTestId('more-dropdown')).toBeInTheDocument();
+      expect(screen.getByText('Pin')).toBeInTheDocument();
+      expect(screen.getByText('Edit')).toBeInTheDocument();
+      expect(screen.getByText('Message Info')).toBeInTheDocument();
+      expect(screen.getByText('Select Multiple')).toBeInTheDocument();
+    });
+  });
 });
 
 

@@ -286,6 +286,8 @@ export default function MessagesPage({
   const [replyingTo, setReplyingTo] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
+  const [selectedMessageForAction, setSelectedMessageForAction] = useState(null);
+  const [isActionBarMoreOpen, setIsActionBarMoreOpen] = useState(false);
   const [deleteModalTarget, setDeleteModalTarget] = useState(null);
   const [pinnedMessage, setPinnedMessage] = useState(null);
   const [forwardModalTarget, setForwardModalTarget] = useState(null);
@@ -372,6 +374,9 @@ export default function MessagesPage({
   const touchStartPosRef = useRef({ x: 0, y: 0 });
   const activePartnerRef = useRef(activePartner);
   activePartnerRef.current = activePartner;
+  const selectedMessageForActionRef = useRef(selectedMessageForAction);
+  selectedMessageForActionRef.current = selectedMessageForAction;
+  const justSelectedActionRef = useRef(0);
   const contextMenuRef = useRef(null);
   const isInitialPartnerLoadRef = useRef(true);
   const activePartnerUsernameRef = useRef(null);
@@ -1158,12 +1163,19 @@ export default function MessagesPage({
     }
 
     const handleGlobalClick = () => {
+      if (Date.now() - justSelectedActionRef.current < 450) {
+        return;
+      }
+      setSelectedMessageForAction(null);
+      setIsActionBarMoreOpen(false);
       setContextMenu(null);
       setIsConvMenuOpen(false);
       setConvContextMenu(null);
     };
     const handleGlobalKeyDown = (e) => {
       if (e.key === 'Escape') {
+        setSelectedMessageForAction(null);
+        setIsActionBarMoreOpen(false);
         setContextMenu(null);
         setIsConvMenuOpen(false);
         setConvContextMenu(null);
@@ -1697,70 +1709,29 @@ export default function MessagesPage({
   };
 
   // ==========================================================================
-  // 6b. VibeGrid Message Action Handlers (Reply, Edit, Copy, Delete)
+  // 6b. VibeGrid Message Action Handlers (WhatsApp Classic Selection & Actions)
   // ==========================================================================
-  const handleContextMenu = (e, msg) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (e && e.stopPropagation) e.stopPropagation();
-
-    // Deselect any active browser text selection
+  const handleSelectMessageForAction = (msg) => {
     if (typeof window !== 'undefined' && window.getSelection) {
       const sel = window.getSelection();
       if (sel && sel.removeAllRanges) sel.removeAllRanges();
     }
-
-    const mouseX = e?.clientX ?? (e?.touches && e.touches[0]?.clientX) ?? 100;
-    const mouseY = e?.clientY ?? (e?.touches && e.touches[0]?.clientY) ?? 100;
-
-    const menuWidth = 200;
-    const estimatedHeight = 420;
-    const bottomSafety = 76; // keep above mobile composer / navigation bar
-    const viewportHeight = window.innerHeight;
-    const viewportWidth = window.innerWidth;
-
-    let x = mouseX;
-    if (x + menuWidth > viewportWidth - 12) {
-      x = Math.max(12, viewportWidth - menuWidth - 12);
-    }
-
-    let y = mouseY;
-    if (y + estimatedHeight > viewportHeight - bottomSafety) {
-      y = Math.max(12, viewportHeight - bottomSafety - estimatedHeight);
-    }
-
-    setContextMenu({ x, y, message: msg });
+    justSelectedActionRef.current = Date.now();
+    setIsActionBarMoreOpen(false);
+    setSelectedMessageForAction(msg);
   };
 
-  // Ensure floating context menu never overflows bottom or right of viewport (e.g. Delete option is never clipped)
-  useLayoutEffect(() => {
-    if (contextMenu && contextMenuRef.current) {
-      const el = contextMenuRef.current;
-      const rect = el.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      const viewportWidth = window.innerWidth;
-      const bottomThreshold = viewportHeight - 76; // Account for mobile chat composer
+  const handleDeselectMessage = () => {
+    setSelectedMessageForAction(null);
+    setIsActionBarMoreOpen(false);
+  };
 
-      let adjustedTop = rect.top;
-      let adjustedLeft = rect.left;
+  const handleContextMenu = (e, msg) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
 
-      if (rect.bottom > bottomThreshold) {
-        adjustedTop = Math.max(12, rect.top - (rect.bottom - bottomThreshold));
-      }
-      if (adjustedTop < 12) {
-        adjustedTop = 12;
-      }
-
-      if (rect.right > viewportWidth - 12) {
-        adjustedLeft = Math.max(12, rect.left - (rect.right - (viewportWidth - 12)));
-      }
-      if (adjustedLeft < 12) {
-        adjustedLeft = 12;
-      }
-
-      el.style.top = `${adjustedTop}px`;
-      el.style.left = `${adjustedLeft}px`;
-    }
-  }, [contextMenu]);
+    handleSelectMessageForAction(msg);
+  };
 
   const handleTouchStart = (e, msg) => {
     if (longPressTimerRef.current) {
@@ -1777,17 +1748,11 @@ export default function MessagesPage({
     }
 
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
-    const clientX = touch.clientX;
-    const clientY = touch.clientY;
 
     longPressTimerRef.current = setTimeout(() => {
       longPressTimerRef.current = null;
-      if (typeof window !== 'undefined' && window.getSelection) {
-        const sel = window.getSelection();
-        if (sel && sel.removeAllRanges) sel.removeAllRanges();
-      }
-      handleContextMenu({ clientX, clientY, preventDefault: () => {}, stopPropagation: () => {} }, msg);
-    }, 450);
+      handleSelectMessageForAction(msg);
+    }, 420);
   };
 
   const handleTouchMove = (e) => {
@@ -2578,8 +2543,177 @@ export default function MessagesPage({
         <section className="messages-chat-panel">
           {activePartner ? (
             <>
-              {/* Chat Header */}
-              <div className="chat-header">
+              {/* Chat Header / WhatsApp Classic Top Action Bar */}
+              {selectedMessageForAction ? (
+                <div className="chat-header chat-top-action-bar" data-testid="chat-top-action-bar">
+                  <div className="top-action-bar-left">
+                    <button
+                      type="button"
+                      className="btn-action-bar-back"
+                      onClick={handleDeselectMessage}
+                      title="Deselect message"
+                      aria-label="Deselect message"
+                    >
+                      <ArrowLeft size={20} />
+                    </button>
+                    <span className="action-bar-count">1 selected</span>
+                  </div>
+
+                  <div className="top-action-bar-right">
+                    {!selectedMessageForAction.is_deleted && (
+                      <button
+                        type="button"
+                        className="btn-action-icon"
+                        onClick={() => {
+                          const msg = selectedMessageForAction;
+                          handleDeselectMessage();
+                          handleStartReply(msg);
+                        }}
+                        title="Reply"
+                        aria-label="Reply"
+                      >
+                        <Reply size={19} />
+                      </button>
+                    )}
+                    {!selectedMessageForAction.is_deleted && (
+                      <button
+                        type="button"
+                        className="btn-action-icon"
+                        onClick={() => {
+                          const msg = selectedMessageForAction;
+                          handleDeselectMessage();
+                          handleToggleStar(msg);
+                        }}
+                        title={selectedMessageForAction.is_starred ? 'Unstar' : 'Star'}
+                        aria-label="Star"
+                      >
+                        <Star
+                          size={19}
+                          fill={selectedMessageForAction.is_starred ? '#f59e0b' : 'none'}
+                          color={selectedMessageForAction.is_starred ? '#f59e0b' : 'currentColor'}
+                        />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-action-icon btn-action-danger"
+                      onClick={() => {
+                        const msg = selectedMessageForAction;
+                        handleDeselectMessage();
+                        handlePromptDelete(msg);
+                      }}
+                      title="Delete"
+                      aria-label="Delete"
+                    >
+                      <Trash2 size={19} />
+                    </button>
+                    {!selectedMessageForAction.is_deleted && (
+                      <button
+                        type="button"
+                        className="btn-action-icon"
+                        onClick={() => {
+                          const msg = selectedMessageForAction;
+                          handleDeselectMessage();
+                          handleStartForward(msg);
+                        }}
+                        title="Forward"
+                        aria-label="Forward"
+                      >
+                        <Share2 size={19} />
+                      </button>
+                    )}
+                    {!selectedMessageForAction.is_deleted && (
+                      <button
+                        type="button"
+                        className="btn-action-icon"
+                        onClick={() => {
+                          const msg = selectedMessageForAction;
+                          handleDeselectMessage();
+                          handleCopyMessage(msg);
+                        }}
+                        title="Copy text"
+                        aria-label="Copy text"
+                      >
+                        <Copy size={19} />
+                      </button>
+                    )}
+
+                    {/* More actions dropdown (Pin, Edit, Info, Select) */}
+                    <div className="action-bar-more-wrap">
+                      <button
+                        type="button"
+                        className="btn-action-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsActionBarMoreOpen((prev) => !prev);
+                        }}
+                        title="More options"
+                        aria-label="More options"
+                      >
+                        <MoreVertical size={19} />
+                      </button>
+
+                      {isActionBarMoreOpen && (
+                        <div className="action-bar-more-dropdown" onClick={(e) => e.stopPropagation()}>
+                          {!selectedMessageForAction.is_deleted && (
+                            <button
+                              type="button"
+                              className="action-bar-dropdown-item"
+                              onClick={() => {
+                                const msg = selectedMessageForAction;
+                                handleDeselectMessage();
+                                handleTogglePin(msg);
+                              }}
+                            >
+                              <Pin size={15} /> {pinnedMessage?.id === selectedMessageForAction.id ? 'Unpin' : 'Pin'}
+                            </button>
+                          )}
+                          {selectedMessageForAction.is_mine && !selectedMessageForAction.is_deleted && (
+                            <button
+                              type="button"
+                              className="action-bar-dropdown-item"
+                              onClick={() => {
+                                const msg = selectedMessageForAction;
+                                handleDeselectMessage();
+                                handleStartEdit(msg);
+                              }}
+                            >
+                              <Edit2 size={15} /> Edit
+                            </button>
+                          )}
+                          {selectedMessageForAction.is_mine && !selectedMessageForAction.is_deleted && (
+                            <button
+                              type="button"
+                              className="action-bar-dropdown-item"
+                              onClick={() => {
+                                const msg = selectedMessageForAction;
+                                handleDeselectMessage();
+                                handleOpenMessageInfo(msg);
+                              }}
+                            >
+                              <Info size={15} /> Message Info
+                            </button>
+                          )}
+                          {!selectedMessageForAction.is_deleted && (
+                            <button
+                              type="button"
+                              className="action-bar-dropdown-item"
+                              onClick={() => {
+                                const msg = selectedMessageForAction;
+                                handleDeselectMessage();
+                                handleToggleSelectMode(msg);
+                              }}
+                            >
+                              <CheckSquare size={15} /> Select Multiple
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="chat-header">
                 <button
                   type="button"
                   className="btn-chat-back-mobile"
@@ -2924,6 +3058,7 @@ export default function MessagesPage({
                   </div>
                 </div>
               </div>
+            )}
 
               {/* Blocked User Banner */}
               {(isBlocked || isBlockedBy) && (
@@ -3053,6 +3188,12 @@ export default function MessagesPage({
                 ref={chatStreamRef}
                 onScroll={() => {
                   if (contextMenu) setContextMenu(null);
+                  if (selectedMessageForAction) handleDeselectMessage();
+                }}
+                onClick={(e) => {
+                  if (selectedMessageForAction && e.target === chatStreamRef.current) {
+                    handleDeselectMessage();
+                  }
                 }}
               >
                 {/* E2EE Security Disclaimer Banner */}
@@ -3129,8 +3270,21 @@ export default function MessagesPage({
                         )}
                         <div
                           id={`msg-${m.id}`}
-                          className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'} ${isSelectionMode ? 'selection-mode' : ''} ${selectedMessageIds.has(Number(m.id)) ? 'is-selected' : ''}`}
-                          onClick={isSelectionMode ? () => handleToggleMessageSelection(m.id) : undefined}
+                          className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'} ${isSelectionMode ? 'selection-mode' : ''} ${selectedMessageIds.has(Number(m.id)) ? 'is-selected' : ''} ${selectedMessageForAction?.id === m.id ? 'is-action-selected' : ''}`}
+                          onClick={(e) => {
+                            if (isSelectionMode) {
+                              handleToggleMessageSelection(m.id);
+                            } else if (selectedMessageForAction) {
+                              e.stopPropagation();
+                              if (selectedMessageForAction.id === m.id) {
+                                if (Date.now() - justSelectedActionRef.current > 350) {
+                                  handleDeselectMessage();
+                                }
+                              } else {
+                                handleSelectMessageForAction(m);
+                              }
+                            }
+                          }}
                           onContextMenu={(e) => {
                             if (isSelectionMode) {
                               e.preventDefault();
@@ -3153,7 +3307,34 @@ export default function MessagesPage({
                             </div>
                           )}
 
-                          <div className={`message-bubble ${mediaPayload ? 'has-media' : ''} ${m.is_deleted ? 'deleted-bubble' : ''}`}>
+                          <div
+                            className={`message-bubble ${mediaPayload ? 'has-media' : ''} ${m.is_deleted ? 'deleted-bubble' : ''} ${selectedMessageForAction?.id === m.id ? 'is-highlighted-bubble' : ''}`}
+                          >
+                            {/* Style 1: WhatsApp Classic Floating Quick Reaction Pill directly over selected bubble */}
+                            {selectedMessageForAction?.id === m.id && !m.is_deleted && (
+                              <div
+                                className="vg-wa-floating-reactions"
+                                onClick={(e) => e.stopPropagation()}
+                                data-testid="wa-floating-reactions"
+                              >
+                                {['❤️', '😂', '👍', '😮', '😢', '🙏'].map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    className="vg-wa-react-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleReaction(m.id, emoji);
+                                      handleDeselectMessage();
+                                    }}
+                                    title={`React ${emoji}`}
+                                    aria-label={`React ${emoji}`}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                             {/* Forwarded badge */}
                             {m.is_forwarded && !m.is_deleted && (
                               <div className="forwarded-badge">
@@ -3645,81 +3826,13 @@ export default function MessagesPage({
         onClose={closeKeyBackupModal}
       />
 
-      {/* Floating Context Menu */}
-      {contextMenu && (
-        <div className="vg-context-overlay" onClick={() => setContextMenu(null)}>
-          <div
-            ref={contextMenuRef}
-            className="vg-context-menu"
-            style={{ top: contextMenu.y, left: contextMenu.x }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Quick Reactions Bar */}
-            {!contextMenu.message.is_deleted && (
-              <div className="vg-quick-reactions-bar">
-                {QUICK_REACTIONS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    className="vg-quick-react-btn"
-                    onClick={() => {
-                      handleToggleReaction(contextMenu.message.id, emoji);
-                      setContextMenu(null);
-                    }}
-                    title={`React ${emoji}`}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {!contextMenu.message.is_deleted && (
-              <button className="vg-ctx-item" onClick={() => handleStartReply(contextMenu.message)}>
-                <Reply size={15} /> Reply
-              </button>
-            )}
-            {!contextMenu.message.is_deleted && (
-              <button className="vg-ctx-item" onClick={() => handleStartForward(contextMenu.message)}>
-                <Share2 size={15} /> Forward
-              </button>
-            )}
-            {!contextMenu.message.is_deleted && (
-              <button className="vg-ctx-item" onClick={() => handleCopyMessage(contextMenu.message)}>
-                <Copy size={15} /> Copy
-              </button>
-            )}
-            {!contextMenu.message.is_deleted && (
-              <button className="vg-ctx-item" onClick={() => handleToggleSelectMode(contextMenu.message)}>
-                <CheckSquare size={15} /> Select
-              </button>
-            )}
-            {!contextMenu.message.is_deleted && (
-              <button className="vg-ctx-item" onClick={() => handleToggleStar(contextMenu.message)}>
-                <Star size={15} fill={contextMenu.message.is_starred ? '#f59e0b' : 'none'} color={contextMenu.message.is_starred ? '#f59e0b' : 'currentColor'} />
-                {contextMenu.message.is_starred ? 'Unstar' : 'Star'}
-              </button>
-            )}
-            {!contextMenu.message.is_deleted && (
-              <button className="vg-ctx-item" onClick={() => handleTogglePin(contextMenu.message)}>
-                <Pin size={15} /> {pinnedMessage?.id === contextMenu.message.id ? 'Unpin' : 'Pin'}
-              </button>
-            )}
-            {contextMenu.message.is_mine && !contextMenu.message.is_deleted && (
-              <button className="vg-ctx-item" onClick={() => handleStartEdit(contextMenu.message)}>
-                <Edit2 size={15} /> Edit
-              </button>
-            )}
-            {contextMenu.message.is_mine && !contextMenu.message.is_deleted && (
-              <button className="vg-ctx-item" onClick={() => handleOpenMessageInfo(contextMenu.message)}>
-                <Info size={15} /> Message Info
-              </button>
-            )}
-            <button className="vg-ctx-item vg-ctx-danger" onClick={() => handlePromptDelete(contextMenu.message)}>
-              <Trash2 size={15} /> Delete
-            </button>
-          </div>
-        </div>
+      {/* WhatsApp Classic message selection backdrop */}
+      {selectedMessageForAction && (
+        <div
+          className="vg-wa-backdrop"
+          onClick={handleDeselectMessage}
+          aria-hidden="true"
+        />
       )}
 
       {/* Delete Confirmation Modal */}
@@ -4872,6 +4985,7 @@ export default function MessagesPage({
         }
 
         .message-bubble {
+          position: relative;
           max-width: 68%;
           padding: 10px 14px;
           word-break: break-word;
@@ -5242,6 +5356,235 @@ export default function MessagesPage({
         .reply-preview-close:hover {
           background: rgba(255, 255, 255, 0.1);
           color: var(--text-primary, #f8fafc);
+        }
+
+        /* ===== WhatsApp Classic Top Action Bar & Floating Reaction Pill ===== */
+        .vg-wa-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 40;
+          background: transparent;
+        }
+
+        .chat-top-action-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: var(--bg-card, #1e293b);
+          border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+          padding: 6px 12px;
+          min-height: 56px;
+          animation: waBarSlideDown 0.14s ease-out;
+          z-index: 100;
+        }
+
+        @keyframes waBarSlideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-6px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .top-action-bar-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .btn-action-bar-back {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 44px;
+          min-height: 44px;
+          border: none;
+          background: transparent;
+          color: var(--text-primary, #ffffff);
+          border-radius: 50%;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .btn-action-bar-back:hover,
+        .btn-action-bar-back:focus-visible {
+          background: rgba(255, 255, 255, 0.1);
+        }
+
+        .action-bar-count {
+          font-size: 1.05rem;
+          font-weight: 600;
+          color: var(--text-primary, #ffffff);
+          letter-spacing: 0.2px;
+        }
+
+        .top-action-bar-right {
+          display: flex;
+          align-items: center;
+          gap: 2px;
+        }
+
+        .btn-action-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 44px;
+          min-height: 44px;
+          border: none;
+          background: transparent;
+          color: var(--text-secondary, #94a3b8);
+          border-radius: 50%;
+          cursor: pointer;
+          transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+        }
+
+        .btn-action-icon:hover,
+        .btn-action-icon:focus-visible {
+          background: rgba(255, 255, 255, 0.1);
+          color: var(--text-primary, #ffffff);
+        }
+
+        .btn-action-icon:active {
+          transform: scale(0.94);
+        }
+
+        .btn-action-danger {
+          color: #f87171;
+        }
+
+        .btn-action-danger:hover,
+        .btn-action-danger:focus-visible {
+          background: rgba(239, 68, 68, 0.15);
+          color: #ef4444;
+        }
+
+        .action-bar-more-wrap {
+          position: relative;
+        }
+
+        .action-bar-more-dropdown {
+          position: absolute;
+          top: calc(100% + 4px);
+          right: 0;
+          background: var(--bg-card, #1e293b);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+          border-radius: 12px;
+          padding: 6px;
+          min-width: 175px;
+          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+          z-index: 1000;
+          animation: waMenuScale 0.12s ease-out;
+        }
+
+        @keyframes waMenuScale {
+          from {
+            opacity: 0;
+            transform: scale(0.92) translateY(-4px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+
+        .action-bar-dropdown-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+          padding: 10px 14px;
+          border: none;
+          background: transparent;
+          color: var(--text-primary, #e2e8f0);
+          font-size: 0.88rem;
+          font-weight: 500;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: background 0.12s ease;
+          text-align: left;
+        }
+
+        .action-bar-dropdown-item:hover,
+        .action-bar-dropdown-item:focus-visible {
+          background: rgba(255, 255, 255, 0.08);
+        }
+
+        /* Message bubble highlight when selected for action */
+        .message-bubble.is-highlighted-bubble {
+          box-shadow: 0 0 0 2.5px #6366f1, 0 6px 20px rgba(99, 102, 241, 0.35) !important;
+          transform: translateZ(0);
+        }
+
+        .message-bubble-row.is-action-selected {
+          background: rgba(99, 102, 241, 0.08);
+          border-radius: 12px;
+        }
+
+        /* Floating Reaction Pill directly over selected bubble */
+        .vg-wa-floating-reactions {
+          position: absolute;
+          top: -46px;
+          display: flex;
+          align-items: center;
+          gap: 3px;
+          background: var(--bg-card, #1e293b);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.16));
+          border-radius: 9999px;
+          padding: 3px 8px;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
+          z-index: 50;
+          animation: waReactionPop 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          user-select: none;
+        }
+
+        .message-bubble-row.outgoing .vg-wa-floating-reactions {
+          right: 0;
+        }
+
+        .message-bubble-row.incoming .vg-wa-floating-reactions {
+          left: 0;
+        }
+
+        @keyframes waReactionPop {
+          0% {
+            opacity: 0;
+            transform: scale(0.6) translateY(8px);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+
+        .vg-wa-react-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          border: none;
+          background: transparent;
+          font-size: 1.3rem;
+          line-height: 1;
+          border-radius: 50%;
+          cursor: pointer;
+          padding: 0;
+          transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.12s ease;
+        }
+
+        .vg-wa-react-btn:hover,
+        .vg-wa-react-btn:focus-visible {
+          transform: scale(1.3);
+          background: rgba(255, 255, 255, 0.12);
+        }
+
+        .vg-wa-react-btn:active {
+          transform: scale(0.95);
         }
 
         /* ===== Floating Context Menu ===== */
