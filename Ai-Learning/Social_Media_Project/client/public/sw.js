@@ -9,7 +9,7 @@
  * 4. Automatic cache cleanup on deployment and immediate client claiming
  */
 
-const CACHE_NAME = 'vibegrid-pwa-v37';
+const CACHE_NAME = 'vibegrid-pwa-v38';
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_ASSETS = [
@@ -24,6 +24,13 @@ const PRECACHE_ASSETS = [
   '/icons/apple-touch-icon.png',
   '/icons/icon.svg'
 ];
+
+// 0. Listen for SKIP_WAITING from client to activate immediately
+self.addEventListener('message', (event) => {
+  if (event.data && (event.data.type === 'SKIP_WAITING' || event.data === 'skipWaiting')) {
+    self.skipWaiting();
+  }
+});
 
 // 1. Install Event: Cache Core App Shell & Skip Waiting
 self.addEventListener('install', (event) => {
@@ -84,7 +91,7 @@ self.addEventListener('fetch', (event) => {
             const responseClone = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(request, responseClone);
-            });
+            }).catch(() => {});
           }
           return networkResponse;
         })
@@ -119,13 +126,15 @@ self.addEventListener('fetch', (event) => {
               const responseClone = networkResponse.clone();
               caches.open(CACHE_NAME).then((cache) => {
                 cache.put(request, responseClone);
-              });
+              }).catch(() => {});
             }
             return networkResponse;
           })
           .catch(() => cachedResponse);
 
         return cachedResponse || fetchPromise;
+      }).catch(() => {
+        return fetch(request).catch(() => new Response('', { status: 408 }));
       })
     );
     return;

@@ -31,6 +31,13 @@ export function registerServiceWorker(onUpdateAvailable) {
           registration.update();
         } catch {}
 
+        // Check if there is already a waiting service worker
+        if (registration.waiting && navigator.serviceWorker.controller) {
+          console.log('🔄 [PWA] Existing waiting worker detected.');
+          if (onUpdateAvailable) onUpdateAvailable();
+          if (updateAvailableListener) updateAvailableListener();
+        }
+
         registration.addEventListener('updatefound', () => {
           const installingWorker = registration.installing;
           if (installingWorker == null) return;
@@ -42,6 +49,15 @@ export function registerServiceWorker(onUpdateAvailable) {
               if (updateAvailableListener) updateAvailableListener();
             }
           });
+        });
+
+        // Check for updates whenever the tab becomes visible again
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            try {
+              registration.update();
+            } catch {}
+          }
         });
       })
       .catch((error) => {
@@ -123,6 +139,15 @@ export function usePWA() {
     // Update listener
     updateAvailableListener = () => setHasUpdate(true);
 
+    // Actively check if a waiting worker is already present
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        if (reg && reg.waiting && navigator.serviceWorker.controller) {
+          setHasUpdate(true);
+        }
+      }).catch(() => {});
+    }
+
     return () => {
       if (mediaQuery && mediaQuery.removeEventListener && handleDisplayChange) {
         mediaQuery.removeEventListener('change', handleDisplayChange);
@@ -163,11 +188,15 @@ export function usePWA() {
   };
 
   const applyUpdate = () => {
-    if ('serviceWorker' in navigator) {
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistration().then((reg) => {
         if (reg && reg.waiting) {
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
+        setTimeout(() => {
+          window.location.reload();
+        }, 200);
+      }).catch(() => {
         window.location.reload();
       });
     } else {
