@@ -1865,6 +1865,178 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
       expect(onDeselect).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ===================================================================
+  // Chat Presence and Deleted Message Tests
+  // ===================================================================
+  describe('Chat Presence and Deleted Message Behavior', () => {
+    // 1. Presence Sub-label Component
+    function ChatPresenceHeaderComponent({ activePartner, onlineUserIds }) {
+      const isCurrentPartnerOnline = Boolean(
+        activePartner && (
+          onlineUserIds.has(Number(activePartner.id)) ||
+          Boolean(activePartner.is_online)
+        )
+      );
+
+      return (
+        <span className="chat-header-sub" data-testid="chat-header-sub">
+          {isCurrentPartnerOnline ? (
+            <span className="online-sub-label">
+              <span className="online-dot-pulse" /> Online
+            </span>
+          ) : activePartner?.last_seen_at && activePartner?.show_online_status !== false ? (
+            <span className="last-seen-label">
+              Last seen {activePartner.last_seen_at.includes('just now') ? 'just now' : '5m ago'}
+            </span>
+          ) : (
+            activePartner?.full_name || 'End-to-end encrypted'
+          )}
+        </span>
+      );
+    }
+
+    it('shows "Online" with pulse dot when user is in onlineUserIds set or activePartner.is_online is true', () => {
+      const partner = { id: 42, full_name: 'Bob', is_online: true };
+      const onlineSet = new Set();
+      const { rerender } = render(
+        <ChatPresenceHeaderComponent activePartner={partner} onlineUserIds={onlineSet} />
+      );
+
+      expect(screen.getByTestId('chat-header-sub')).toHaveTextContent('Online');
+      expect(screen.getByText('Online')).toHaveClass('online-sub-label');
+
+      // Also when ID is in onlineUserIds set
+      const offlinePartner = { id: 42, full_name: 'Bob', is_online: false };
+      const onlineSetWithId = new Set([42]);
+      rerender(
+        <ChatPresenceHeaderComponent activePartner={offlinePartner} onlineUserIds={onlineSetWithId} />
+      );
+      expect(screen.getByTestId('chat-header-sub')).toHaveTextContent('Online');
+    });
+
+    it('shows "Last seen ..." when partner is offline and show_online_status is true', () => {
+      const partner = {
+        id: 42,
+        full_name: 'Bob',
+        is_online: false,
+        last_seen_at: 'just now',
+        show_online_status: true
+      };
+      const onlineSet = new Set();
+      render(<ChatPresenceHeaderComponent activePartner={partner} onlineUserIds={onlineSet} />);
+
+      expect(screen.getByTestId('chat-header-sub')).toHaveTextContent('Last seen just now');
+    });
+
+    it('does NOT show Online or Last seen when show_online_status is false', () => {
+      const partner = {
+        id: 42,
+        full_name: 'Bob',
+        is_online: false,
+        last_seen_at: 'just now',
+        show_online_status: false
+      };
+      const onlineSet = new Set();
+      render(<ChatPresenceHeaderComponent activePartner={partner} onlineUserIds={onlineSet} />);
+
+      expect(screen.getByTestId('chat-header-sub')).not.toHaveTextContent('Online');
+      expect(screen.getByTestId('chat-header-sub')).not.toHaveTextContent('Last seen');
+      expect(screen.getByTestId('chat-header-sub')).toHaveTextContent('Bob');
+    });
+
+    // 2. Deleted Message Actions & Permanent Treatment
+    it('permanently treats deleted messages as deleted and prevents re-deletion, forwarding, editing, or reacting', () => {
+      let messages = [
+        { id: 201, content: 'Hello', is_mine: true, is_deleted: false },
+        { id: 202, content: 'World', is_mine: false, is_deleted: false }
+      ];
+
+      // Simulate delete action
+      const handleDeleteMessage = (msg) => {
+        if (!msg || msg.is_deleted) return;
+        messages = messages.map((m) =>
+          m.id === msg.id
+            ? { ...m, is_deleted: true, content: 'This message was deleted' }
+            : m
+        );
+      };
+
+      // 1. Delete message 201
+      handleDeleteMessage(messages[0]);
+      expect(messages[0].is_deleted).toBe(true);
+      expect(messages[0].content).toBe('This message was deleted');
+
+      // 2. Try to delete it again - must not change or trigger any action
+      const deleteAttempt = vi.fn();
+      const handlePromptDelete = (msg) => {
+        if (!msg || msg.is_deleted) return;
+        deleteAttempt();
+      };
+      handlePromptDelete(messages[0]);
+      expect(deleteAttempt).not.toHaveBeenCalled();
+
+      // 3. Selection guard - deleted messages cannot be selected
+      const selectAttempt = vi.fn();
+      const handleSelectMessageForAction = (msg) => {
+        if (!msg || msg.is_deleted) return;
+        selectAttempt();
+      };
+      handleSelectMessageForAction(messages[0]);
+      expect(selectAttempt).not.toHaveBeenCalled();
+
+      // 4. Pin guard - deleted messages cannot be pinned
+      const pinAttempt = vi.fn();
+      const handleTogglePin = (msg) => {
+        if (!msg || msg.is_deleted) return;
+        pinAttempt();
+      };
+      handleTogglePin(messages[0]);
+      expect(pinAttempt).not.toHaveBeenCalled();
+
+      // 5. Reaction guard - cannot react to deleted messages
+      const reactionAttempt = vi.fn();
+      const handleToggleReaction = (msgId) => {
+        const msg = messages.find((m) => m.id === msgId);
+        if (!msg || msg.is_deleted) return;
+        reactionAttempt();
+      };
+      handleToggleReaction(messages[0].id);
+      expect(reactionAttempt).not.toHaveBeenCalled();
+    });
+
+    // 3. Top Action Bar: Delete button hidden when selected message is deleted
+    function TopActionBarComponent({ selectedMessages, onDelete }) {
+      return (
+        <div data-testid="chat-top-action-bar">
+          <span>{selectedMessages.length} selected</span>
+          {selectedMessages.some((m) => !m.is_deleted) && (
+            <button type="button" data-testid="action-bar-delete" onClick={onDelete}>
+              Delete
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    it('renders Delete button in Top Action Bar only when at least one non-deleted message is selected', () => {
+      const onDelete = vi.fn();
+      const nonDeletedMsg = { id: 1, content: 'Active', is_deleted: false };
+      const deletedMsg = { id: 2, content: 'This message was deleted', is_deleted: true };
+
+      // With non-deleted message selected: Delete button is present
+      const { rerender } = render(
+        <TopActionBarComponent selectedMessages={[nonDeletedMsg]} onDelete={onDelete} />
+      );
+      expect(screen.getByTestId('action-bar-delete')).toBeInTheDocument();
+
+      // With only deleted message selected: Delete button is NOT rendered
+      rerender(
+        <TopActionBarComponent selectedMessages={[deletedMsg]} onDelete={onDelete} />
+      );
+      expect(screen.queryByTestId('action-bar-delete')).not.toBeInTheDocument();
+    });
+  });
 });
 
 

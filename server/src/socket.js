@@ -127,11 +127,22 @@ function initSocket(httpServer) {
       socket.broadcast.emit('presence:update', { userId, status: 'online' });
     }
 
-    // Return active online users
-    socket.on('presence:get', (callback) => {
+    // Return active online users (sockets + recent heartbeat)
+    socket.on('presence:get', async (callback) => {
       if (typeof callback === 'function') {
-        const activeIds = Array.from(onlineUsers.keys());
-        callback(activeIds);
+        const socketActiveIds = Array.from(onlineUsers.keys());
+        try {
+          const recentRes = await query(
+            `SELECT id FROM users 
+             WHERE show_online_status != FALSE 
+               AND last_seen_at > CURRENT_TIMESTAMP - INTERVAL '60 seconds'`
+          );
+          const recentIds = recentRes.rows.map((r) => Number(r.id));
+          const allActive = Array.from(new Set([...socketActiveIds.map(Number), ...recentIds]));
+          callback(allActive);
+        } catch {
+          callback(socketActiveIds);
+        }
       }
     });
 

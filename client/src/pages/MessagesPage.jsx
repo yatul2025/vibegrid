@@ -924,12 +924,23 @@ export default function MessagesPage({
         setFirstUnreadMessageId(firstUnreadId);
         setUnreadDividerCount(unreadCount);
 
+        // Deduplicate messages by ID to prevent duplicate placeholders or messages
+        const uniqueMessages = [];
+        const seenMsgIds = new Set();
+        for (const msg of decryptedMessages) {
+          const key = String(msg.id);
+          if (!seenMsgIds.has(key)) {
+            seenMsgIds.add(key);
+            uniqueMessages.push(msg);
+          }
+        }
+
         setMessages((prev) => {
-          if (!isInitialLoad && prev.length === decryptedMessages.length && prev.length > 0) {
+          if (!isInitialLoad && prev.length === uniqueMessages.length && prev.length > 0) {
             const isUnchanged =
-              prev[0]?.id === decryptedMessages[0]?.id &&
-              prev[prev.length - 1]?.id === decryptedMessages[decryptedMessages.length - 1]?.id &&
-              !decryptedMessages.some((msg, idx) => {
+              prev[0]?.id === uniqueMessages[0]?.id &&
+              prev[prev.length - 1]?.id === uniqueMessages[uniqueMessages.length - 1]?.id &&
+              !uniqueMessages.some((msg, idx) => {
                 const old = prev[idx];
                 return (
                   !old ||
@@ -948,13 +959,13 @@ export default function MessagesPage({
             }
           }
 
-          if (!isInitialLoad && decryptedMessages.length > prev.length) {
-            const lastMsg = decryptedMessages[decryptedMessages.length - 1];
+          if (!isInitialLoad && uniqueMessages.length > prev.length) {
+            const lastMsg = uniqueMessages[uniqueMessages.length - 1];
             if (lastMsg && !lastMsg.is_mine) {
               stopPartnerTypingImmediately();
             }
           }
-          return decryptedMessages;
+          return uniqueMessages;
         });
 
         if (isInitialLoad) {
@@ -1030,14 +1041,23 @@ export default function MessagesPage({
     }
   }, [fetchConversations, initialTargetUsername, fetchMessagesForPartner]);
 
-  // Request online presence list on mount
+  // Request online presence list on mount and maintain presence heartbeat
   useEffect(() => {
-    socketService.emit('presence:get', (activeIds) => {
-      if (Array.isArray(activeIds)) {
-        setOnlineUserIds(new Set(activeIds.map(Number)));
-      }
-    });
-  }, []);
+    if (!user) return;
+
+    const syncPresence = () => {
+      apiClient.post('/messages/heartbeat').catch(() => {});
+      socketService.emit('presence:get', (activeIds) => {
+        if (Array.isArray(activeIds)) {
+          setOnlineUserIds(new Set(activeIds.map(Number)));
+        }
+      });
+    };
+
+    syncPresence();
+    const interval = setInterval(syncPresence, 25000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   // ==========================================================================
   // 2. Real-Time Socket Event Subscriptions (No Polling)
@@ -1155,9 +1175,15 @@ export default function MessagesPage({
         }
         return next;
       });
-      if (status === 'offline' && lastSeen) {
+      if (status === 'offline') {
         setActivePartner((prev) =>
-          prev && Number(prev.id) === uid ? { ...prev, last_seen_at: lastSeen } : prev
+          prev && Number(prev.id) === uid
+            ? { ...prev, is_online: false, last_seen_at: lastSeen || prev.last_seen_at || new Date().toISOString() }
+            : prev
+        );
+      } else if (status === 'online') {
+        setActivePartner((prev) =>
+          prev && Number(prev.id) === uid ? { ...prev, is_online: true } : prev
         );
       }
     };
@@ -1207,20 +1233,20 @@ export default function MessagesPage({
     // 7. Real-Time Message Delete
     const handleMessageDelete = (payload) => {
       setMessages((prev) =>
-        payload.forEveryone
-          ? prev.map((m) =>
-              Number(m.id) === Number(payload.messageId)
-                ? {
-                    ...m,
-                    is_deleted: true,
-                    content: 'This message was deleted',
-                    ciphertext: null,
-                    iv_nonce: null
-                  }
-                : m
-            )
-          : prev.filter((m) => Number(m.id) !== Number(payload.messageId))
+        prev.map((m) =>
+          Number(m.id) === Number(payload.messageId)
+            ? {
+                ...m,
+                is_deleted: true,
+                content: 'This message was deleted',
+                ciphertext: null,
+                iv_nonce: null
+              }
+            : m
+        )
       );
+      setPinnedMessages((prev) => prev.filter((pm) => Number(pm.id) !== Number(payload.messageId)));
+      setPinnedMessage((prev) => (prev && Number(prev.id) === Number(payload.messageId) ? null : prev));
     };
 
     // 8. Real-Time Message Reaction
@@ -1507,8 +1533,13 @@ export default function MessagesPage({
       });
 
       if (res.success && res.data?.message) {
-        setMessages((prev) =>
-          prev.map((m) =>
+        setMessages((prev) => {
+          const realId = Number(res.data.message.id);
+          const alreadyHasRealMsg = prev.some((m) => Number(m.id) === realId);
+          if (alreadyHasRealMsg) {
+            return prev.filter((m) => m.id !== tempId);
+          }
+          return prev.map((m) =>
             m.id === tempId
               ? {
                   ...res.data.message,
@@ -1519,8 +1550,8 @@ export default function MessagesPage({
                   pending: false
                 }
               : m
-          )
-        );
+          );
+        });
 
         setConversations((prev) =>
           prev.map((c) =>
@@ -1671,16 +1702,20 @@ export default function MessagesPage({
       });
 
       if (res.success && res.data?.message) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            ...res.data.message,
-            content: payloadString,
-            is_mine: true,
-            is_encrypted: true,
-            reply_to_message: activeReply
-          }
-        ]);
+        const newMsgId = Number(res.data.message.id);
+        setMessages((prev) => {
+          if (prev.some((m) => Number(m.id) === newMsgId)) return prev;
+          return [
+            ...prev,
+            {
+              ...res.data.message,
+              content: payloadString,
+              is_mine: true,
+              is_encrypted: true,
+              reply_to_message: activeReply
+            }
+          ];
+        });
         setTimeout(() => scrollToBottom(true), 30);
       }
     } catch (err) {
@@ -1745,16 +1780,20 @@ export default function MessagesPage({
       });
 
       if (res.success && res.data?.message) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            ...res.data.message,
-            content: payloadString,
-            is_mine: true,
-            is_encrypted: true,
-            reply_to_message: activeReply
-          }
-        ]);
+        const newMsgId = Number(res.data.message.id);
+        setMessages((prev) => {
+          if (prev.some((m) => Number(m.id) === newMsgId)) return prev;
+          return [
+            ...prev,
+            {
+              ...res.data.message,
+              content: payloadString,
+              is_mine: true,
+              is_encrypted: true,
+              reply_to_message: activeReply
+            }
+          ];
+        });
         setTimeout(() => scrollToBottom(true), 30);
       }
     } catch (err) {
@@ -1816,16 +1855,20 @@ export default function MessagesPage({
       });
 
       if (res.success && res.data?.message) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            ...res.data.message,
-            content: payloadString,
-            is_mine: true,
-            is_encrypted: true,
-            reply_to_message: activeReply
-          }
-        ]);
+        const newMsgId = Number(res.data.message.id);
+        setMessages((prev) => {
+          if (prev.some((m) => Number(m.id) === newMsgId)) return prev;
+          return [
+            ...prev,
+            {
+              ...res.data.message,
+              content: payloadString,
+              is_mine: true,
+              is_encrypted: true,
+              reply_to_message: activeReply
+            }
+          ];
+        });
         setTimeout(() => scrollToBottom(true), 30);
       }
     } catch (err) {
@@ -1848,6 +1891,7 @@ export default function MessagesPage({
   };
 
   const handleSelectMessageForAction = (msg) => {
+    if (!msg || msg.is_deleted) return;
     if (typeof window !== 'undefined' && window.getSelection) {
       const sel = window.getSelection();
       if (sel && sel.removeAllRanges) sel.removeAllRanges();
@@ -1861,6 +1905,7 @@ export default function MessagesPage({
   };
 
   const handleToggleSelectMessageForAction = (msg) => {
+    if (!msg || msg.is_deleted) return;
     if (typeof window !== 'undefined' && window.getSelection) {
       const sel = window.getSelection();
       if (sel && sel.removeAllRanges) sel.removeAllRanges();
@@ -1914,15 +1959,15 @@ export default function MessagesPage({
   };
 
   const handleDeleteSelected = () => {
-    if (selectedMessagesForAction.length === 0) return;
-    const msgs = [...selectedMessagesForAction];
-    if (msgs.length === 1) {
-      handlePromptDelete(msgs[0]);
+    const nonDeleted = selectedMessagesForAction.filter((m) => !m.is_deleted);
+    if (nonDeleted.length === 0) return;
+    if (nonDeleted.length === 1) {
+      handlePromptDelete(nonDeleted[0]);
     } else {
       setDeleteModalTarget({
-        message: { content: `${msgs.length} messages` },
+        message: { content: `${nonDeleted.length} messages` },
         isBulk: true,
-        messages: msgs
+        messages: nonDeleted
       });
     }
   };
@@ -2031,6 +2076,7 @@ export default function MessagesPage({
   const handleContextMenu = (e, msg) => {
     if (e && e.preventDefault) e.preventDefault();
     if (e && e.stopPropagation) e.stopPropagation();
+    if (!msg || msg.is_deleted) return;
 
     // If mobile long-press timer already triggered selection, ignore synthetic contextmenu event
     if (longPressFiredRef.current) return;
@@ -2050,6 +2096,7 @@ export default function MessagesPage({
       longPressTimerRef.current = null;
     }
     longPressFiredRef.current = false;
+    if (!msg || msg.is_deleted) return;
 
     // If multi-select is ALREADY active, don't set a long-press timer; single tap handles toggle directly
     if (selectedMessagesForActionRef.current && selectedMessagesForActionRef.current.length > 0) {
@@ -2133,7 +2180,8 @@ export default function MessagesPage({
 
   const handlePromptDelete = (msg) => {
     setContextMenu(null);
-    if (msg.is_mine && !msg.is_deleted) {
+    if (!msg || msg.is_deleted) return;
+    if (msg.is_mine) {
       setDeleteModalTarget({ message: msg });
     } else {
       handleDeleteMessage(msg, 'for_me');
@@ -2144,7 +2192,7 @@ export default function MessagesPage({
     setContextMenu(null);
     setDeleteModalTarget(null);
 
-    if (!msg) return;
+    if (!msg || msg.is_deleted) return;
 
     // If message is a pending / sending / failed optimistic message with a local temp ID
     if (String(msg.id).startsWith('temp-') || msg.pending || msg.failed) {
@@ -2190,6 +2238,8 @@ export default function MessagesPage({
   // Toggle emoji reaction
   const handleToggleReaction = async (messageId, reaction) => {
     if (!messageId || !reaction) return;
+    const targetMsg = messages.find((m) => Number(m.id) === Number(messageId));
+    if (targetMsg && targetMsg.is_deleted) return;
 
     // Optimistic update
     setMessages((prev) =>
@@ -2328,6 +2378,7 @@ export default function MessagesPage({
   // Toggle Pin Message
   const handleTogglePin = async (msg) => {
     setContextMenu(null);
+    if (!msg || msg.is_deleted) return;
     if (guardDemoAction('pin')) return;
     if (!activeConversationId) return;
     const isCurrentlyPinned = pinnedMessages.some((pm) => Number(pm.id) === Number(msg.id)) || Number(pinnedMessage?.id) === Number(msg.id);
@@ -2362,6 +2413,8 @@ export default function MessagesPage({
   };
 
   const handleToggleMessageSelection = (messageId) => {
+    const msg = messages.find((m) => Number(m.id) === Number(messageId));
+    if (msg && msg.is_deleted) return;
     setSelectedMessageIds((prev) => {
       const next = new Set(prev);
       const numId = Number(messageId);
@@ -2382,21 +2435,23 @@ export default function MessagesPage({
 
   const handleBulkDelete = async (type = 'for_me') => {
     if (selectedMessageIds.size === 0) return;
-    const ids = Array.from(selectedMessageIds);
+    const ids = Array.from(selectedMessageIds).filter(
+      (id) => !messages.find((m) => Number(m.id) === Number(id))?.is_deleted
+    );
+    if (ids.length === 0) {
+      handleCancelSelection();
+      return;
+    }
     try {
       const res = await apiClient.post('/messages/bulk/delete', { messageIds: ids, type });
       if (res.success) {
-        if (type === 'for_everyone') {
-          setMessages((prev) =>
-            prev.map((m) =>
-              selectedMessageIds.has(Number(m.id))
-                ? { ...m, is_deleted: true, content: 'This message was deleted', ciphertext: null, iv_nonce: null }
-                : m
-            )
-          );
-        } else {
-          setMessages((prev) => prev.filter((m) => !selectedMessageIds.has(Number(m.id))));
-        }
+        setMessages((prev) =>
+          prev.map((m) =>
+            ids.includes(Number(m.id))
+              ? { ...m, is_deleted: true, content: 'This message was deleted', ciphertext: null, iv_nonce: null }
+              : m
+          )
+        );
         handleCancelSelection();
       }
     } catch (err) {
@@ -2692,7 +2747,12 @@ export default function MessagesPage({
     fetchMessagesForPartner(targetUser.username, true);
   };
 
-  const isCurrentPartnerOnline = activePartner && onlineUserIds.has(Number(activePartner.id));
+  const isCurrentPartnerOnline = Boolean(
+    activePartner && (
+      onlineUserIds.has(Number(activePartner.id)) ||
+      Boolean(activePartner.is_online)
+    )
+  );
 
   // Phase 3: Filter messages by query and active media tab
   const filteredMessages = useMemo(() => {
@@ -2948,15 +3008,17 @@ export default function MessagesPage({
                     )}
 
                     {/* Delete: deletes 1 or all selected messages */}
-                    <button
-                      type="button"
-                      className="btn-action-icon btn-action-danger"
-                      onClick={handleDeleteSelected}
-                      title="Delete"
-                      aria-label="Delete"
-                    >
-                      <Trash2 size={19} />
-                    </button>
+                    {selectedMessagesForAction.some((m) => !m.is_deleted) && (
+                      <button
+                        type="button"
+                        className="btn-action-icon btn-action-danger"
+                        onClick={handleDeleteSelected}
+                        title="Delete"
+                        aria-label="Delete"
+                      >
+                        <Trash2 size={19} />
+                      </button>
+                    )}
 
                     {/* Forward: forwards 1 or all selected messages */}
                     {selectedMessagesForAction.some((m) => !m.is_deleted) && (
@@ -3170,7 +3232,7 @@ export default function MessagesPage({
                         <span className="typing-sub-label">{activePartner.full_name || activePartner.username} is typing...</span>
                       ) : isCurrentPartnerOnline ? (
                         <span className="online-sub-label">
-                          <span className="online-dot-pulse" /> Active now
+                          <span className="online-dot-pulse" /> Online
                         </span>
                       ) : activePartner?.last_seen_at && activePartner?.show_online_status !== false ? (
                         <span className="last-seen-label">
@@ -3676,7 +3738,13 @@ export default function MessagesPage({
                           className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'} ${isSelectionMode ? 'selection-mode' : ''} ${selectedMessageIds.has(Number(m.id)) ? 'is-selected' : ''} ${selectedActionMsgIds.has(Number(m.id)) ? 'is-action-selected' : ''}`}
                           onClick={(e) => {
                             if (isSelectionMode) {
-                              handleToggleMessageSelection(m.id);
+                              if (!m.is_deleted) handleToggleMessageSelection(m.id);
+                            } else if (m.is_deleted) {
+                              if (selectedMessagesForAction.length > 0) {
+                                e.stopPropagation();
+                                handleDeselectMessage();
+                              }
+                              return;
                             } else if (longPressFiredRef.current) {
                               longPressFiredRef.current = false;
                               e.stopPropagation();
@@ -3690,6 +3758,11 @@ export default function MessagesPage({
                             }
                           }}
                           onContextMenu={(e) => {
+                            if (m.is_deleted) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              return;
+                            }
                             if (isSelectionMode) {
                               e.preventDefault();
                               handleToggleMessageSelection(m.id);
@@ -3698,6 +3771,7 @@ export default function MessagesPage({
                             }
                           }}
                           onTouchStart={(e) => {
+                            if (m.is_deleted) return;
                             if (!isSelectionMode) handleTouchStart(e, m);
                           }}
                           onTouchMove={handleTouchMove}
@@ -3835,7 +3909,7 @@ export default function MessagesPage({
                             </div>
 
                               {/* Aggregated reactions pill row */}
-                              {m.reactions && m.reactions.length > 0 && (
+                              {m.reactions && m.reactions.length > 0 && !m.is_deleted && (
                                 <div className="message-reactions-row">
                                   {Object.entries(
                                     m.reactions.reduce((acc, r) => {

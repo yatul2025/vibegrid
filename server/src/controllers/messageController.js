@@ -84,6 +84,8 @@ const getConversations = async (req, res, next) => {
         u.username AS partner_username,
         u.full_name AS partner_full_name,
         u.avatar_url AS partner_avatar_url,
+        u.show_online_status,
+        u.last_seen_at,
         COALESCE(uc.unread_count, 0) AS unread_count,
         COALESCE(cm.is_pinned, FALSE) AS is_pinned,
         (COALESCE(cm.is_muted, FALSE) AND (cm.muted_until IS NULL OR cm.muted_until > CURRENT_TIMESTAMP)) AS is_muted,
@@ -99,10 +101,36 @@ const getConversations = async (req, res, next) => {
 
     const result = await query(conversationsQuery, [userId, showArchived]);
 
+    let socketActiveIds = [];
+    try {
+      const { onlineUsers } = require('../socket');
+      if (onlineUsers) {
+        socketActiveIds = Array.from(onlineUsers.keys()).filter((id) => onlineUsers.get(id) > 0);
+      }
+    } catch (e) {}
+
+    const convsWithOnline = result.rows.map((row) => {
+      let isOnline = false;
+      if (row.show_online_status !== false) {
+        if (socketActiveIds.map(Number).includes(Number(row.partner_id))) {
+          isOnline = true;
+        } else if (row.last_seen_at) {
+          const diffMs = Date.now() - new Date(row.last_seen_at).getTime();
+          if (diffMs >= 0 && diffMs < 60000) {
+            isOnline = true;
+          }
+        }
+      }
+      return {
+        ...row,
+        is_online: isOnline
+      };
+    });
+
     res.status(200).json({
       success: true,
       data: {
-        conversations: result.rows
+        conversations: convsWithOnline
       }
     });
   } catch (error) {
@@ -135,7 +163,29 @@ const getMessages = async (req, res, next) => {
     }
 
     const partner = partnerRes.rows[0];
-    if (partner.show_online_status === false) {
+    let isPartnerOnline = false;
+    try {
+      const { onlineUsers } = require('../socket');
+      if (onlineUsers && onlineUsers.get(partner.id) > 0) {
+        isPartnerOnline = true;
+      }
+    } catch (e) {}
+
+    if (partner.show_online_status !== false) {
+      if (isPartnerOnline) {
+        partner.is_online = true;
+      } else if (partner.last_seen_at) {
+        const diffMs = Date.now() - new Date(partner.last_seen_at).getTime();
+        if (diffMs >= 0 && diffMs < 60000) {
+          partner.is_online = true;
+        } else {
+          partner.is_online = false;
+        }
+      } else {
+        partner.is_online = false;
+      }
+    } else {
+      partner.is_online = false;
       partner.last_seen_at = null;
     }
 
@@ -749,6 +799,10 @@ const deleteMessage = async (req, res, next) => {
     }
 
     const msg = msgRes.rows[0];
+    if (msg.is_deleted) {
+      return res.status(400).json({ success: false, error: 'This message has already been deleted.' });
+    }
+
     const isSender = Number(msg.sender_id) === Number(userId);
     const isRecipient = Number(msg.recipient_id) === Number(userId);
 
@@ -2008,6 +2062,58 @@ const getTypingStatus = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Send client presence heartbeat
+ * @route   POST /api/messages/heartbeat
+ * @access  Private (Authenticated)
+ */
+const sendHeartbeat = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    await query('UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1', [userId]);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get active online user IDs (socket + recent activity)
+ * @route   GET /api/messages/presence
+ * @access  Private (Authenticated)
+ */
+const getPresenceList = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    await query('UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1', [userId]);
+
+    let socketActiveIds = [];
+    try {
+      const { onlineUsers } = require('../socket');
+      if (onlineUsers) {
+        socketActiveIds = Array.from(onlineUsers.keys()).filter((id) => onlineUsers.get(id) > 0);
+      }
+    } catch (e) {}
+
+    const recentRes = await query(
+      `SELECT id FROM users 
+       WHERE show_online_status != FALSE 
+         AND last_seen_at > CURRENT_TIMESTAMP - INTERVAL '60 seconds'`
+    );
+    const recentIds = recentRes.rows.map((r) => Number(r.id));
+    const allActive = Array.from(new Set([...socketActiveIds.map(Number), ...recentIds]));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        activeUserIds: allActive
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getConversations,
   getMessages,
@@ -2031,5 +2137,8 @@ module.exports = {
   clearConversationMessages,
   reportEntity,
   sendTypingStatus,
-  getTypingStatus
+  getTypingStatus,
+  sendHeartbeat,
+  getPresenceList
 };
+

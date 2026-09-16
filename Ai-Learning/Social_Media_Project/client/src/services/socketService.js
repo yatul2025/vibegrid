@@ -243,8 +243,17 @@ class SocketService {
           });
         }
       } else if (event === 'presence:get') {
-        if (typeof callback === 'function') {
-          callback([]);
+        try {
+          const res = await apiClient.get('/messages/presence');
+          if (res?.success && Array.isArray(res.data?.activeUserIds)) {
+            if (typeof callback === 'function') callback(res.data.activeUserIds);
+          } else if (typeof callback === 'function') {
+            callback([]);
+          }
+        } catch {
+          if (typeof callback === 'function') {
+            callback([]);
+          }
         }
       } else {
         // Fallback for custom events when socket is idle

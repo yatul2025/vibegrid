@@ -25,6 +25,8 @@ router.get('/unread-count', messageController.getUnreadMessagesCount);
 router.get('/starred', messageController.getStarredMessages);
 router.post('/forward', messageController.forwardMessage);
 router.post('/typing', messageController.sendTypingStatus);
+router.post('/heartbeat', messageController.sendHeartbeat);
+router.get('/presence', messageController.getPresenceList);
 
 // Specific message actions (declared before /:username parameter)
 router.put('/msg/:id/edit', messageController.editMessage);

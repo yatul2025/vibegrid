@@ -28,7 +28,9 @@ const {
   clearConversationMessages,
   reportEntity,
   sendTypingStatus,
-  getTypingStatus
+  getTypingStatus,
+  sendHeartbeat,
+  getPresenceList
 } = require('../controllers/messageController');
 
 // ─── Mocks ───────────────────────────────────────────────────────────
@@ -363,6 +365,21 @@ describe('deleteMessage', () => {
     }));
   });
 
+  it('should return 400 if message is already deleted', async () => {
+    query.mockResolvedValueOnce({
+      rows: [{ id: 100, sender_id: 1, recipient_id: 2, conversation_id: 10, is_deleted: true }]
+    });
+
+    const req = mockReq({ query: { type: 'for_everyone' } });
+    const res = mockRes();
+    await deleteMessage(req, res, mockNext);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'This message has already been deleted.' })
+    );
+  });
+
   it('should call next(error) on unexpected error', async () => {
     query.mockRejectedValueOnce(new Error('DB connection lost'));
 
@@ -371,6 +388,43 @@ describe('deleteMessage', () => {
     await deleteMessage(req, res, mockNext);
 
     expect(mockNext).toHaveBeenCalledWith(expect.any(Error));
+  });
+});
+
+// =====================================================================
+// Presence & Heartbeat tests
+// =====================================================================
+describe('Presence & Heartbeat', () => {
+  it('sendHeartbeat updates last_seen_at and responds with 200', async () => {
+    query.mockResolvedValueOnce({ rowCount: 1 });
+
+    const req = mockReq();
+    const res = mockRes();
+    await sendHeartbeat(req, res, mockNext);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ success: true });
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE users SET last_seen_at'),
+      [1]
+    );
+  });
+
+  it('getPresenceList returns active user IDs', async () => {
+    query.mockResolvedValueOnce({ rowCount: 1 }); // heartbeat update
+    query.mockResolvedValueOnce({ rows: [{ id: 5 }, { id: 9 }] }); // recent active
+
+    const req = mockReq();
+    const res = mockRes();
+    await getPresenceList(req, res, mockNext);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({
+        activeUserIds: expect.arrayContaining([5, 9])
+      })
+    }));
   });
 });
 
