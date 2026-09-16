@@ -380,6 +380,7 @@ export default function MessagesPage({
   const lastTypingSentRef = useRef(0);
   const partnerTypingExpiresAtRef = useRef(0);
   const longPressTimerRef = useRef(null);
+  const longPressFiredRef = useRef(false);
   const touchStartPosRef = useRef({ x: 0, y: 0 });
   const activePartnerRef = useRef(activePartner);
   activePartnerRef.current = activePartner;
@@ -1262,10 +1263,6 @@ export default function MessagesPage({
     }
 
     const handleGlobalClick = () => {
-      if (Date.now() - justSelectedActionRef.current < 450) {
-        return;
-      }
-      setSelectedMessageForAction(null);
       setIsActionBarMoreOpen(false);
       setContextMenu(null);
       setIsConvMenuOpen(false);
@@ -1273,8 +1270,14 @@ export default function MessagesPage({
     };
     const handleGlobalKeyDown = (e) => {
       if (e.key === 'Escape') {
-        setSelectedMessageForAction(null);
-        setIsActionBarMoreOpen(false);
+        if (isActionBarMoreOpenRef.current) {
+          setIsActionBarMoreOpen(false);
+          return;
+        }
+        if (selectedMessagesForActionRef.current && selectedMessagesForActionRef.current.length > 0) {
+          handleDeselectMessage();
+          return;
+        }
         setContextMenu(null);
         setIsConvMenuOpen(false);
         setConvContextMenu(null);
@@ -1926,7 +1929,12 @@ export default function MessagesPage({
     if (e && e.preventDefault) e.preventDefault();
     if (e && e.stopPropagation) e.stopPropagation();
 
-    if (selectedMessagesForAction.length > 0) {
+    // If mobile long-press timer already triggered selection, ignore synthetic contextmenu event
+    if (longPressFiredRef.current) return;
+    if (Date.now() - justSelectedActionRef.current < 450) return;
+    justSelectedActionRef.current = Date.now();
+
+    if (selectedMessagesForActionRef.current && selectedMessagesForActionRef.current.length > 0) {
       handleToggleSelectMessageForAction(msg);
     } else {
       handleSelectMessageForAction(msg);
@@ -1938,6 +1946,13 @@ export default function MessagesPage({
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+    longPressFiredRef.current = false;
+
+    // If multi-select is ALREADY active, don't set a long-press timer; single tap handles toggle directly
+    if (selectedMessagesForActionRef.current && selectedMessagesForActionRef.current.length > 0) {
+      return;
+    }
+
     const touch = e.touches?.[0];
     if (!touch) return;
 
@@ -1951,8 +1966,13 @@ export default function MessagesPage({
 
     longPressTimerRef.current = setTimeout(() => {
       longPressTimerRef.current = null;
+      longPressFiredRef.current = true;
+      justSelectedActionRef.current = Date.now();
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(40);
+      }
       handleSelectMessageForAction(msg);
-    }, 420);
+    }, 400);
   };
 
   const handleTouchMove = (e) => {
@@ -3402,6 +3422,11 @@ export default function MessagesPage({
                 ref={chatStreamRef}
                 onScroll={handleChatStreamScroll}
                 onClick={(e) => {
+                  if (longPressFiredRef.current) {
+                    longPressFiredRef.current = false;
+                    return;
+                  }
+                  if (Date.now() - justSelectedActionRef.current < 450) return;
                   if (selectedMessagesForAction.length > 0 && e.target === chatStreamRef.current) {
                     handleDeselectMessage();
                   }
@@ -3485,6 +3510,13 @@ export default function MessagesPage({
                           onClick={(e) => {
                             if (isSelectionMode) {
                               handleToggleMessageSelection(m.id);
+                            } else if (longPressFiredRef.current) {
+                              longPressFiredRef.current = false;
+                              e.stopPropagation();
+                              return;
+                            } else if (Date.now() - justSelectedActionRef.current < 450) {
+                              e.stopPropagation();
+                              return;
                             } else if (selectedMessagesForAction.length > 0) {
                               e.stopPropagation();
                               handleToggleSelectMessageForAction(m);
