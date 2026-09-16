@@ -24,7 +24,7 @@
  *    - One-click Audio Call (📞) and Video Call (📹) actions in the chat header.
  */
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import socketService from '../services/socketService';
@@ -372,6 +372,10 @@ export default function MessagesPage({
   const touchStartPosRef = useRef({ x: 0, y: 0 });
   const activePartnerRef = useRef(activePartner);
   activePartnerRef.current = activePartner;
+  const contextMenuRef = useRef(null);
+  const isInitialPartnerLoadRef = useRef(true);
+  const activePartnerUsernameRef = useRef(null);
+  const prevMessagesLengthRef = useRef(0);
 
   // Ephemeral typing handlers with sticky hysteresis
   const handleIncomingTyping = useCallback((isTyping) => {
@@ -617,9 +621,21 @@ export default function MessagesPage({
     }
   };
 
+  // Reset initial load flag whenever switching to a new partner
+  useEffect(() => {
+    if (activePartner?.username !== activePartnerUsernameRef.current) {
+      activePartnerUsernameRef.current = activePartner?.username || null;
+      isInitialPartnerLoadRef.current = true;
+      prevMessagesLengthRef.current = 0;
+    }
+  }, [activePartner?.username]);
+
   // Auto-scroll to bottom of message thread (isolated to chat-stream container to prevent window shifting)
-  const scrollToBottom = useCallback((smooth = true) => {
+  const scrollToBottom = useCallback((smooth = false) => {
     const doScroll = () => {
+      if (chatStreamRef.current) {
+        chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
+      }
       if (messagesEndRef.current) {
         try {
           messagesEndRef.current.scrollIntoView({
@@ -631,22 +647,44 @@ export default function MessagesPage({
             chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
           }
         }
-      } else if (chatStreamRef.current) {
-        chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
       }
     };
 
     doScroll();
     requestAnimationFrame(doScroll);
-    setTimeout(doScroll, 60);
-    setTimeout(doScroll, 180);
+    setTimeout(doScroll, 40);
+    setTimeout(doScroll, 120);
   }, []);
 
-  // Whenever new messages arrive or partner starts/stops typing, ensure thread is scrolled above typing bar
+  // WhatsApp-grade instant bottom placement before browser paint on initial message load
+  useLayoutEffect(() => {
+    if (isInitialPartnerLoadRef.current && messages.length > 0 && !loadingMessages) {
+      if (chatStreamRef.current) {
+        chatStreamRef.current.scrollTop = chatStreamRef.current.scrollHeight;
+      }
+    }
+  }, [messages, loadingMessages]);
+
+  // Whenever new messages arrive or partner starts/stops typing, ensure thread is scrolled
   useEffect(() => {
-    if (messages.length > 0) {
+    if (messages.length === 0) {
+      prevMessagesLengthRef.current = 0;
+      return;
+    }
+
+    if (isInitialPartnerLoadRef.current) {
+      // Instant snap on initial load — do NOT animate down from top!
+      scrollToBottom(false);
+      isInitialPartnerLoadRef.current = false;
+      prevMessagesLengthRef.current = messages.length;
+      return;
+    }
+
+    // Only smooth scroll for subsequent incoming/outgoing messages or typing indicator updates
+    if (messages.length > prevMessagesLengthRef.current || isPartnerTyping) {
       scrollToBottom(true);
     }
+    prevMessagesLengthRef.current = messages.length;
   }, [messages.length, isPartnerTyping, scrollToBottom]);
 
   // Manage body class for active chat to optimize mobile viewport & prevent window scrolling behind keyboard
@@ -810,13 +848,13 @@ export default function MessagesPage({
             setTimeout(() => {
               const unreadEl = document.getElementById('new-messages-divider');
               if (unreadEl) {
-                unreadEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                unreadEl.scrollIntoView({ behavior: 'auto', block: 'center' });
               } else {
                 scrollToBottom(false);
               }
-            }, 80);
+            }, 40);
           } else {
-            setTimeout(() => scrollToBottom(false), 50);
+            scrollToBottom(false);
           }
         }
         if (onUnreadCountChange) onUnreadCountChange();
@@ -1662,19 +1700,67 @@ export default function MessagesPage({
   // 6b. VibeGrid Message Action Handlers (Reply, Edit, Copy, Delete)
   // ==========================================================================
   const handleContextMenu = (e, msg) => {
-    e.preventDefault();
-    e.stopPropagation();
+    if (e && e.preventDefault) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
 
-    const mouseX = e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? 100;
-    const mouseY = e.clientY ?? (e.touches && e.touches[0]?.clientY) ?? 100;
+    // Deselect any active browser text selection
+    if (typeof window !== 'undefined' && window.getSelection) {
+      const sel = window.getSelection();
+      if (sel && sel.removeAllRanges) sel.removeAllRanges();
+    }
 
-    const menuWidth = 190;
-    const menuHeight = 220;
-    const x = mouseX + menuWidth > window.innerWidth ? window.innerWidth - menuWidth - 16 : mouseX;
-    const y = mouseY + menuHeight > window.innerHeight ? window.innerHeight - menuHeight - 16 : mouseY;
+    const mouseX = e?.clientX ?? (e?.touches && e.touches[0]?.clientX) ?? 100;
+    const mouseY = e?.clientY ?? (e?.touches && e.touches[0]?.clientY) ?? 100;
+
+    const menuWidth = 200;
+    const estimatedHeight = 420;
+    const bottomSafety = 76; // keep above mobile composer / navigation bar
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+
+    let x = mouseX;
+    if (x + menuWidth > viewportWidth - 12) {
+      x = Math.max(12, viewportWidth - menuWidth - 12);
+    }
+
+    let y = mouseY;
+    if (y + estimatedHeight > viewportHeight - bottomSafety) {
+      y = Math.max(12, viewportHeight - bottomSafety - estimatedHeight);
+    }
 
     setContextMenu({ x, y, message: msg });
   };
+
+  // Ensure floating context menu never overflows bottom or right of viewport (e.g. Delete option is never clipped)
+  useLayoutEffect(() => {
+    if (contextMenu && contextMenuRef.current) {
+      const el = contextMenuRef.current;
+      const rect = el.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      const bottomThreshold = viewportHeight - 76; // Account for mobile chat composer
+
+      let adjustedTop = rect.top;
+      let adjustedLeft = rect.left;
+
+      if (rect.bottom > bottomThreshold) {
+        adjustedTop = Math.max(12, rect.top - (rect.bottom - bottomThreshold));
+      }
+      if (adjustedTop < 12) {
+        adjustedTop = 12;
+      }
+
+      if (rect.right > viewportWidth - 12) {
+        adjustedLeft = Math.max(12, rect.left - (rect.right - (viewportWidth - 12)));
+      }
+      if (adjustedLeft < 12) {
+        adjustedLeft = 12;
+      }
+
+      el.style.top = `${adjustedTop}px`;
+      el.style.left = `${adjustedLeft}px`;
+    }
+  }, [contextMenu]);
 
   const handleTouchStart = (e, msg) => {
     if (longPressTimerRef.current) {
@@ -1683,14 +1769,25 @@ export default function MessagesPage({
     }
     const touch = e.touches?.[0];
     if (!touch) return;
+
+    // Deselect any active text range before long-press starts to prevent Android highlight handles
+    if (typeof window !== 'undefined' && window.getSelection) {
+      const sel = window.getSelection();
+      if (sel && sel.removeAllRanges) sel.removeAllRanges();
+    }
+
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
     const clientX = touch.clientX;
     const clientY = touch.clientY;
 
     longPressTimerRef.current = setTimeout(() => {
       longPressTimerRef.current = null;
+      if (typeof window !== 'undefined' && window.getSelection) {
+        const sel = window.getSelection();
+        if (sel && sel.removeAllRanges) sel.removeAllRanges();
+      }
       handleContextMenu({ clientX, clientY, preventDefault: () => {}, stopPropagation: () => {} }, msg);
-    }, 500);
+    }, 450);
   };
 
   const handleTouchMove = (e) => {
@@ -2249,6 +2346,8 @@ export default function MessagesPage({
   }, [searchQuery, user?.id]);
 
   const selectConversation = (username) => {
+    isInitialPartnerLoadRef.current = true;
+    prevMessagesLengthRef.current = 0;
     if (typeof window !== 'undefined' && window.history) {
       if (window.history.state?.inChatWith !== username) {
         window.history.pushState({ tab: 'messages', inChatWith: username }, '');
@@ -2265,6 +2364,8 @@ export default function MessagesPage({
   };
 
   const startNewChat = (targetUser) => {
+    isInitialPartnerLoadRef.current = true;
+    prevMessagesLengthRef.current = 0;
     setIsNewChatModalOpen(false);
     setSearchQuery('');
     setSearchResults([]);
@@ -3548,6 +3649,7 @@ export default function MessagesPage({
       {contextMenu && (
         <div className="vg-context-overlay" onClick={() => setContextMenu(null)}>
           <div
+            ref={contextMenuRef}
             className="vg-context-menu"
             style={{ top: contextMenu.y, left: contextMenu.x }}
             onClick={(e) => e.stopPropagation()}
@@ -4773,6 +4875,11 @@ export default function MessagesPage({
           max-width: 68%;
           padding: 10px 14px;
           word-break: break-word;
+          -webkit-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+          user-select: none;
+          -webkit-touch-callout: none;
         }
 
         .message-bubble-row.outgoing .message-bubble {
@@ -4794,6 +4901,11 @@ export default function MessagesPage({
           margin: 0;
           font-size: 0.92rem;
           line-height: 1.45;
+          -webkit-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+          user-select: none;
+          -webkit-touch-callout: none;
         }
 
         .message-info-row {
@@ -5144,10 +5256,15 @@ export default function MessagesPage({
           position: fixed;
           background: var(--bg-card, #1e293b);
           border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-          border-radius: 12px;
+          border-radius: 14px;
           padding: 6px;
-          min-width: 160px;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+          min-width: 175px;
+          max-width: calc(100vw - 24px);
+          max-height: calc(100vh - 90px);
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
+          box-shadow: 0 10px 36px rgba(0, 0, 0, 0.45);
           animation: ctxFadeIn 0.12s ease;
           z-index: 10000;
         }

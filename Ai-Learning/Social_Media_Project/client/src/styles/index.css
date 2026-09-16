@@ -6602,7 +6602,6 @@ a.nav-tab-btn {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  scroll-behavior: smooth;
 }
 
 .chat-stream-bottom-anchor {
@@ -6657,6 +6656,11 @@ a.nav-tab-btn {
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .message-bubble-row.outgoing .message-bubble {
@@ -6692,6 +6696,11 @@ a.nav-tab-btn {
   margin: 0;
   font-size: 0.92rem;
   line-height: 1.4;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .message-timestamp {
