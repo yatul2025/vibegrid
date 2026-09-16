@@ -289,7 +289,13 @@ export default function MessagesPage({
   const [replyingTo, setReplyingTo] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
-  const [selectedMessageForAction, setSelectedMessageForAction] = useState(null);
+  const [selectedMessagesForAction, setSelectedMessagesForAction] = useState([]);
+  const selectedMessageForAction = selectedMessagesForAction.length === 1 ? selectedMessagesForAction[0] : null;
+  const isActionSelectionActive = selectedMessagesForAction.length > 0;
+  const selectedActionMsgIds = useMemo(
+    () => new Set(selectedMessagesForAction.map((m) => Number(m.id))),
+    [selectedMessagesForAction]
+  );
   const [isActionBarMoreOpen, setIsActionBarMoreOpen] = useState(false);
   const [deleteModalTarget, setDeleteModalTarget] = useState(null);
   const [pinnedMessage, setPinnedMessage] = useState(null);
@@ -377,6 +383,8 @@ export default function MessagesPage({
   const touchStartPosRef = useRef({ x: 0, y: 0 });
   const activePartnerRef = useRef(activePartner);
   activePartnerRef.current = activePartner;
+  const selectedMessagesForActionRef = useRef(selectedMessagesForAction);
+  selectedMessagesForActionRef.current = selectedMessagesForAction;
   const selectedMessageForActionRef = useRef(selectedMessageForAction);
   selectedMessageForActionRef.current = selectedMessageForAction;
   const justSelectedActionRef = useRef(0);
@@ -428,6 +436,8 @@ export default function MessagesPage({
     }
     lastTypingSentRef.current = 0;
     stopPartnerTypingImmediately();
+    setSelectedMessagesForAction([]);
+    setIsActionBarMoreOpen(false);
   }, [activePartner?.id, stopPartnerTypingImmediately]);
 
   // Refs for tracking modal states synchronously in popstate handler
@@ -610,8 +620,8 @@ export default function MessagesPage({
       if (isActionBarMoreOpenRef.current) {
         setIsActionBarMoreOpen(false);
       }
-      if (selectedMessageForActionRef.current) {
-        setSelectedMessageForAction(null);
+      if (selectedMessagesForActionRef.current && selectedMessagesForActionRef.current.length > 0) {
+        setSelectedMessagesForAction([]);
         setIsActionBarMoreOpen(false);
         return;
       }
@@ -1809,17 +1819,106 @@ export default function MessagesPage({
     }
     justSelectedActionRef.current = Date.now();
     setIsActionBarMoreOpen(false);
-    if (!selectedMessageForActionRef.current) {
+    if (!selectedMessagesForActionRef.current || selectedMessagesForActionRef.current.length === 0) {
       pushModalHistory('message_action');
     }
-    setSelectedMessageForAction(msg);
+    setSelectedMessagesForAction([msg]);
+  };
+
+  const handleToggleSelectMessageForAction = (msg) => {
+    if (typeof window !== 'undefined' && window.getSelection) {
+      const sel = window.getSelection();
+      if (sel && sel.removeAllRanges) sel.removeAllRanges();
+    }
+    justSelectedActionRef.current = Date.now();
+    setIsActionBarMoreOpen(false);
+    setSelectedMessagesForAction((prev) => {
+      const exists = prev.some((m) => Number(m.id) === Number(msg.id));
+      if (exists) {
+        const next = prev.filter((m) => Number(m.id) !== Number(msg.id));
+        if (next.length === 0) {
+          if (typeof window !== 'undefined' && window.history && window.history.state?.modal === 'message_action') {
+            window.history.back();
+          }
+        }
+        return next;
+      } else {
+        if (prev.length === 0) {
+          pushModalHistory('message_action');
+        }
+        return [...prev, msg];
+      }
+    });
   };
 
   const handleDeselectMessage = () => {
-    setSelectedMessageForAction(null);
+    setSelectedMessagesForAction([]);
     setIsActionBarMoreOpen(false);
     if (typeof window !== 'undefined' && window.history && window.history.state?.modal === 'message_action') {
       window.history.back();
+    }
+  };
+
+  const handleToggleStarSelected = () => {
+    if (selectedMessagesForAction.length === 0) return;
+    const msgs = [...selectedMessagesForAction];
+    handleDeselectMessage();
+    if (msgs.length === 1) {
+      handleToggleStar(msgs[0]);
+    } else {
+      const allStarred = msgs.every((m) => m.is_starred);
+      const targetStar = !allStarred;
+      const ids = msgs.map((m) => Number(m.id));
+      setMessages((prev) =>
+        prev.map((m) => (ids.includes(Number(m.id)) ? { ...m, is_starred: targetStar } : m))
+      );
+      apiClient.post('/messages/bulk/star', { messageIds: ids, isStarred: targetStar }).catch((err) => {
+        console.warn('Bulk star failed:', err);
+      });
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedMessagesForAction.length === 0) return;
+    const msgs = [...selectedMessagesForAction];
+    handleDeselectMessage();
+    if (msgs.length === 1) {
+      handlePromptDelete(msgs[0]);
+    } else {
+      setDeleteModalTarget({
+        message: { content: `${msgs.length} messages` },
+        isBulk: true,
+        messages: msgs
+      });
+    }
+  };
+
+  const handleForwardSelected = () => {
+    if (selectedMessagesForAction.length === 0) return;
+    const msgs = [...selectedMessagesForAction];
+    handleDeselectMessage();
+    if (msgs.length === 1) {
+      handleStartForward(msgs[0]);
+    } else {
+      setForwardModalTarget({
+        id: msgs.map((m) => Number(m.id)),
+        isBulk: true,
+        content: `${msgs.length} selected messages`
+      });
+      setForwardSelectedUsers([]);
+      setForwardSearchQuery('');
+    }
+  };
+
+  const handleCopySelected = () => {
+    if (selectedMessagesForAction.length === 0) return;
+    const msgs = [...selectedMessagesForAction];
+    handleDeselectMessage();
+    const texts = msgs
+      .map((m) => (m.is_deleted ? '' : m.content))
+      .filter(Boolean);
+    if (texts.length > 0 && navigator.clipboard) {
+      navigator.clipboard.writeText(texts.join('\n\n')).catch(() => {});
     }
   };
 
@@ -1827,7 +1926,11 @@ export default function MessagesPage({
     if (e && e.preventDefault) e.preventDefault();
     if (e && e.stopPropagation) e.stopPropagation();
 
-    handleSelectMessageForAction(msg);
+    if (selectedMessagesForAction.length > 0) {
+      handleToggleSelectMessageForAction(msg);
+    } else {
+      handleSelectMessageForAction(msg);
+    }
   };
 
   const handleTouchStart = (e, msg) => {
@@ -2641,7 +2744,7 @@ export default function MessagesPage({
           {activePartner ? (
             <>
               {/* Chat Header / WhatsApp Classic Top Action Bar */}
-              {selectedMessageForAction ? (
+              {selectedMessagesForAction.length > 0 ? (
                 <div className="chat-header chat-top-action-bar" data-testid="chat-top-action-bar">
                   <div className="top-action-bar-left">
                     <button
@@ -2654,18 +2757,19 @@ export default function MessagesPage({
                       <ArrowLeft size={20} />
                     </button>
                     <span className="action-bar-count">
-                      <span className="count-num">1</span>
+                      <span className="count-num">{selectedMessagesForAction.length}</span>
                       <span className="count-label"> selected</span>
                     </span>
                   </div>
 
                   <div className="top-action-bar-right">
-                    {!selectedMessageForAction.is_deleted && (
+                    {/* Reply: only if exactly 1 message is selected and not deleted */}
+                    {selectedMessagesForAction.length === 1 && !selectedMessagesForAction[0].is_deleted && (
                       <button
                         type="button"
                         className="btn-action-icon"
                         onClick={() => {
-                          const msg = selectedMessageForAction;
+                          const msg = selectedMessagesForAction[0];
                           handleDeselectMessage();
                           handleStartReply(msg);
                         }}
@@ -2675,62 +2779,54 @@ export default function MessagesPage({
                         <Reply size={19} />
                       </button>
                     )}
-                    {!selectedMessageForAction.is_deleted && (
+
+                    {/* Star / Unstar: stars or unstars all selected messages */}
+                    {selectedMessagesForAction.some((m) => !m.is_deleted) && (
                       <button
                         type="button"
                         className="btn-action-icon"
-                        onClick={() => {
-                          const msg = selectedMessageForAction;
-                          handleDeselectMessage();
-                          handleToggleStar(msg);
-                        }}
-                        title={selectedMessageForAction.is_starred ? 'Unstar' : 'Star'}
+                        onClick={handleToggleStarSelected}
+                        title={selectedMessagesForAction.every((m) => m.is_starred) ? 'Unstar' : 'Star'}
                         aria-label="Star"
                       >
                         <Star
                           size={19}
-                          fill={selectedMessageForAction.is_starred ? '#f59e0b' : 'none'}
-                          color={selectedMessageForAction.is_starred ? '#f59e0b' : 'currentColor'}
+                          fill={selectedMessagesForAction.every((m) => m.is_starred) ? '#f59e0b' : 'none'}
+                          color={selectedMessagesForAction.every((m) => m.is_starred) ? '#f59e0b' : 'currentColor'}
                         />
                       </button>
                     )}
+
+                    {/* Delete: deletes 1 or all selected messages */}
                     <button
                       type="button"
                       className="btn-action-icon btn-action-danger"
-                      onClick={() => {
-                        const msg = selectedMessageForAction;
-                        handleDeselectMessage();
-                        handlePromptDelete(msg);
-                      }}
+                      onClick={handleDeleteSelected}
                       title="Delete"
                       aria-label="Delete"
                     >
                       <Trash2 size={19} />
                     </button>
-                    {!selectedMessageForAction.is_deleted && (
+
+                    {/* Forward: forwards 1 or all selected messages */}
+                    {selectedMessagesForAction.some((m) => !m.is_deleted) && (
                       <button
                         type="button"
                         className="btn-action-icon"
-                        onClick={() => {
-                          const msg = selectedMessageForAction;
-                          handleDeselectMessage();
-                          handleStartForward(msg);
-                        }}
+                        onClick={handleForwardSelected}
                         title="Forward"
                         aria-label="Forward"
                       >
                         <Share2 size={19} />
                       </button>
                     )}
-                    {!selectedMessageForAction.is_deleted && (
+
+                    {/* Copy text: copies 1 or all selected messages */}
+                    {selectedMessagesForAction.some((m) => !m.is_deleted && m.content) && (
                       <button
                         type="button"
                         className="btn-action-icon"
-                        onClick={() => {
-                          const msg = selectedMessageForAction;
-                          handleDeselectMessage();
-                          handleCopyMessage(msg);
-                        }}
+                        onClick={handleCopySelected}
                         title="Copy text"
                         aria-label="Copy text"
                       >
@@ -2738,7 +2834,7 @@ export default function MessagesPage({
                       </button>
                     )}
 
-                    {/* More actions dropdown (Pin, Edit, Info, Select) */}
+                    {/* More actions dropdown (Pin, Edit, Info, Select all) */}
                     <div className="action-bar-more-wrap">
                       <button
                         type="button"
@@ -2754,73 +2850,78 @@ export default function MessagesPage({
                       </button>
 
                       {isActionBarMoreOpen && (
-                        <div className="action-bar-more-dropdown" onClick={(e) => e.stopPropagation()}>
-                          {!selectedMessageForAction.is_deleted && (
+                        <>
+                          <div
+                            className="action-bar-more-backdrop"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsActionBarMoreOpen(false);
+                            }}
+                          />
+                          <div className="action-bar-more-dropdown" onClick={(e) => e.stopPropagation()}>
+                            {selectedMessagesForAction.some((m) => !m.is_deleted && m.content) && (
+                              <button
+                                type="button"
+                                className="action-bar-dropdown-item"
+                                onClick={() => {
+                                  setIsActionBarMoreOpen(false);
+                                  handleCopySelected();
+                                }}
+                              >
+                                <Copy size={15} /> Copy
+                              </button>
+                            )}
+                            {selectedMessagesForAction.length === 1 && !selectedMessagesForAction[0].is_deleted && (
+                              <button
+                                type="button"
+                                className="action-bar-dropdown-item"
+                                onClick={() => {
+                                  const msg = selectedMessagesForAction[0];
+                                  handleDeselectMessage();
+                                  handleTogglePin(msg);
+                                }}
+                              >
+                                <Pin size={15} /> {pinnedMessage?.id === selectedMessagesForAction[0].id ? 'Unpin' : 'Pin'}
+                              </button>
+                            )}
+                            {selectedMessagesForAction.length === 1 && selectedMessagesForAction[0].is_mine && !selectedMessagesForAction[0].is_deleted && (
+                              <button
+                                type="button"
+                                className="action-bar-dropdown-item"
+                                onClick={() => {
+                                  const msg = selectedMessagesForAction[0];
+                                  handleDeselectMessage();
+                                  handleStartEdit(msg);
+                                }}
+                              >
+                                <Edit2 size={15} /> Edit
+                              </button>
+                            )}
+                            {selectedMessagesForAction.length === 1 && selectedMessagesForAction[0].is_mine && !selectedMessagesForAction[0].is_deleted && (
+                              <button
+                                type="button"
+                                className="action-bar-dropdown-item"
+                                onClick={() => {
+                                  const msg = selectedMessagesForAction[0];
+                                  handleDeselectMessage();
+                                  handleOpenMessageInfo(msg);
+                                }}
+                              >
+                                <Info size={15} /> Message Info
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="action-bar-dropdown-item"
                               onClick={() => {
-                                const msg = selectedMessageForAction;
-                                handleDeselectMessage();
-                                handleCopyMessage(msg);
+                                setIsActionBarMoreOpen(false);
+                                setSelectedMessagesForAction(messages.filter((m) => !m.is_deleted));
                               }}
                             >
-                              <Copy size={15} /> Copy
+                              <CheckSquare size={15} /> Select all
                             </button>
-                          )}
-                          {!selectedMessageForAction.is_deleted && (
-                            <button
-                              type="button"
-                              className="action-bar-dropdown-item"
-                              onClick={() => {
-                                const msg = selectedMessageForAction;
-                                handleDeselectMessage();
-                                handleTogglePin(msg);
-                              }}
-                            >
-                              <Pin size={15} /> {pinnedMessage?.id === selectedMessageForAction.id ? 'Unpin' : 'Pin'}
-                            </button>
-                          )}
-                          {selectedMessageForAction.is_mine && !selectedMessageForAction.is_deleted && (
-                            <button
-                              type="button"
-                              className="action-bar-dropdown-item"
-                              onClick={() => {
-                                const msg = selectedMessageForAction;
-                                handleDeselectMessage();
-                                handleStartEdit(msg);
-                              }}
-                            >
-                              <Edit2 size={15} /> Edit
-                            </button>
-                          )}
-                          {selectedMessageForAction.is_mine && !selectedMessageForAction.is_deleted && (
-                            <button
-                              type="button"
-                              className="action-bar-dropdown-item"
-                              onClick={() => {
-                                const msg = selectedMessageForAction;
-                                handleDeselectMessage();
-                                handleOpenMessageInfo(msg);
-                              }}
-                            >
-                              <Info size={15} /> Message Info
-                            </button>
-                          )}
-                          {!selectedMessageForAction.is_deleted && (
-                            <button
-                              type="button"
-                              className="action-bar-dropdown-item"
-                              onClick={() => {
-                                const msg = selectedMessageForAction;
-                                handleDeselectMessage();
-                                handleToggleSelectMode(msg);
-                              }}
-                            >
-                              <CheckSquare size={15} /> Select Multiple
-                            </button>
-                          )}
-                        </div>
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
@@ -3301,7 +3402,7 @@ export default function MessagesPage({
                 ref={chatStreamRef}
                 onScroll={handleChatStreamScroll}
                 onClick={(e) => {
-                  if (selectedMessageForAction && e.target === chatStreamRef.current) {
+                  if (selectedMessagesForAction.length > 0 && e.target === chatStreamRef.current) {
                     handleDeselectMessage();
                   }
                 }}
@@ -3380,19 +3481,13 @@ export default function MessagesPage({
                         )}
                         <div
                           id={`msg-${m.id}`}
-                          className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'} ${isSelectionMode ? 'selection-mode' : ''} ${selectedMessageIds.has(Number(m.id)) ? 'is-selected' : ''} ${selectedMessageForAction?.id === m.id ? 'is-action-selected' : ''}`}
+                          className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'} ${isSelectionMode ? 'selection-mode' : ''} ${selectedMessageIds.has(Number(m.id)) ? 'is-selected' : ''} ${selectedActionMsgIds.has(Number(m.id)) ? 'is-action-selected' : ''}`}
                           onClick={(e) => {
                             if (isSelectionMode) {
                               handleToggleMessageSelection(m.id);
-                            } else if (selectedMessageForAction) {
+                            } else if (selectedMessagesForAction.length > 0) {
                               e.stopPropagation();
-                              if (selectedMessageForAction.id === m.id) {
-                                if (Date.now() - justSelectedActionRef.current > 350) {
-                                  handleDeselectMessage();
-                                }
-                              } else {
-                                handleSelectMessageForAction(m);
-                              }
+                              handleToggleSelectMessageForAction(m);
                             }
                           }}
                           onContextMenu={(e) => {
@@ -3418,10 +3513,10 @@ export default function MessagesPage({
                           )}
 
                           <div
-                            className={`message-bubble ${mediaPayload ? 'has-media' : ''} ${m.is_deleted ? 'deleted-bubble' : ''} ${selectedMessageForAction?.id === m.id ? 'is-highlighted-bubble' : ''}`}
+                            className={`message-bubble ${mediaPayload ? 'has-media' : ''} ${m.is_deleted ? 'deleted-bubble' : ''} ${selectedActionMsgIds.has(Number(m.id)) ? 'is-highlighted-bubble' : ''}`}
                           >
                             {/* Style 1: WhatsApp Classic Floating Quick Reaction Pill directly over selected bubble */}
-                            {selectedMessageForAction?.id === m.id && !m.is_deleted && (
+                            {selectedMessagesForAction.length === 1 && selectedMessagesForAction[0].id === m.id && !m.is_deleted && (
                               <div
                                 className="vg-wa-floating-reactions"
                                 onClick={(e) => e.stopPropagation()}
@@ -3959,36 +4054,59 @@ export default function MessagesPage({
         onClose={closeKeyBackupModal}
       />
 
-      {/* WhatsApp Classic message selection backdrop */}
-      {selectedMessageForAction && (
-        <div
-          className="vg-wa-backdrop"
-          onClick={handleDeselectMessage}
-          aria-hidden="true"
-        />
-      )}
-
       {/* Delete Confirmation Modal */}
       {deleteModalTarget && (
         <div className="modal-backdrop" onClick={() => setDeleteModalTarget(null)}>
           <div className="modal-card vg-delete-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Delete Message</h3>
+            <h3>Delete {deleteModalTarget.isBulk ? `${deleteModalTarget.messages.length} Messages` : 'Message'}</h3>
             <p className="vg-delete-preview">
-              {deleteModalTarget.message.content?.slice(0, 80) || '(media)'}
+              {deleteModalTarget.isBulk
+                ? `Are you sure you want to delete ${deleteModalTarget.messages.length} selected messages?`
+                : (deleteModalTarget.message?.content?.slice(0, 80) || '(media)')}
             </p>
             <div className="vg-delete-actions">
               <button
                 className="btn-secondary"
-                onClick={() => handleDeleteMessage(deleteModalTarget.message, 'for_me')}
+                onClick={() => {
+                  if (deleteModalTarget.isBulk) {
+                    const ids = deleteModalTarget.messages.map((m) => Number(m.id));
+                    apiClient.post('/messages/bulk/delete', { messageIds: ids, type: 'for_me' }).then(() => {
+                      setMessages((prev) => prev.filter((m) => !ids.includes(Number(m.id))));
+                      setDeleteModalTarget(null);
+                    }).catch((err) => alert(err.message || 'Bulk delete failed.'));
+                  } else {
+                    handleDeleteMessage(deleteModalTarget.message, 'for_me');
+                  }
+                }}
               >
                 <Trash size={14} /> Delete for me
               </button>
-              <button
-                className="btn-danger"
-                onClick={() => handleDeleteMessage(deleteModalTarget.message, 'for_everyone')}
-              >
-                <Trash2 size={14} /> Delete for everyone
-              </button>
+              {(deleteModalTarget.isBulk
+                ? deleteModalTarget.messages.some((m) => m.is_mine)
+                : deleteModalTarget.message?.is_mine) && (
+                <button
+                  className="btn-danger"
+                  onClick={() => {
+                    if (deleteModalTarget.isBulk) {
+                      const ids = deleteModalTarget.messages.filter((m) => m.is_mine).map((m) => Number(m.id));
+                      apiClient.post('/messages/bulk/delete', { messageIds: ids, type: 'for_everyone' }).then(() => {
+                        setMessages((prev) =>
+                          prev.map((m) =>
+                            ids.includes(Number(m.id))
+                              ? { ...m, is_deleted: true, content: 'This message was deleted', ciphertext: null, iv_nonce: null }
+                              : m
+                          )
+                        );
+                        setDeleteModalTarget(null);
+                      }).catch((err) => alert(err.message || 'Bulk delete failed.'));
+                    } else {
+                      handleDeleteMessage(deleteModalTarget.message, 'for_everyone');
+                    }
+                  }}
+                >
+                  <Trash2 size={14} /> Delete for everyone
+                </button>
+              )}
               <button
                 className="btn-ghost"
                 onClick={() => setDeleteModalTarget(null)}
@@ -5492,10 +5610,10 @@ export default function MessagesPage({
         }
 
         /* ===== WhatsApp Classic Top Action Bar & Floating Reaction Pill ===== */
-        .vg-wa-backdrop {
+        .action-bar-more-backdrop {
           position: fixed;
           inset: 0;
-          z-index: 40;
+          z-index: 990;
           background: transparent;
         }
 
@@ -5511,7 +5629,7 @@ export default function MessagesPage({
           z-index: 100;
           box-sizing: border-box;
           width: 100%;
-          overflow: hidden;
+          overflow: visible;
         }
 
         @keyframes waBarSlideDown {
@@ -6975,6 +7093,7 @@ export default function MessagesPage({
           .chat-top-action-bar {
             padding: 4px 6px;
             gap: 2px;
+            overflow: visible;
           }
           .top-action-bar-left {
             gap: 4px;

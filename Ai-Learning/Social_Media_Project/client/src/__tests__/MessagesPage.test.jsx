@@ -1497,7 +1497,7 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
   // =====================================================================
   describe('WhatsApp Classic Top Action Bar & Back Gesture Navigation', () => {
     function TopActionBarTestComponent({
-      selectedMessage,
+      selectedMessages = [],
       onDeselect,
       onReply,
       onStar,
@@ -1505,9 +1505,10 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
       onForward,
       onCopy,
       isMoreOpen,
-      onToggleMore
+      onToggleMore,
+      onSelectAll
     }) {
-      if (!selectedMessage) return <div data-testid="normal-header">Normal Header</div>;
+      if (!selectedMessages || selectedMessages.length === 0) return <div data-testid="normal-header">Normal Header</div>;
 
       return (
         <div className="chat-header chat-top-action-bar" data-testid="chat-top-action-bar">
@@ -1522,13 +1523,15 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
               Back
             </button>
             <span className="action-bar-count">
-              <span className="count-num" data-testid="count-num">1</span>
+              <span className="count-num" data-testid="count-num">{selectedMessages.length}</span>
               <span className="count-label" data-testid="count-label"> selected</span>
             </span>
           </div>
 
           <div className="top-action-bar-right">
-            <button type="button" className="btn-action-icon" onClick={onReply} aria-label="Reply">Reply</button>
+            {selectedMessages.length === 1 && (
+              <button type="button" className="btn-action-icon" onClick={onReply} aria-label="Reply">Reply</button>
+            )}
             <button type="button" className="btn-action-icon" onClick={onStar} aria-label="Star">Star</button>
             <button type="button" className="btn-action-icon btn-action-danger" onClick={onDelete} aria-label="Delete">Delete</button>
             <button type="button" className="btn-action-icon" onClick={onForward} aria-label="Forward">Forward</button>
@@ -1538,7 +1541,7 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
               {isMoreOpen && (
                 <div className="action-bar-more-dropdown" data-testid="more-dropdown">
                   <button type="button" onClick={onCopy}>Copy</button>
-                  <button type="button">Pin</button>
+                  <button type="button" onClick={onSelectAll}>Select all</button>
                 </div>
               )}
             </div>
@@ -1547,7 +1550,7 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
       );
     }
 
-    it('renders all 6 top action buttons and count spans when a message is selected', () => {
+    it('renders all 6 top action buttons and count spans when a single message is selected', () => {
       const onDeselect = vi.fn();
       const onReply = vi.fn();
       const onStar = vi.fn();
@@ -1558,7 +1561,7 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
 
       render(
         <TopActionBarTestComponent
-          selectedMessage={{ id: 42, content: 'Test message', is_mine: true }}
+          selectedMessages={[{ id: 42, content: 'Test message', is_mine: true }]}
           onDeselect={onDeselect}
           onReply={onReply}
           onStar={onStar}
@@ -1583,10 +1586,65 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
       expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
     });
 
-    it('renders Copy option inside the More dropdown as fallback', () => {
+    it('updates count to 3 and hides Reply when multiple messages are selected', () => {
+      const selected = [
+        { id: 1, content: 'First SMS' },
+        { id: 2, content: 'Second SMS' },
+        { id: 3, content: 'Third SMS' }
+      ];
+
       render(
         <TopActionBarTestComponent
-          selectedMessage={{ id: 42, content: 'Test message', is_mine: true }}
+          selectedMessages={selected}
+          onDeselect={vi.fn()}
+          onReply={vi.fn()}
+          onStar={vi.fn()}
+          onDelete={vi.fn()}
+          onForward={vi.fn()}
+          onCopy={vi.fn()}
+          isMoreOpen={false}
+          onToggleMore={vi.fn()}
+        />
+      );
+
+      expect(screen.getByTestId('count-num')).toHaveTextContent('3');
+      // Reply is hidden for multiple messages
+      expect(screen.queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument();
+      // Bulk actions remain visible
+      expect(screen.getByRole('button', { name: 'Star' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Forward' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Copy text' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
+    });
+
+    it('toggles selection off for a message without deselecting other selected messages', () => {
+      let selected = [{ id: 1 }, { id: 2 }, { id: 3 }];
+      const toggleSelect = (msg) => {
+        const exists = selected.some((m) => m.id === msg.id);
+        if (exists) {
+          selected = selected.filter((m) => m.id !== msg.id);
+        } else {
+          selected = [...selected, msg];
+        }
+      };
+
+      // Tapping message 2 removes it from selection while message 1 and 3 stay selected
+      toggleSelect({ id: 2 });
+      expect(selected.map((m) => m.id)).toEqual([1, 3]);
+
+      // Tapping message 4 adds it to selection
+      toggleSelect({ id: 4 });
+      expect(selected.map((m) => m.id)).toEqual([1, 3, 4]);
+    });
+
+    it('opens three-dot more options dropdown with Copy and Select All', () => {
+      const onToggleMore = vi.fn();
+      const onSelectAll = vi.fn();
+
+      render(
+        <TopActionBarTestComponent
+          selectedMessages={[{ id: 42, content: 'Test message', is_mine: true }]}
           onDeselect={vi.fn()}
           onReply={vi.fn()}
           onStar={vi.fn()}
@@ -1594,25 +1652,27 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
           onForward={vi.fn()}
           onCopy={vi.fn()}
           isMoreOpen={true}
-          onToggleMore={vi.fn()}
+          onToggleMore={onToggleMore}
+          onSelectAll={onSelectAll}
         />
       );
 
       const moreDropdown = screen.getByTestId('more-dropdown');
       expect(moreDropdown).toBeInTheDocument();
       expect(moreDropdown).toHaveTextContent('Copy');
+      expect(moreDropdown).toHaveTextContent('Select all');
     });
 
-    it('intercepts popstate back gesture when a message is selected without leaving the chat', () => {
-      let selectedMsg = { id: 99, content: 'Hello' };
+    it('intercepts popstate back gesture when messages are selected without leaving the chat', () => {
+      let selectedMsgs = [{ id: 99, content: 'Hello' }, { id: 100, content: 'World' }];
       let activePartner = { username: 'alice' };
       const setActivePartner = vi.fn((p) => { activePartner = p; });
-      const setSelectedMsg = vi.fn((m) => { selectedMsg = m; });
+      const setSelectedMsgs = vi.fn((m) => { selectedMsgs = m; });
 
       // Simulates the handlePopState logic
       const simulatePopState = (e) => {
-        if (selectedMsg) {
-          setSelectedMsg(null);
+        if (selectedMsgs && selectedMsgs.length > 0) {
+          setSelectedMsgs([]);
           return;
         }
         if (activePartner) {
@@ -1622,13 +1682,13 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
         }
       };
 
-      // 1st back gesture while message is selected: deselects message, does NOT exit chat
+      // 1st back gesture while messages are selected: deselects all messages, does NOT exit chat
       simulatePopState({ state: { tab: 'messages', inChatWith: 'alice' } });
-      expect(setSelectedMsg).toHaveBeenCalledWith(null);
+      expect(setSelectedMsgs).toHaveBeenCalledWith([]);
       expect(setActivePartner).not.toHaveBeenCalled();
 
-      // 2nd back gesture after message is deselected: exits chat to conversation list
-      selectedMsg = null;
+      // 2nd back gesture after messages are deselected: exits chat to conversation list
+      selectedMsgs = [];
       simulatePopState({ state: { tab: 'messages' } });
       expect(setActivePartner).toHaveBeenCalledWith(null);
     });
