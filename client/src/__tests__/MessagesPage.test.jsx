@@ -1692,6 +1692,91 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
       simulatePopState({ state: { tab: 'messages' } });
       expect(setActivePartner).toHaveBeenCalledWith(null);
     });
+
+    it('suppresses synthetic click immediately following long-press selection so it is not toggled off', () => {
+      let selectedMessages = [];
+      let longPressFired = false;
+      let justSelectedTimestamp = 0;
+
+      const handleLongPress = (msg) => {
+        longPressFired = true;
+        justSelectedTimestamp = Date.now();
+        selectedMessages = [msg];
+      };
+
+      const handleClick = (msg) => {
+        if (longPressFired) {
+          longPressFired = false;
+          return; // suppressed!
+        }
+        if (Date.now() - justSelectedTimestamp < 450) {
+          return; // suppressed!
+        }
+        if (selectedMessages.length > 0) {
+          // toggle logic
+          const exists = selectedMessages.some((m) => m.id === msg.id);
+          if (exists) {
+            selectedMessages = selectedMessages.filter((m) => m.id !== msg.id);
+          } else {
+            selectedMessages = [...selectedMessages, msg];
+          }
+        }
+      };
+
+      const testMsg = { id: 101, content: 'Long pressed message' };
+
+      // 1. Long press timer fires
+      handleLongPress(testMsg);
+      expect(selectedMessages).toHaveLength(1);
+      expect(selectedMessages[0].id).toBe(101);
+      expect(longPressFired).toBe(true);
+
+      // 2. Synthetic click fires ~20ms later
+      handleClick(testMsg);
+      // Ensure synthetic click did NOT deselect
+      expect(selectedMessages).toHaveLength(1);
+      expect(selectedMessages[0].id).toBe(101);
+      expect(longPressFired).toBe(false);
+
+      // 3. Subsequent user tap on a different message after cooldown (e.g. 500ms later)
+      justSelectedTimestamp = Date.now() - 500;
+      const testMsg2 = { id: 102, content: 'Second message' };
+      handleClick(testMsg2);
+      expect(selectedMessages).toHaveLength(2);
+      expect(selectedMessages.map(m => m.id)).toEqual([101, 102]);
+
+      // 4. Subsequent user tap on testMsg deselects only testMsg, leaves testMsg2
+      justSelectedTimestamp = Date.now() - 500;
+      handleClick(testMsg);
+      expect(selectedMessages).toHaveLength(1);
+      expect(selectedMessages[0].id).toBe(102);
+    });
+
+    it('deselects messages on Escape key press without closing the chat view', () => {
+      let selectedMessages = [{ id: 101, content: 'Esc test' }];
+      let activePartner = { username: 'bob' };
+      const onDeselect = vi.fn(() => { selectedMessages = []; });
+      const onCloseChat = vi.fn(() => { activePartner = null; });
+
+      const handleGlobalKeyDown = (e) => {
+        if (e.key === 'Escape') {
+          if (selectedMessages && selectedMessages.length > 0) {
+            onDeselect();
+            return;
+          }
+          onCloseChat();
+        }
+      };
+
+      // 1st Escape: deselects selected messages
+      handleGlobalKeyDown({ key: 'Escape' });
+      expect(onDeselect).toHaveBeenCalledTimes(1);
+      expect(onCloseChat).not.toHaveBeenCalled();
+
+      // 2nd Escape: now closes active chat
+      handleGlobalKeyDown({ key: 'Escape' });
+      expect(onCloseChat).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
