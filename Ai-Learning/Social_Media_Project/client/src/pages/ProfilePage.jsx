@@ -208,6 +208,15 @@ export default function ProfilePage({
     return () => clearTimeout(timer);
   }, [profileMsg]);
 
+  // Clean up avatar preview object URL
+  useEffect(() => {
+    return () => {
+      if (avatarPreview && avatarPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(avatarPreview);
+      }
+    };
+  }, [avatarPreview]);
+
   // User Posts State (Phase 5 & 6)
   const [userPosts, setUserPosts] = useState([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
@@ -847,6 +856,7 @@ export default function ProfilePage({
         setProfile((prev) => ({ ...prev, avatar_url: res.data.user.avatar_url }));
         updateUser({ avatar_url: res.data.user.avatar_url });
         setProfileMsg({ type: 'success', text: 'Avatar changed successfully!' });
+        setAvatarPreview(null);
       } else {
         setAvatarError(res.error || 'Failed to upload avatar.');
         setAvatarPreview(null);

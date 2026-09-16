@@ -11,7 +11,7 @@
  * 5. Instant callback to refresh the Story Tray.
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import apiClient from '../api/client';
 
 export default function CreateStoryModal({ isOpen, onClose, onStoryCreated }) {
@@ -20,6 +20,29 @@ export default function CreateStoryModal({ isOpen, onClose, onStoryCreated }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
+
+  // Clean up object URL when previewUrl changes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  // Reset state and revoke preview when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setFile(null);
+      setPreviewUrl((prev) => {
+        if (prev && prev.startsWith('blob:')) {
+          URL.revokeObjectURL(prev);
+        }
+        return null;
+      });
+      setError(null);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -40,6 +63,9 @@ export default function CreateStoryModal({ isOpen, onClose, onStoryCreated }) {
       return;
     }
 
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setError(null);
     setFile(selected);
     setPreviewUrl(URL.createObjectURL(selected));

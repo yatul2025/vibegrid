@@ -12,12 +12,17 @@
 const { Pool } = require('pg');
 const config = require('./env');
 
+// Normalize SSL mode in connection string for pg-connection-string v3 compatibility
+const dbUrl = config.databaseUrl
+  ? config.databaseUrl.replace(/sslmode=(require|prefer|verify-ca)/g, 'sslmode=verify-full')
+  : null;
+
 // Configure Pool options
-const poolConfig = config.databaseUrl
+const poolConfig = dbUrl
   ? {
-      connectionString: config.databaseUrl,
+      connectionString: dbUrl,
       // SSL required for most cloud PostgreSQL providers (Neon, Supabase, Render)
-      ssl: config.databaseUrl.includes('localhost') ? false : { rejectUnauthorized: false }
+      ssl: dbUrl.includes('localhost') ? false : { rejectUnauthorized: false }
     }
   : {
       host: config.db.host,
