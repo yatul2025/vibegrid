@@ -911,7 +911,7 @@ function AppContent() {
       </header>
 
       {/* Main Content Area */}
-      <main className={`main-content ${user ? 'has-bottom-nav' : ''}`}>
+      <main className={`main-content ${user ? 'has-bottom-nav' : ''} ${isOffline ? 'has-offline-banner' : ''}`}>
         <ErrorBoundary>
           {currentTab === 'status' && (
             isTestUser ? (

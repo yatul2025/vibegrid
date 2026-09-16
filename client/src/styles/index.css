@@ -385,8 +385,10 @@ a:focus:not(:focus-visible),
   background: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 998;
   display: flex;
   align-items: center;
@@ -394,6 +396,12 @@ a:focus:not(:focus-visible),
   padding: 0 24px;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
+}
+
+.main-content {
+  padding-top: 62px;
+  width: 100%;
+  min-height: 100vh;
 }
 
 .top-navbar-container {
@@ -6931,25 +6939,17 @@ a.nav-tab-btn {
   .top-navbar {
     padding: 0 14px;
     height: 54px;
-    position: sticky;
+    position: fixed;
     top: 0;
+    left: 0;
+    right: 0;
     z-index: 998;
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
 
-  .nav-brand {
-    font-size: 1.15rem;
-    gap: 8px;
-  }
-
-  .nav-brand-icon-wrapper {
-    width: 30px;
-    height: 30px;
-  }
-
-  .vg-nav-logo-svg {
-    width: 30px;
-    height: 30px;
+  .main-content {
+    padding-top: 54px;
   }
 
   .main-content.has-bottom-nav {
@@ -10050,8 +10050,10 @@ select.form-input option,
 
 /* 1. PWA Network Status Banner (Offline notification) */
 .pwa-network-status-banner {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  top: 62px;
+  left: 0;
+  right: 0;
   width: 100%;
   padding: 8px 16px;
   font-size: 0.85rem;
@@ -10061,10 +10063,26 @@ select.form-input option,
   justify-content: center;
   gap: 8px;
   text-align: center;
-  z-index: 1100;
+  z-index: 997;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   transition: all 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .pwa-network-status-banner {
+    top: 54px;
+  }
+}
+
+.main-content.has-offline-banner {
+  padding-top: calc(62px + 36px);
+}
+
+@media (max-width: 768px) {
+  .main-content.has-offline-banner {
+    padding-top: calc(54px + 36px);
+  }
 }
 
 .pwa-network-status-banner.offline {
@@ -10442,6 +10460,16 @@ select.form-input option,
 @media (display-mode: standalone) {
   .top-navbar {
     padding-top: env(safe-area-inset-top, 0px);
+    height: calc(54px + env(safe-area-inset-top, 0px));
+  }
+  .main-content {
+    padding-top: calc(54px + env(safe-area-inset-top, 0px));
+  }
+  .main-content.has-offline-banner {
+    padding-top: calc(54px + env(safe-area-inset-top, 0px) + 36px);
+  }
+  .pwa-network-status-banner {
+    top: calc(54px + env(safe-area-inset-top, 0px));
   }
   .mobile-bottom-navbar {
     padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
