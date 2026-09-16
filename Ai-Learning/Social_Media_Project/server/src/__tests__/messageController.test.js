@@ -624,8 +624,13 @@ describe('togglePinMessage', () => {
   it('should pin message when authorized', async () => {
     query.mockResolvedValueOnce({ rows: [{ role: 'member' }] });
     query.mockResolvedValueOnce({
-      rows: [{ id: 100, content: 'Meeting at 5', sender_id: 1, created_at: '2026-09-14T08:00:00Z', username: 'alice' }]
+      rows: [{ id: 100, content: 'Meeting at 5', sender_id: 1, created_at: '2026-09-14T08:00:00Z', sender_username: 'alice' }]
     });
+    query.mockResolvedValueOnce({ rows: [] }); // existingPin
+    query.mockResolvedValueOnce({ rowCount: 1 }); // INSERT conversation_pinned_messages
+    query.mockResolvedValueOnce({
+      rows: [{ id: 100, content: 'Meeting at 5', sender_id: 1, created_at: '2026-09-14T08:00:00Z', sender_username: 'alice', pinned_at: '2026-09-16T12:00:00Z' }]
+    }); // SELECT all pinned messages
     query.mockResolvedValueOnce({ rowCount: 1 }); // UPDATE conversation
 
     const req = mockReq({ params: { id: 'conv-123' }, body: { messageId: 100 } });
@@ -637,7 +642,8 @@ describe('togglePinMessage', () => {
       expect.objectContaining({
         success: true,
         data: expect.objectContaining({
-          pinnedMessageId: 100
+          pinnedMessageId: 100,
+          pinnedMessages: expect.any(Array)
         })
       })
     );
@@ -846,10 +852,14 @@ describe('Phase 3: Presence & Read Receipt Tests', () => {
     query.mockResolvedValueOnce({ rows: [{ id: 10 }] });
     // 2b. Block query
     query.mockResolvedValueOnce({ rows: [] });
+    // 2c. Pinned messages query
+    query.mockResolvedValueOnce({ rows: [] });
     // 3. Messages query
     query.mockResolvedValueOnce({ rows: [] });
     // 4. Mark read query
     query.mockResolvedValueOnce({ rowCount: 0 });
+    // 5. Typing query
+    query.mockResolvedValueOnce({ rows: [{ is_typing: false }] });
 
     const req = mockReq({ params: { username: 'bob' } });
     const res = mockRes();
@@ -888,10 +898,14 @@ describe('Phase 3: Presence & Read Receipt Tests', () => {
     query.mockResolvedValueOnce({ rows: [{ id: 10 }] });
     // 2b. Block query
     query.mockResolvedValueOnce({ rows: [] });
+    // 2c. Pinned messages query
+    query.mockResolvedValueOnce({ rows: [] });
     // 3. Messages query
     query.mockResolvedValueOnce({ rows: [] });
     // 4. Mark read query
     query.mockResolvedValueOnce({ rowCount: 0 });
+    // 5. Typing query
+    query.mockResolvedValueOnce({ rows: [{ is_typing: false }] });
 
     const req = mockReq({ params: { username: 'private_bob' } });
     const res = mockRes();

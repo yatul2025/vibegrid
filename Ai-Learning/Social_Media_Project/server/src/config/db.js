@@ -208,6 +208,16 @@ const testConnection = async () => {
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_chat_typing_target ON chat_typing(user_id, target_user_id, updated_at);
+
+        CREATE TABLE IF NOT EXISTS conversation_pinned_messages (
+          id SERIAL PRIMARY KEY,
+          conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+          message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+          pinned_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          pinned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(conversation_id, message_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_pinned_messages_conv ON conversation_pinned_messages(conversation_id);
       `);
     } catch (tblErr) {
       console.warn('[DB] Table init check warning:', tblErr.message);

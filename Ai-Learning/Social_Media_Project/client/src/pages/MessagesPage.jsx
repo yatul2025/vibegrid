@@ -65,6 +65,7 @@ import {
   Copy,
   Ban,
   CornerUpLeft,
+  CornerUpRight,
   Share2,
   Star,
   Pin,
@@ -299,6 +300,8 @@ export default function MessagesPage({
   const [isActionBarMoreOpen, setIsActionBarMoreOpen] = useState(false);
   const [deleteModalTarget, setDeleteModalTarget] = useState(null);
   const [pinnedMessage, setPinnedMessage] = useState(null);
+  const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [activePinIndex, setActivePinIndex] = useState(0);
   const [forwardModalTarget, setForwardModalTarget] = useState(null);
   const [forwardSelectedUsers, setForwardSelectedUsers] = useState([]);
   const [forwardSearchQuery, setForwardSearchQuery] = useState('');
@@ -870,6 +873,12 @@ export default function MessagesPage({
         setActiveConversationId(res.data.conversationId || null);
         setEphemeralTimer(res.data.ephemeralTimerSeconds || null);
         setPinnedMessage(res.data.pinnedMessage || null);
+        setPinnedMessages(
+          Array.isArray(res.data.pinnedMessages)
+            ? res.data.pinnedMessages
+            : (res.data.pinnedMessage ? [res.data.pinnedMessage] : [])
+        );
+        setActivePinIndex(0);
 
         // Real-time typing status from serverless sync
         if (typeof res.data.isPartnerTyping === 'boolean') {
@@ -1229,6 +1238,13 @@ export default function MessagesPage({
     const handleMessagePin = (payload) => {
       if (payload.conversationId === activeConversationId) {
         setPinnedMessage(payload.pinnedMessage || null);
+        if (Array.isArray(payload.pinnedMessages)) {
+          setPinnedMessages(payload.pinnedMessages);
+        } else if (payload.pinnedMessage) {
+          setPinnedMessages([payload.pinnedMessage]);
+        } else {
+          setPinnedMessages([]);
+        }
       }
     };
 
@@ -1911,10 +1927,21 @@ export default function MessagesPage({
     }
   };
 
+  const isMessageDeletableForEveryone = (msg) => {
+    if (!msg || !msg.is_mine || msg.is_deleted) return false;
+    if (!msg.created_at) return true;
+    const DELETE_LIMIT_MINUTES = 60;
+    const msgTime = new Date(msg.created_at).getTime();
+    const diffMinutes = (Date.now() - msgTime) / (1000 * 60);
+    return diffMinutes <= DELETE_LIMIT_MINUTES;
+  };
+
   const handleForwardSelected = () => {
     if (selectedMessagesForAction.length === 0) return;
     const msgs = [...selectedMessagesForAction];
-    handleDeselectMessage();
+    // Clear selection directly without window.history.back() race condition
+    setSelectedMessagesForAction([]);
+    setIsActionBarMoreOpen(false);
     if (msgs.length === 1) {
       handleStartForward(msgs[0]);
     } else {
@@ -1925,6 +1952,67 @@ export default function MessagesPage({
       });
       setForwardSelectedUsers([]);
       setForwardSearchQuery('');
+    }
+  };
+
+  const handleShareSelected = async () => {
+    if (selectedMessagesForAction.length === 0) return;
+    const msgs = [...selectedMessagesForAction];
+    handleDeselectMessage();
+
+    const nonDeleted = msgs.filter((m) => !m.is_deleted);
+    if (nonDeleted.length === 0) return;
+
+    let shareTitle = nonDeleted.length === 1 ? 'Shared Message' : `${nonDeleted.length} Shared Messages`;
+    let shareText = '';
+    let shareUrl = '';
+
+    if (nonDeleted.length === 1) {
+      const single = nonDeleted[0];
+      const media = parseMediaPayload(single.content);
+      if (media && media.url) {
+        shareText = media.caption || (media.name ? `Attachment: ${media.name}` : single.content) || '';
+        shareUrl = media.url;
+      } else {
+        shareText = single.content || '';
+      }
+    } else {
+      shareText = nonDeleted
+        .map((m) => {
+          const media = parseMediaPayload(m.content);
+          if (media && media.url) {
+            return `[Media: ${media.name || media.type || 'file'}] ${media.caption || ''}\n${media.url}`;
+          }
+          return m.content || '';
+        })
+        .filter(Boolean)
+        .join('\n\n');
+    }
+
+    const shareData = {
+      title: shareTitle,
+      text: shareText
+    };
+    if (shareUrl) {
+      shareData.url = shareUrl;
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          if (navigator.clipboard) {
+            await navigator.clipboard.writeText(shareText || shareUrl || '');
+            alert('Message content copied to clipboard.');
+          }
+        }
+      }
+    } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(shareText || shareUrl || '');
+      alert('Message content copied to clipboard for sharing.');
+    } else {
+      alert('Sharing is not supported on this browser.');
     }
   };
 
@@ -2065,25 +2153,31 @@ export default function MessagesPage({
       return;
     }
 
-    if (type === 'for_everyone' && !msg.is_mine) {
-      alert('You can only delete your own messages for everyone.');
-      return;
+    if (type === 'for_everyone') {
+      if (!msg.is_mine) {
+        alert('You can only delete your own messages for everyone.');
+        return;
+      }
+      if (!isMessageDeletableForEveryone(msg)) {
+        alert('Messages can only be deleted for everyone within 60 minutes of sending.');
+        return;
+      }
     }
 
     try {
       const res = await apiClient.delete(`/messages/msg/${msg.id}?type=${type}`);
       if (res.success) {
-        if (type === 'for_everyone') {
-          setMessages((prev) =>
-            prev.map((m) =>
-              String(m.id) === String(msg.id)
-                ? { ...m, is_deleted: true, content: 'This message was deleted', ciphertext: null, iv_nonce: null }
-                : m
-            )
-          );
-        } else {
-          setMessages((prev) => prev.filter((m) => String(m.id) !== String(msg.id)));
-        }
+        // Both for_everyone and for_me display "This message was deleted"
+        setMessages((prev) =>
+          prev.map((m) =>
+            String(m.id) === String(msg.id)
+              ? { ...m, is_deleted: true, content: 'This message was deleted', ciphertext: null, iv_nonce: null }
+              : m
+          )
+        );
+        // Clean up from pinned messages
+        setPinnedMessages((prev) => prev.filter((pm) => String(pm.id) !== String(msg.id)));
+        setPinnedMessage((prev) => (prev && String(prev.id) === String(msg.id) ? null : prev));
         handleDeselectMessage();
       }
     } catch (err) {
@@ -2236,15 +2330,22 @@ export default function MessagesPage({
     setContextMenu(null);
     if (guardDemoAction('pin')) return;
     if (!activeConversationId) return;
-    const isCurrentlyPinned = Number(pinnedMessage?.id) === Number(msg.id);
-    const targetPinId = isCurrentlyPinned ? null : msg.id;
+    const isCurrentlyPinned = pinnedMessages.some((pm) => Number(pm.id) === Number(msg.id)) || Number(pinnedMessage?.id) === Number(msg.id);
 
     try {
       const res = await apiClient.post(`/messages/conv/${activeConversationId}/pin`, {
-        messageId: targetPinId
+        messageId: msg.id,
+        isPinned: !isCurrentlyPinned
       });
-      if (res.success) {
+      if (res.success && res.data) {
         setPinnedMessage(res.data.pinnedMessage || null);
+        if (Array.isArray(res.data.pinnedMessages)) {
+          setPinnedMessages(res.data.pinnedMessages);
+        } else if (res.data.pinnedMessage) {
+          setPinnedMessages([res.data.pinnedMessage]);
+        } else {
+          setPinnedMessages([]);
+        }
       }
     } catch (err) {
       alert(err.message || 'Failed to update pinned message.');
@@ -2866,6 +2967,19 @@ export default function MessagesPage({
                         title="Forward"
                         aria-label="Forward"
                       >
+                        <CornerUpRight size={19} />
+                      </button>
+                    )}
+
+                    {/* Share: shares 1 or all selected messages natively or copies */}
+                    {selectedMessagesForAction.some((m) => !m.is_deleted) && (
+                      <button
+                        type="button"
+                        className="btn-action-icon"
+                        onClick={handleShareSelected}
+                        title="Share"
+                        aria-label="Share"
+                      >
                         <Share2 size={19} />
                       </button>
                     )}
@@ -2920,6 +3034,18 @@ export default function MessagesPage({
                                 <Copy size={15} /> Copy
                               </button>
                             )}
+                            {selectedMessagesForAction.some((m) => !m.is_deleted) && (
+                              <button
+                                type="button"
+                                className="action-bar-dropdown-item"
+                                onClick={() => {
+                                  setIsActionBarMoreOpen(false);
+                                  handleShareSelected();
+                                }}
+                              >
+                                <Share2 size={15} /> Share
+                              </button>
+                            )}
                             {selectedMessagesForAction.length === 1 && !selectedMessagesForAction[0].is_deleted && (
                               <button
                                 type="button"
@@ -2930,7 +3056,7 @@ export default function MessagesPage({
                                   handleTogglePin(msg);
                                 }}
                               >
-                                <Pin size={15} /> {pinnedMessage?.id === selectedMessagesForAction[0].id ? 'Unpin' : 'Pin'}
+                                <Pin size={15} /> {(pinnedMessages.some((pm) => Number(pm.id) === Number(selectedMessagesForAction[0].id)) || pinnedMessage?.id === selectedMessagesForAction[0].id) ? 'Unpin' : 'Pin'}
                               </button>
                             )}
                             {selectedMessagesForAction.length === 1 && isMessageEditable(selectedMessagesForAction[0]) && (
@@ -3413,37 +3539,49 @@ export default function MessagesPage({
                 </div>
               )}
 
-              {/* Pinned Message Header Banner */}
-              {pinnedMessage && (
-                <div
-                  className="pinned-message-banner"
-                  onClick={() => scrollToMessage(pinnedMessage.id)}
-                  title="Click to jump to pinned message"
-                >
-                  <div className="pinned-banner-content">
-                    <Pin size={14} className="pinned-banner-icon" />
-                    <div className="pinned-banner-text">
-                      <span className="pinned-banner-label">
-                        Pinned Message {pinnedMessage.sender_username && `· @${pinnedMessage.sender_username}`}
-                      </span>
-                      <p className="pinned-banner-snippet">
-                        {pinnedMessage.content?.slice(0, 90) || '…'}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="pinned-banner-close"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTogglePin(pinnedMessage);
+              {/* Pinned Message Header Banner (Multiple Pins Supported) */}
+              {(pinnedMessages.length > 0 || pinnedMessage) && (() => {
+                const effectiveList = pinnedMessages.length > 0 ? pinnedMessages : (pinnedMessage ? [pinnedMessage] : []);
+                const count = effectiveList.length;
+                const currentPin = effectiveList[activePinIndex % count] || effectiveList[0];
+                if (!currentPin) return null;
+
+                return (
+                  <div
+                    className="pinned-message-banner"
+                    onClick={() => {
+                      scrollToMessage(currentPin.id);
+                      if (count > 1) {
+                        setActivePinIndex((prev) => (prev + 1) % count);
+                      }
                     }}
-                    title="Unpin message"
+                    title={count > 1 ? `Click to jump to next pinned message (${((activePinIndex % count) + 1)}/${count})` : "Click to jump to pinned message"}
                   >
-                    <X size={14} />
-                  </button>
-                </div>
-              )}
+                    <div className="pinned-banner-content">
+                      <Pin size={14} className="pinned-banner-icon" />
+                      <div className="pinned-banner-text">
+                        <span className="pinned-banner-label">
+                          Pinned Message {count > 1 ? `(${((activePinIndex % count) + 1)}/${count})` : ''} {currentPin.sender_username && `· @${currentPin.sender_username}`}
+                        </span>
+                        <p className="pinned-banner-snippet">
+                          {currentPin.content?.slice(0, 90) || '…'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="pinned-banner-close"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTogglePin(currentPin);
+                      }}
+                      title="Unpin this message"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                );
+              })()}
 
               {/* Chat Message Stream */}
               <div
@@ -3649,7 +3787,7 @@ export default function MessagesPage({
                               {m.is_starred && (
                                 <Star size={11} className="message-starred-icon" fill="#f59e0b" color="#f59e0b" title="Starred message" />
                               )}
-                              {pinnedMessage?.id === m.id && (
+                              {(pinnedMessages.some((pm) => Number(pm.id) === Number(m.id)) || pinnedMessage?.id === m.id) && (
                                 <Pin size={11} className="message-pinned-icon" color="#818cf8" title="Pinned message" />
                               )}
                               {m.is_mine && m.failed && (
@@ -4126,97 +4264,139 @@ export default function MessagesPage({
                 : (deleteModalTarget.message?.content?.slice(0, 80) || '(media)')}
             </p>
             <div className="vg-delete-actions">
-              <button
-                className="btn-secondary"
-                onClick={() => {
-                  if (deleteModalTarget.isBulk) {
-                    const localMsgs = deleteModalTarget.messages.filter(
-                      (m) => String(m.id).startsWith('temp-') || m.pending || m.failed
-                    );
-                    const serverMsgs = deleteModalTarget.messages.filter(
-                      (m) => !String(m.id).startsWith('temp-') && !m.pending && !m.failed
-                    );
-                    const localIds = localMsgs.map((m) => String(m.id));
-                    const serverIds = serverMsgs.map((m) => Number(m.id));
+              {(() => {
+                const targetMsgs = deleteModalTarget.isBulk
+                  ? deleteModalTarget.messages
+                  : (deleteModalTarget.message ? [deleteModalTarget.message] : []);
+                const myMsgs = targetMsgs.filter((m) => m.is_mine);
+                const hasMyMsgs = myMsgs.length > 0;
+                const allEligible = hasMyMsgs && myMsgs.every((m) => isMessageDeletableForEveryone(m));
+                const hasExpired = hasMyMsgs && !allEligible;
 
-                    if (localIds.length > 0) {
-                      setMessages((prev) => prev.filter((m) => !localIds.includes(String(m.id))));
-                    }
+                return (
+                  <>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => {
+                        if (deleteModalTarget.isBulk) {
+                          const localMsgs = deleteModalTarget.messages.filter(
+                            (m) => String(m.id).startsWith('temp-') || m.pending || m.failed
+                          );
+                          const serverMsgs = deleteModalTarget.messages.filter(
+                            (m) => !String(m.id).startsWith('temp-') && !m.pending && !m.failed
+                          );
+                          const localIds = localMsgs.map((m) => String(m.id));
+                          const serverIds = serverMsgs.map((m) => Number(m.id));
 
-                    if (serverIds.length > 0) {
-                      apiClient
-                        .post('/messages/bulk/delete', { messageIds: serverIds, type: 'for_me' })
-                        .then(() => {
-                          setMessages((prev) => prev.filter((m) => !serverIds.includes(Number(m.id))));
-                          setDeleteModalTarget(null);
-                          handleDeselectMessage();
-                        })
-                        .catch((err) => alert(err.message || 'Bulk delete failed.'));
-                    } else {
-                      setDeleteModalTarget(null);
-                      handleDeselectMessage();
-                    }
-                  } else {
-                    handleDeleteMessage(deleteModalTarget.message, 'for_me');
-                  }
-                }}
-              >
-                <Trash size={14} /> Delete for me
-              </button>
-              {(deleteModalTarget.isBulk
-                ? deleteModalTarget.messages.some((m) => m.is_mine)
-                : deleteModalTarget.message?.is_mine) && (
-                <button
-                  className="btn-danger"
-                  onClick={() => {
-                    if (deleteModalTarget.isBulk) {
-                      const localMsgs = deleteModalTarget.messages.filter(
-                        (m) => (String(m.id).startsWith('temp-') || m.pending || m.failed) && m.is_mine
-                      );
-                      const serverMsgs = deleteModalTarget.messages.filter(
-                        (m) => !String(m.id).startsWith('temp-') && !m.pending && !m.failed && m.is_mine
-                      );
-                      const localIds = localMsgs.map((m) => String(m.id));
-                      const serverIds = serverMsgs.map((m) => Number(m.id));
+                          if (localIds.length > 0) {
+                            setMessages((prev) => prev.filter((m) => !localIds.includes(String(m.id))));
+                          }
 
-                      if (localIds.length > 0) {
-                        setMessages((prev) => prev.filter((m) => !localIds.includes(String(m.id))));
-                      }
-
-                      if (serverIds.length > 0) {
-                        apiClient
-                          .post('/messages/bulk/delete', { messageIds: serverIds, type: 'for_everyone' })
-                          .then(() => {
-                            setMessages((prev) =>
-                              prev.map((m) =>
-                                serverIds.includes(Number(m.id))
-                                  ? {
-                                      ...m,
-                                      is_deleted: true,
-                                      content: 'This message was deleted',
-                                      ciphertext: null,
-                                      iv_nonce: null
-                                    }
-                                  : m
-                              )
-                            );
+                          if (serverIds.length > 0) {
+                            apiClient
+                              .post('/messages/bulk/delete', { messageIds: serverIds, type: 'for_me' })
+                              .then(() => {
+                                setMessages((prev) =>
+                                  prev.map((m) =>
+                                    serverIds.includes(Number(m.id))
+                                      ? {
+                                          ...m,
+                                          is_deleted: true,
+                                          content: 'This message was deleted',
+                                          ciphertext: null,
+                                          iv_nonce: null
+                                        }
+                                      : m
+                                  )
+                                );
+                                setPinnedMessages((prev) => prev.filter((pm) => !serverIds.includes(Number(pm.id))));
+                                setPinnedMessage((prev) => (prev && serverIds.includes(Number(prev.id)) ? null : prev));
+                                setDeleteModalTarget(null);
+                                handleDeselectMessage();
+                              })
+                              .catch((err) => alert(err.message || 'Bulk delete failed.'));
+                          } else {
                             setDeleteModalTarget(null);
                             handleDeselectMessage();
-                          })
-                          .catch((err) => alert(err.message || 'Bulk delete failed.'));
-                      } else {
-                        setDeleteModalTarget(null);
-                        handleDeselectMessage();
-                      }
-                    } else {
-                      handleDeleteMessage(deleteModalTarget.message, 'for_everyone');
-                    }
-                  }}
-                >
-                  <Trash2 size={14} /> Delete for everyone
-                </button>
-              )}
+                          }
+                        } else {
+                          handleDeleteMessage(deleteModalTarget.message, 'for_me');
+                        }
+                      }}
+                    >
+                      <Trash size={14} /> Delete for me
+                    </button>
+
+                    {hasMyMsgs && (
+                      <button
+                        type="button"
+                        className="btn-danger"
+                        disabled={!allEligible}
+                        title={!allEligible ? 'Delete for everyone is only available within 60 minutes of sending.' : undefined}
+                        style={!allEligible ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                        onClick={() => {
+                          if (!allEligible) return;
+                          if (deleteModalTarget.isBulk) {
+                            const localMsgs = deleteModalTarget.messages.filter(
+                              (m) => (String(m.id).startsWith('temp-') || m.pending || m.failed) && m.is_mine
+                            );
+                            const serverMsgs = deleteModalTarget.messages.filter(
+                              (m) => !String(m.id).startsWith('temp-') && !m.pending && !m.failed && m.is_mine
+                            );
+                            const localIds = localMsgs.map((m) => String(m.id));
+                            const serverIds = serverMsgs.map((m) => Number(m.id));
+
+                            if (localIds.length > 0) {
+                              setMessages((prev) => prev.filter((m) => !localIds.includes(String(m.id))));
+                            }
+
+                            if (serverIds.length > 0) {
+                              apiClient
+                                .post('/messages/bulk/delete', { messageIds: serverIds, type: 'for_everyone' })
+                                .then(() => {
+                                  setMessages((prev) =>
+                                    prev.map((m) =>
+                                      serverIds.includes(Number(m.id))
+                                        ? {
+                                            ...m,
+                                            is_deleted: true,
+                                            content: 'This message was deleted',
+                                            ciphertext: null,
+                                            iv_nonce: null
+                                          }
+                                        : m
+                                    )
+                                  );
+                                  setPinnedMessages((prev) => prev.filter((pm) => !serverIds.includes(Number(pm.id))));
+                                  setPinnedMessage((prev) => (prev && serverIds.includes(Number(prev.id)) ? null : prev));
+                                  setDeleteModalTarget(null);
+                                  handleDeselectMessage();
+                                })
+                                .catch((err) => alert(err.message || 'Bulk delete failed.'));
+                            } else {
+                              setDeleteModalTarget(null);
+                              handleDeselectMessage();
+                            }
+                          } else {
+                            handleDeleteMessage(deleteModalTarget.message, 'for_everyone');
+                          }
+                        }}
+                      >
+                        <Trash2 size={14} /> Delete for everyone {hasExpired ? '(Expired: >60m)' : ''}
+                      </button>
+                    )}
+
+                    {hasExpired && (
+                      <span style={{ fontSize: '11px', color: '#ef4444', textAlign: 'center' }}>
+                        "Delete for everyone" is only allowed within 60 minutes of sending.
+                      </span>
+                    )}
+                  </>
+                );
+              })()}
               <button
+                type="button"
                 className="btn-ghost"
                 onClick={() => setDeleteModalTarget(null)}
               >
