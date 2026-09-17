@@ -225,12 +225,14 @@ export default function SettingsPage({
   const [soundEnabled, setSoundEnabled] = useState(() => soundFx.isEnabled());
   const [soundPack, setSoundPack] = useState(() => soundFx.getPack());
   const [soundVolume, setSoundVolume] = useState(() => soundFx.getVolume());
+  const [soundClickEnabled, setSoundClickEnabled] = useState(() => soundFx.isClickSoundEnabled());
 
   useEffect(() => {
     const unsub = soundFx.subscribe((state) => {
       setSoundEnabled(state.enabled);
       setSoundPack(state.pack);
       setSoundVolume(state.volume);
+      setSoundClickEnabled(state.clickEnabled);
     });
     return unsub;
   }, []);
@@ -2278,10 +2280,44 @@ export default function SettingsPage({
                           </div>
                         </div>
 
-                        {/* Volume Slider & Test Sound */}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '14px', marginTop: '16px', background: 'var(--bg-card, rgba(255,255,255,0.02))', padding: '12px 14px', borderRadius: '10px', border: '1px solid var(--border-color, rgba(255,255,255,0.06))' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '220px' }}>
-                            <span style={{ fontSize: '16px' }}>🔊</span>
+                        {/* UI Click Sound Toggle Option */}
+                        <div className="privacy-toggle-row" style={{ padding: '14px 0', borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))', borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.08))', marginBottom: '16px' }}>
+                          <div className="privacy-toggle-info">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '18px' }}>🖱️</span>
+                              <strong>UI Click & Tap Sounds</strong>
+                              <span className={`pwa-status-pill ${soundClickEnabled ? 'pill-success' : 'pill-muted'}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
+                                {soundClickEnabled ? 'Clicks Active' : 'Muted'}
+                              </span>
+                            </div>
+                            <p>Play crisp tactile clicks when tapping buttons, navigation tabs, links, pills, and cards.</p>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-xs"
+                              onClick={() => soundFx.play('click')}
+                              title="Test current click sound"
+                              style={{ padding: '6px 10px', fontSize: '11px' }}
+                            >
+                              ▶ Test Click
+                            </button>
+                            <SpringToggle
+                              checked={soundClickEnabled}
+                              onChange={(e) => {
+                                const val = e.target.checked;
+                                soundFx.setClickSoundEnabled(val);
+                              }}
+                              aria-label="Toggle UI Click Sounds"
+                              data-testid="sound-click-toggle"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Volume Slider & Interactive Audio Soundboard */}
+                        <div style={{ marginTop: '16px', background: 'var(--bg-card, rgba(255,255,255,0.02))', padding: '14px 16px', borderRadius: '12px', border: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+                            <span style={{ fontSize: '18px' }}>🔊</span>
                             <label htmlFor="masterSoundVolume" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                               Master Volume: {Math.round(soundVolume * 100)}%
                             </label>
@@ -2297,15 +2333,45 @@ export default function SettingsPage({
                               data-testid="sound-volume-slider"
                             />
                           </div>
-                          <button
-                            type="button"
-                            className="btn-secondary btn-sm"
-                            onClick={() => soundFx.play('celebration')}
-                            data-testid="sound-test-btn"
-                            title="Play celebration fanfare test"
-                          >
-                            🎉 Test Celebration Chime
-                          </button>
+
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginRight: '4px' }}>
+                              Test Sound FX:
+                            </span>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-xs"
+                              onClick={() => soundFx.play('celebration')}
+                              data-testid="sound-test-btn"
+                              title="Play celebration fanfare test"
+                            >
+                              🎉 Celebration
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-xs"
+                              onClick={() => soundFx.play('receive')}
+                              title="Play incoming chat message chime"
+                            >
+                              💬 Chat Message
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-xs"
+                              onClick={() => soundFx.play('toggle')}
+                              title="Play toggle switch snap"
+                            >
+                              🔄 Toggle Switch
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-xs"
+                              onClick={() => soundFx.play('click')}
+                              title="Play button click tick"
+                            >
+                              🖱️ UI Click
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}

@@ -1071,7 +1071,13 @@ export default function MessagesPage({
 
     // 1. Real-time Incoming Message Handler
     const handleReceiveMessage = async (msg) => {
+      if (!msg) return;
       console.log('⚡ [Socket] Real-time message received:', msg);
+
+      const isMine = Number(msg.sender_id) === Number(user?.id);
+      if (!isMine) {
+        playNotificationChime();
+      }
 
       const currentPartner = activePartnerRef.current;
       const isCurrentChat = currentPartner && (
@@ -1088,7 +1094,7 @@ export default function MessagesPage({
       const processedMsg = {
         ...msg,
         content: decryptedContent,
-        is_mine: Number(msg.sender_id) === Number(user.id)
+        is_mine: isMine
       };
 
       if (isCurrentChat) {
@@ -1123,10 +1129,9 @@ export default function MessagesPage({
         const matchedConv = prev.find((c) => Number(c.partner_id) === Number(partnerId));
         const isConvMuted = Boolean(matchedConv?.is_muted);
 
-        // Trigger chime & desktop notification if not muted and in background
+        // Trigger desktop notification if not muted and in background
         if (!processedMsg.is_mine && !isConvMuted) {
           if (document.hidden || !isCurrentChat) {
-            playNotificationChime();
             triggerDesktopNotification(
               processedMsg.sender_username || matchedConv?.partner_username || 'Contact',
               snippet,

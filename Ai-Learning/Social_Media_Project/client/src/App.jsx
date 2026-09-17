@@ -21,6 +21,7 @@ import VibiMascotGreeting from './components/VibiMascotGreeting';
 import ReturningUserWelcomeDrop from './components/ReturningUserWelcomeDrop';
 import AuroraCelebrationOverlay, { triggerCelebration } from './components/AuroraCelebrationOverlay';
 import NetworkStatusPill from './components/NetworkStatusPill';
+import soundFx from './services/soundFxService';
 import {
   Home,
   Compass,
@@ -61,6 +62,10 @@ function AppContent() {
   });
   const [settingsSection, setSettingsSection] = useState('privacy');
   const [slideDirection, setSlideDirection] = useState(null);
+  const currentTabRef = useRef(currentTab);
+  useEffect(() => {
+    currentTabRef.current = currentTab;
+  }, [currentTab]);
   const touchStartRef = useRef({ x: 0, y: 0, time: 0, isIgnored: false });
   const [a11yStatus, setA11yStatus] = useState('');
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -562,9 +567,30 @@ function AppContent() {
       fetchUnreadMessagesCount();
       const notifTimer = setInterval(fetchUnreadCount, 20000);
       const msgTimer = setInterval(fetchUnreadMessagesCount, 15000);
+
+      // Global real-time message chime & unread badge updater
+      const handleGlobalIncomingMessage = (msg) => {
+        if (!msg) return;
+        if (Number(msg.sender_id) !== Number(user.id)) {
+          setUnreadMessagesCount((prev) => prev + 1);
+          if (currentTabRef.current !== 'messages') {
+            try {
+              soundFx.play('receive');
+            } catch {}
+          }
+        }
+      };
+
+      try {
+        socketService.on('message:receive', handleGlobalIncomingMessage);
+      } catch {}
+
       return () => {
         clearInterval(notifTimer);
         clearInterval(msgTimer);
+        try {
+          socketService.off('message:receive', handleGlobalIncomingMessage);
+        } catch {}
       };
     } else {
       try {

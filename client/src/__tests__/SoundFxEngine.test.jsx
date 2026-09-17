@@ -101,7 +101,8 @@ describe('SoundFxService Core (Phase 9 Web Audio Engine)', () => {
     expect(subscriber).toHaveBeenCalledWith({
       enabled: true,
       pack: 'modern',
-      volume: 0.7
+      volume: 0.7,
+      clickEnabled: true
     });
 
     // Mutation triggers subscriber
@@ -109,7 +110,8 @@ describe('SoundFxService Core (Phase 9 Web Audio Engine)', () => {
     expect(subscriber).toHaveBeenLastCalledWith({
       enabled: true,
       pack: 'cyber',
-      volume: 0.7
+      volume: 0.7,
+      clickEnabled: true
     });
 
     unsub();
@@ -118,8 +120,19 @@ describe('SoundFxService Core (Phase 9 Web Audio Engine)', () => {
     expect(subscriber).not.toHaveBeenCalledWith(expect.objectContaining({ pack: 'retro' }));
   });
 
+  it('toggles and persists click sounds setting', () => {
+    expect(soundFx.isClickSoundEnabled()).toBe(true);
+    soundFx.setClickSoundEnabled(false);
+    expect(soundFx.isClickSoundEnabled()).toBe(false);
+    expect(localStorage.getItem('vibegrid_sound_click_enabled')).toBe('false');
+
+    soundFx.toggleClickSound();
+    expect(soundFx.isClickSoundEnabled()).toBe(true);
+    expect(localStorage.getItem('vibegrid_sound_click_enabled')).toBe('true');
+  });
+
   it('plays all sound events across all 5 sound packs without throwing errors', () => {
-    const events = ['like', 'send', 'receive', 'reaction', 'toggle', 'celebration', 'refresh'];
+    const events = ['click', 'like', 'send', 'receive', 'reaction', 'toggle', 'celebration', 'refresh'];
     const packs = ['modern', 'kalimba', 'retro', 'cyber', 'minimal'];
 
     packs.forEach((packId) => {
@@ -236,4 +249,55 @@ describe('SettingsPage Sound FX UI (Phase 9 Option 6)', () => {
     expect(screen.getByText('Muted')).toBeInTheDocument();
     expect(screen.queryByTestId('sound-pack-modern')).not.toBeInTheDocument();
   });
+
+  it('renders UI click sound toggle and allows switching it on and off', async () => {
+    render(
+      <AuthProvider>
+        <SettingsPage initialSection="notifications" />
+      </AuthProvider>
+    );
+
+    await screen.findByTestId('sound-fx-settings-card');
+    const clickToggle = screen.getByTestId('sound-click-toggle');
+    expect(clickToggle).toBeInTheDocument();
+
+    const input = clickToggle.querySelector('input[type="checkbox"]');
+    expect(input.checked).toBe(true);
+
+    act(() => {
+      fireEvent.click(input);
+    });
+
+    expect(soundFx.isClickSoundEnabled()).toBe(false);
+  });
+
+  it('triggers interactive soundboard preview buttons for Chat Message, Toggle, and UI Click', async () => {
+    const playSpy = vi.spyOn(soundFx, 'play');
+
+    render(
+      <AuthProvider>
+        <SettingsPage initialSection="notifications" />
+      </AuthProvider>
+    );
+
+    await screen.findByTestId('sound-fx-settings-card');
+
+    // Test Chat Message button
+    const chatBtn = screen.getByRole('button', { name: /Chat Message/i });
+    fireEvent.click(chatBtn);
+    expect(playSpy).toHaveBeenCalledWith('receive');
+
+    // Test Toggle Switch button
+    const toggleBtn = screen.getByRole('button', { name: /Toggle Switch/i });
+    fireEvent.click(toggleBtn);
+    expect(playSpy).toHaveBeenCalledWith('toggle');
+
+    // Test UI Click button
+    const clickBtn = screen.getByRole('button', { name: /UI Click/i });
+    fireEvent.click(clickBtn);
+    expect(playSpy).toHaveBeenCalledWith('click');
+
+    playSpy.mockRestore();
+  });
 });
+
