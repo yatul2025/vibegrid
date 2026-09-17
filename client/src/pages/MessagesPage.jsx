@@ -875,7 +875,10 @@ export default function MessagesPage({
   const fetchMessagesForPartner = useCallback(async (username, isInitialLoad = false) => {
     if (!username) return;
     try {
-      if (isInitialLoad) setLoadingMessages(true);
+      if (isInitialLoad) {
+        setLoadingMessages(true);
+        setMessages([]);
+      }
       const res = await apiClient.get(`/messages/${username}`);
       if (res.success && res.data) {
         const partner = res.data.partner;
@@ -1011,9 +1014,14 @@ export default function MessagesPage({
           }
         }
         if (onUnreadCountChange) onUnreadCountChange();
+      } else if (username.startsWith('group-')) {
+        setMessages([]);
       }
     } catch (err) {
       console.error(`Error loading messages for @${username}:`, err);
+      if (username.startsWith('group-')) {
+        setMessages([]);
+      }
     } finally {
       if (isInitialLoad) setLoadingMessages(false);
     }
@@ -2924,6 +2932,44 @@ export default function MessagesPage({
     const username = typeof usernameOrIdentifier === 'string' ? usernameOrIdentifier : usernameOrIdentifier.partner_username;
     if (!username) return;
 
+    // Immediately clear messages to guarantee fresh view with zero old SMS leakage
+    setMessages([]);
+    setLoadingMessages(true);
+
+    // Immediately activate partner metadata if object or available in conversations/local groups
+    let targetPartner = typeof usernameOrIdentifier === 'object' && usernameOrIdentifier !== null ? usernameOrIdentifier : null;
+    if (!targetPartner) {
+      targetPartner = conversations.find(
+        (c) => (c.partner_username || '').toLowerCase() === username.toLowerCase() ||
+               (c.partner_id || '').toString().toLowerCase() === username.toLowerCase()
+      );
+    }
+    if (!targetPartner && username.startsWith('group-')) {
+      try {
+        const cacheKey = `vg_local_groups_${user?.id || 'guest'}`;
+        const localGroups = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+        targetPartner = localGroups.find(
+          (g) => (g.partner_username || '').toLowerCase() === username.toLowerCase() ||
+                 (g.id || '').toString() === username.replace(/^group-/, '')
+        );
+      } catch (_) {}
+    }
+
+    if (targetPartner) {
+      setActivePartner({
+        id: targetPartner.partner_id || targetPartner.id || username,
+        username: targetPartner.partner_username || username,
+        full_name: targetPartner.partner_full_name || targetPartner.group_title || targetPartner.title || 'Group Chat',
+        title: targetPartner.group_title || targetPartner.title || targetPartner.partner_full_name || 'Group Chat',
+        avatar_url: targetPartner.partner_avatar_url || (targetPartner.is_group ? '/uploads/avatars/default-group.png' : '/uploads/avatars/default-avatar.png'),
+        is_group: Boolean(targetPartner.is_group || username.startsWith('group-')),
+        member_count: targetPartner.member_count || (targetPartner.members ? targetPartner.members.length : 2),
+        members: targetPartner.members || [],
+        is_online: Boolean(targetPartner.is_online)
+      });
+      setActiveConversationId(targetPartner.conversation_id || targetPartner.id || null);
+    }
+
     isInitialPartnerLoadRef.current = true;
     prevMessagesLengthRef.current = 0;
     if (typeof window !== 'undefined' && window.history) {
@@ -3925,11 +3971,15 @@ export default function MessagesPage({
                     {messages.length === 0 ? (
                       <VibiEmptyState
                         pose="wave"
-                        title={activePartner ? `Say hi to @${activePartner.username}! 👋` : 'Say hi! 👋'}
-                        subtitle="End-to-end encrypted session established. Break the ice with a friendly wave!"
+                        title={activePartner?.is_group
+                          ? `Welcome to ${activePartner.title || activePartner.full_name || 'Group Chat'}! 👥`
+                          : (activePartner ? `Say hi to @${activePartner.username}! 👋` : 'Say hi! 👋')}
+                        subtitle={activePartner?.is_group
+                          ? `${activePartner.member_count || 2} members are here. Start the discussion!`
+                          : "End-to-end encrypted session established. Break the ice with a friendly wave!"}
                         actionLabel="Wave Hello 👋"
                         onAction={() => {
-                          setMessageInput('👋 Hey there!');
+                          setMessageInput(activePartner?.is_group ? '👋 Hey everyone!' : '👋 Hey there!');
                           if (chatInputRef.current) chatInputRef.current.focus();
                         }}
                       />
@@ -4727,9 +4777,8 @@ export default function MessagesPage({
         onClose={closeCreateGroupModal}
         onGroupCreated={(group) => {
           fetchConversations();
-          if (group?.id) {
-            const target = String(group.id).startsWith('group-') ? group.id : `group-${group.id}`;
-            selectConversation(target);
+          if (group) {
+            selectConversation(group);
           }
         }}
       />

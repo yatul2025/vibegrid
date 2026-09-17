@@ -160,7 +160,7 @@ export default function CreateGroupModal({ isOpen, onClose, onGroupCreated }) {
       }
 
       if (onGroupCreated) {
-        onGroupCreated(group);
+        onGroupCreated(fullGroupRecord);
       }
       onClose();
     } catch (err) {
