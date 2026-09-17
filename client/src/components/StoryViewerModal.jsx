@@ -66,6 +66,7 @@ export default function StoryViewerModal({
 
   const storyStartTimeRef = useRef(Date.now());
   const toastTimerRef = useRef(null);
+  const storyTouchRef = useRef({ x: 0, y: 0, time: 0 });
 
   // Sync initial creator index when opened
   useEffect(() => {
@@ -363,11 +364,39 @@ export default function StoryViewerModal({
         onMouseUp={() => {
           if (!isTyping) setIsPaused(false);
         }}
-        onTouchStart={() => {
+        onTouchStart={(e) => {
           if (!isTyping) setIsPaused(true);
+          if (e.touches && e.touches[0]) {
+            storyTouchRef.current = {
+              x: e.touches[0].clientX,
+              y: e.touches[0].clientY,
+              time: Date.now()
+            };
+          }
         }}
-        onTouchEnd={() => {
+        onTouchEnd={(e) => {
           if (!isTyping) setIsPaused(false);
+          if (e.changedTouches && e.changedTouches[0]) {
+            const deltaX = e.changedTouches[0].clientX - storyTouchRef.current.x;
+            const deltaY = e.changedTouches[0].clientY - storyTouchRef.current.y;
+            const absX = Math.abs(deltaX);
+            const absY = Math.abs(deltaY);
+            const deltaTime = Date.now() - storyTouchRef.current.time;
+
+            if (deltaTime < 500) {
+              // Horizontal swipe: Swipe Left -> Next Story, Swipe Right -> Previous Story
+              if (absX > 45 && absX > absY * 1.2) {
+                if (deltaX < -45) {
+                  handleNext();
+                } else if (deltaX > 45) {
+                  handlePrev();
+                }
+              } else if (deltaY > 75 && absY > absX * 1.5) {
+                // Vertical swipe down: Close Story Viewer
+                onClose();
+              }
+            }
+          }
         }}
       >
         {/* Floating Particles Canvas */}

@@ -319,27 +319,20 @@ function AppContent() {
       const y = touch.clientY;
       const target = e.target;
 
-      // When on Feed / Home: full-screen swipe to Explore is completely disabled.
-      // Explore is accessed via Bottom Navigation -> Explore (or extreme right edge pull).
-      const isExtremeRightEdge = x >= window.innerWidth - 18;
-      if (currentTab === 'feed' && !isExtremeRightEdge) {
-        touchStartRef.current.isIgnored = true;
-        return;
-      }
-
-      // On non-feed tabs, ignore extreme OS back/forward bezel margins
-      if (currentTab !== 'feed' && (x < 16 || x > window.innerWidth - 16)) {
-        touchStartRef.current.isIgnored = true;
-        return;
-      }
-
       // Ignore if active chat is open in MessagesPage
       if (typeof document !== 'undefined' && document.body.classList.contains('has-active-chat')) {
         touchStartRef.current.isIgnored = true;
         return;
       }
 
-      // Strict gesture ownership: ignore if touch starts inside stories, categories, tabs, post cards, or inputs
+      // Nested Gesture Ownership:
+      // Determine gesture ownership at touchstart. Local components have first priority:
+      // 1. Stories (tray, scroll container, avatar circles, viewer modal)
+      // 2. Categories carousel & chips
+      // 3. For You / Following / Close Friends tabs
+      // 4. Local carousels, sliders, text inputs, message composers, and overlays
+      // Swiping inside these components will NOT trigger global Home <-> Explore navigation.
+      // Touches on the Home Feed outside these components enable global page navigation.
       const ignoredSelector = [
         'input',
         'textarea',
@@ -354,16 +347,14 @@ function AppContent() {
         '.story-item',
         '.story-avatar-container',
         '.story-slider',
+        '.story-viewer-modal',
+        '.story-viewer-container',
+        '.story-viewer-overlay',
         '.feed-category-chips-bar-wrapper',
         '.feed-category-chips-bar',
         '.category-chip',
         '.feed-primary-tabs',
         '.feed-primary-tab',
-        '.feed-header-container',
-        '.feed-post-card',
-        '.post-card',
-        '.post-item',
-        '.feed-page-container',
         '.image-slider',
         '.carousel',
         '[data-no-swipe]',
@@ -373,7 +364,6 @@ function AppContent() {
         '.confirm-modal-overlay',
         '.share-modal-overlay',
         '.forward-modal-overlay',
-        '.story-viewer-modal',
         '.image-lightbox-modal'
       ].join(', ');
 
@@ -392,8 +382,7 @@ function AppContent() {
         x,
         y,
         time: Date.now(),
-        isIgnored: false,
-        isEdgeSwipe: isExtremeRightEdge
+        isIgnored: false
       };
     };
 
@@ -402,9 +391,12 @@ function AppContent() {
       const touch = e.touches[0];
       const deltaX = touch.clientX - touchStartRef.current.x;
       const deltaY = touch.clientY - touchStartRef.current.y;
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
 
-      // Cancel if user is primarily scrolling vertically (Feed, comments, etc.)
-      if (Math.abs(deltaY) > 25 && Math.abs(deltaY) > Math.abs(deltaX) * 1.1) {
+      // Section 6: If abs(deltaY) > abs(deltaX), allow normal vertical scrolling.
+      // Cancel global horizontal navigation immediately once vertical movement dominates.
+      if (absY > 10 && absY > absX) {
         touchStartRef.current.isIgnored = true;
       }
     };
@@ -421,13 +413,8 @@ function AppContent() {
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
 
-      // Must be a distinct horizontal gesture (>= 50px) completed within 650ms and predominantly horizontal
-      if (deltaTime > 650 || absX < 50 || absX < absY * 1.4) {
-        return;
-      }
-
-      // If on Feed tab, only allow navigation if touch started as an extreme screen edge pull
-      if (currentTab === 'feed' && !touchStartRef.current.isEdgeSwipe) {
+      // Must be a predominantly horizontal gesture (absX > absY) with deltaX >= 50px completed within 650ms
+      if (deltaTime > 650 || absX < 50 || absX <= absY * 1.2) {
         return;
       }
 

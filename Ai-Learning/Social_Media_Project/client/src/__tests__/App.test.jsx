@@ -125,7 +125,7 @@ describe('App Component Root Integration Test', () => {
     const { container } = render(<App />);
     expect(container).toBeDefined();
 
-    // 1. Middle-of-screen swipe on Feed MUST NOT switch to Explore (protection test)
+    // 1. Swipe Left on Feed (Home -> Explore)
     await act(async () => {
       window.dispatchEvent(new TouchEvent('touchstart', {
         touches: [{ clientX: 200, clientY: 300 }]
@@ -135,23 +135,9 @@ describe('App Component Root Integration Test', () => {
       }));
     });
 
-    // Should remain on feed
-    expect(sessionStorage.getItem('vibegrid_active_tab')).toBe('feed');
-
-    // 2. Extreme right-edge swipe on Feed (Home -> Explore)
-    const edgeX = (window.innerWidth || 1024) - 10;
-    await act(async () => {
-      window.dispatchEvent(new TouchEvent('touchstart', {
-        touches: [{ clientX: edgeX, clientY: 300 }]
-      }));
-      window.dispatchEvent(new TouchEvent('touchend', {
-        changedTouches: [{ clientX: edgeX - 100, clientY: 305 }]
-      }));
-    });
-
     expect(sessionStorage.getItem('vibegrid_active_tab')).toBe('explore');
 
-    // 3. Swipe Left on Explore (Explore -> Messages)
+    // 2. Swipe Left on Explore (Explore -> Messages)
     await act(async () => {
       window.dispatchEvent(new TouchEvent('touchstart', {
         touches: [{ clientX: 200, clientY: 300 }]

@@ -1,7 +1,9 @@
 import React from 'react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, act, fireEvent } from '@testing-library/react';
 import App from '../App';
+import StoryViewerModal from '../components/StoryViewerModal';
+import { AuthProvider } from '../context/AuthContext';
 
 describe('Home Page Gesture Isolation Suite', () => {
   beforeEach(() => {
@@ -18,20 +20,59 @@ describe('Home Page Gesture Isolation Suite', () => {
     window.history.replaceState({ tab: 'feed', viewedUsername: null, root: true }, '');
   });
 
-  it('never navigates to Explore when swiping horizontally across the middle of the feed', async () => {
+  it('navigates from Home Feed to Explore when swiping horizontally left on the feed', async () => {
     const { container } = render(<App />);
     expect(container).toBeDefined();
 
-    // Swipe left in the middle of feed (e.g. x: 250 -> 50)
+    // Swipe left on the Home Feed (e.g. x: 250 -> 50)
     await act(async () => {
       window.dispatchEvent(new TouchEvent('touchstart', {
         touches: [{ clientX: 250, clientY: 400 }]
       }));
-      window.dispatchEvent(new TouchEvent('touchmove', {
-        touches: [{ clientX: 100, clientY: 402 }]
-      }));
       window.dispatchEvent(new TouchEvent('touchend', {
         changedTouches: [{ clientX: 50, clientY: 405 }]
+      }));
+    });
+
+    // Should navigate to explore
+    expect(sessionStorage.getItem('vibegrid_active_tab')).toBe('explore');
+  });
+
+  it('navigates from Explore back to Home when swiping horizontally right on explore', async () => {
+    sessionStorage.setItem('vibegrid_active_tab', 'explore');
+    window.history.replaceState({ tab: 'explore', viewedUsername: null, root: true }, '');
+
+    const { container } = render(<App />);
+    expect(container).toBeDefined();
+
+    // Swipe right on Explore (x: 50 -> 250)
+    await act(async () => {
+      window.dispatchEvent(new TouchEvent('touchstart', {
+        touches: [{ clientX: 50, clientY: 400 }]
+      }));
+      window.dispatchEvent(new TouchEvent('touchend', {
+        changedTouches: [{ clientX: 250, clientY: 405 }]
+      }));
+    });
+
+    // Should navigate back to feed
+    expect(sessionStorage.getItem('vibegrid_active_tab')).toBe('feed');
+  });
+
+  it('never navigates to Explore when scrolling vertically on the feed', async () => {
+    const { container } = render(<App />);
+    expect(container).toBeDefined();
+
+    // Vertical swipe down (e.g. y: 200 -> 350)
+    await act(async () => {
+      window.dispatchEvent(new TouchEvent('touchstart', {
+        touches: [{ clientX: 200, clientY: 200 }]
+      }));
+      window.dispatchEvent(new TouchEvent('touchmove', {
+        touches: [{ clientX: 205, clientY: 350 }]
+      }));
+      window.dispatchEvent(new TouchEvent('touchend', {
+        changedTouches: [{ clientX: 100, clientY: 380 }]
       }));
     });
 
@@ -106,5 +147,48 @@ describe('Home Page Gesture Isolation Suite', () => {
       });
       expect(sessionStorage.getItem('vibegrid_active_tab')).toBe('explore');
     }
+  });
+
+  it('captures swipe left and swipe right inside StoryViewerModal for story navigation without page navigation', async () => {
+    const mockCreators = [
+      {
+        userId: 10,
+        username: 'elena_travels',
+        avatarUrl: '/uploads/avatars/avatar1.png',
+        stories: [
+          { id: 'story-1', mediaUrl: '/uploads/stories/1.jpg', createdAt: new Date().toISOString() },
+          { id: 'story-2', mediaUrl: '/uploads/stories/2.jpg', createdAt: new Date().toISOString() }
+        ]
+      }
+    ];
+
+    const { container } = render(
+      <AuthProvider>
+        <StoryViewerModal
+          isOpen={true}
+          creators={mockCreators}
+          initialCreatorIndex={0}
+          onClose={vi.fn()}
+        />
+      </AuthProvider>
+    );
+
+    const viewerContainer = container.querySelector('.story-viewer-container');
+    expect(viewerContainer).toBeDefined();
+
+    // Swipe left inside story viewer (should move to next story without changing page)
+    await act(async () => {
+      viewerContainer.dispatchEvent(new TouchEvent('touchstart', {
+        bubbles: true,
+        touches: [{ clientX: 250, clientY: 300 }]
+      }));
+      viewerContainer.dispatchEvent(new TouchEvent('touchend', {
+        bubbles: true,
+        changedTouches: [{ clientX: 80, clientY: 300 }]
+      }));
+    });
+
+    // Page must remain on feed
+    expect(sessionStorage.getItem('vibegrid_active_tab')).toBe('feed');
   });
 });
