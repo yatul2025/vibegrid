@@ -87,50 +87,6 @@ class SoundFxService {
       window.addEventListener('click', unlock, { capture: true, passive: true });
       window.addEventListener('keydown', unlock, { capture: true, passive: true });
       window.addEventListener('touchstart', unlock, { capture: true, passive: true });
-
-      // Global UI Click Sound Listener (captures clicks on buttons, tabs, links, pills)
-      window.addEventListener(
-        'click',
-        (e) => {
-          if (!this.enabled || !this.clickEnabled) return;
-          try {
-            const target = e.target;
-            if (!target || typeof target.closest !== 'function') return;
-
-            // Never play click sound for switches or text inputs
-            if (target.closest('.switch-toggle, .spring-switch-toggle, input[type="checkbox"], input[type="range"]')) {
-              return;
-            }
-            if (target.closest('input:not([type="button"]):not([type="submit"]):not([type="radio"]), textarea, [contenteditable="true"]')) {
-              return;
-            }
-
-            // Check if clicking an interactive element
-            const isClickable = target.closest(
-              'button, a, [role="button"], [role="tab"], [role="menuitem"], [role="radio"], .btn, .btn-primary, .btn-secondary, .btn-outline, .btn-ghost, .btn-sound, .clickable, .tab-btn, .nav-item, .mobile-nav-item, .settings-nav-item, .nav-icon-btn-mobile, .conversation-item, .sound-pack-card, .theme-card, .avatar-option, .reaction-pill, .filter-chip, .emoji-btn, select, input[type="button"], input[type="submit"]'
-            );
-
-            let isPointer = false;
-            try {
-              if (window.getComputedStyle) {
-                const style = window.getComputedStyle(target);
-                if (style && style.cursor === 'pointer') {
-                  isPointer = true;
-                }
-              }
-            } catch {}
-
-            if (isClickable || isPointer) {
-              const nowMs = Date.now();
-              if (nowMs - this.lastClickTime > 35) {
-                this.lastClickTime = nowMs;
-                this.play('click');
-              }
-            }
-          } catch {}
-        },
-        { capture: true, passive: true }
-      );
     }
   }
 
@@ -169,12 +125,12 @@ class SoundFxService {
   }
 
   _loadClickEnabled() {
-    if (typeof window === 'undefined' || !window.localStorage) return true;
+    if (typeof window === 'undefined' || !window.localStorage) return false;
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY_CLICK_ENABLED);
-      return stored === null ? true : stored === 'true';
+      return stored === 'true';
     } catch {
-      return true;
+      return false;
     }
   }
 

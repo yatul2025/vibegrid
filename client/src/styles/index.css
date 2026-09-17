@@ -11058,8 +11058,47 @@ select.form-input option,
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  padding-top: 10px;
+  padding-top: 14px;
   border-top: 1px solid var(--border-color);
+}
+
+.pwa-push-actions .btn-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px !important;
+  font-size: 0.82rem !important;
+  font-weight: 600;
+  border-radius: 10px !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 38px;
+}
+
+.pwa-diagnostics-trigger-btn {
+  background: rgba(99, 102, 241, 0.1) !important;
+  border: 1px solid rgba(99, 102, 241, 0.28) !important;
+  color: var(--primary, #818cf8) !important;
+  text-decoration: none !important;
+}
+
+.pwa-diagnostics-trigger-btn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.2) !important;
+  border-color: rgba(99, 102, 241, 0.5) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 600px) {
+  .pwa-push-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .pwa-push-actions .btn-sm {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 .diagnostics-modal-card {
@@ -11068,16 +11107,18 @@ select.form-input option,
   background: var(--bg-card);
   border-radius: var(--radius-lg);
   padding: 24px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
   border: 1px solid var(--border-color);
   max-height: 85vh;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .diagnostics-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   margin: 18px 0;
 }
 
@@ -11086,25 +11127,163 @@ select.form-input option,
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--bg-page);
   border: 1px solid var(--border-color);
   font-size: 0.85rem;
+  gap: 12px;
 }
 
 .diagnostics-label {
   font-weight: 600;
   color: var(--text-primary);
+  flex-shrink: 0;
 }
 
 .diagnostics-value {
   color: var(--text-secondary);
-  font-family: monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  word-break: break-word;
+  text-align: right;
+}
+
+.diagnostics-modal-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 520px) {
+  .diagnostics-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .diagnostics-value {
+    text-align: left;
+    word-break: break-all;
+  }
+  .diagnostics-modal-footer {
+    flex-direction: column;
+  }
+  .diagnostics-modal-footer button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Master Volume & Soundboard Polish */
+.sound-volume-control-box {
+  margin-top: 16px;
+  background: var(--bg-card, rgba(255, 255, 255, 0.03));
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sound-volume-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.sound-volume-label-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sound-volume-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.sound-volume-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.sound-volume-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--primary, #6366f1);
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  min-width: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.sound-volume-slider-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sound-volume-limit-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  user-select: none;
+  min-width: 24px;
+}
+
+.sound-volume-range-input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 8px;
+  border-radius: 4px;
+  accent-color: var(--primary, #6366f1);
+  cursor: pointer;
+  background: var(--border-color, rgba(255, 255, 255, 0.15));
+  outline: none;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.sound-test-soundboard {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sound-soundboard-title {
   font-size: 0.8rem;
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.sound-soundboard-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.sound-soundboard-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px !important;
+  font-size: 0.8rem !important;
+  border-radius: 8px !important;
 }
 
 /* ==========================================================================

@@ -97,12 +97,12 @@ describe('SoundFxService Core (Phase 9 Web Audio Engine)', () => {
     const subscriber = vi.fn();
     const unsub = soundFx.subscribe(subscriber);
 
-    // Initial state delivered upon subscribe
+    // Initial state delivered upon subscribe (clickEnabled defaults to false)
     expect(subscriber).toHaveBeenCalledWith({
       enabled: true,
       pack: 'modern',
       volume: 0.7,
-      clickEnabled: true
+      clickEnabled: false
     });
 
     // Mutation triggers subscriber
@@ -111,7 +111,7 @@ describe('SoundFxService Core (Phase 9 Web Audio Engine)', () => {
       enabled: true,
       pack: 'cyber',
       volume: 0.7,
-      clickEnabled: true
+      clickEnabled: false
     });
 
     unsub();
@@ -121,14 +121,14 @@ describe('SoundFxService Core (Phase 9 Web Audio Engine)', () => {
   });
 
   it('toggles and persists click sounds setting', () => {
-    expect(soundFx.isClickSoundEnabled()).toBe(true);
-    soundFx.setClickSoundEnabled(false);
     expect(soundFx.isClickSoundEnabled()).toBe(false);
-    expect(localStorage.getItem('vibegrid_sound_click_enabled')).toBe('false');
-
-    soundFx.toggleClickSound();
+    soundFx.setClickSoundEnabled(true);
     expect(soundFx.isClickSoundEnabled()).toBe(true);
     expect(localStorage.getItem('vibegrid_sound_click_enabled')).toBe('true');
+
+    soundFx.toggleClickSound();
+    expect(soundFx.isClickSoundEnabled()).toBe(false);
+    expect(localStorage.getItem('vibegrid_sound_click_enabled')).toBe('false');
   });
 
   it('plays all sound events across all 5 sound packs without throwing errors', () => {
@@ -250,7 +250,7 @@ describe('SettingsPage Sound FX UI (Phase 9 Option 6)', () => {
     expect(screen.queryByTestId('sound-pack-modern')).not.toBeInTheDocument();
   });
 
-  it('renders UI click sound toggle and allows switching it on and off', async () => {
+  it('renders responsive Master Volume slider and verifies UI click sound option is removed', async () => {
     render(
       <AuthProvider>
         <SettingsPage initialSection="notifications" />
@@ -258,20 +258,21 @@ describe('SettingsPage Sound FX UI (Phase 9 Option 6)', () => {
     );
 
     await screen.findByTestId('sound-fx-settings-card');
-    const clickToggle = screen.getByTestId('sound-click-toggle');
-    expect(clickToggle).toBeInTheDocument();
-
-    const input = clickToggle.querySelector('input[type="checkbox"]');
-    expect(input.checked).toBe(true);
+    const volumeSlider = screen.getByTestId('sound-volume-slider');
+    expect(volumeSlider).toBeInTheDocument();
 
     act(() => {
-      fireEvent.click(input);
+      fireEvent.change(volumeSlider, { target: { value: '85' } });
     });
 
-    expect(soundFx.isClickSoundEnabled()).toBe(false);
+    expect(soundFx.getVolume()).toBe(0.85);
+    expect(screen.getByTestId('sound-volume-percent').textContent).toBe('85%');
+
+    // Verify UI click toggle option is removed from Settings
+    expect(screen.queryByTestId('sound-click-toggle')).not.toBeInTheDocument();
   });
 
-  it('triggers interactive soundboard preview buttons for Chat Message, Toggle, and UI Click', async () => {
+  it('triggers interactive soundboard preview buttons for Celebration, Chat Message, and Toggle', async () => {
     const playSpy = vi.spyOn(soundFx, 'play');
 
     render(
@@ -281,6 +282,11 @@ describe('SettingsPage Sound FX UI (Phase 9 Option 6)', () => {
     );
 
     await screen.findByTestId('sound-fx-settings-card');
+
+    // Test Celebration button
+    const celebBtn = screen.getByRole('button', { name: /Celebration/i });
+    fireEvent.click(celebBtn);
+    expect(playSpy).toHaveBeenCalledWith('celebration');
 
     // Test Chat Message button
     const chatBtn = screen.getByRole('button', { name: /Chat Message/i });
@@ -292,10 +298,8 @@ describe('SettingsPage Sound FX UI (Phase 9 Option 6)', () => {
     fireEvent.click(toggleBtn);
     expect(playSpy).toHaveBeenCalledWith('toggle');
 
-    // Test UI Click button
-    const clickBtn = screen.getByRole('button', { name: /UI Click/i });
-    fireEvent.click(clickBtn);
-    expect(playSpy).toHaveBeenCalledWith('click');
+    // UI Click button is removed
+    expect(screen.queryByRole('button', { name: /UI Click/i })).not.toBeInTheDocument();
 
     playSpy.mockRestore();
   });
