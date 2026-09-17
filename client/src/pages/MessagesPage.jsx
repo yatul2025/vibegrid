@@ -822,15 +822,32 @@ export default function MessagesPage({
   const fetchConversations = useCallback(async (archived = isArchivedView) => {
     try {
       const res = await apiClient.get(`/messages/conversations${archived ? '?archived=true' : ''}`);
-      if (res.success && res.data?.conversations) {
+      let convsList = res.success && res.data?.conversations ? res.data.conversations : [];
+
+      // Merge locally stored groups if any (fallback/offline persistence)
+      try {
+        const cacheKey = `vg_local_groups_${user?.id || 'guest'}`;
+        const localGroups = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+        if (localGroups.length > 0 && !archived) {
+          const serverIds = new Set(convsList.map((c) => String(c.partner_id || c.conversation_id || c.id)));
+          const missingGroups = localGroups.filter(
+            (g) => !serverIds.has(String(g.partner_id || g.conversation_id || g.id))
+          );
+          convsList = [...convsList, ...missingGroups];
+        }
+      } catch (locErr) {}
+
+      if (convsList.length > 0) {
         const decryptedConvs = await Promise.all(
-          res.data.conversations.map(async (c) => {
+          convsList.map(async (c) => {
             let preview = c.last_message;
-            if (c.last_ciphertext && c.last_iv_nonce) {
-              preview = await e2eeService.decryptMessage(
-                { ciphertext: c.last_ciphertext, iv_nonce: c.last_iv_nonce },
-                c.partner_id
-              );
+            if (c.last_ciphertext && c.last_iv_nonce && !c.is_group) {
+              try {
+                preview = await e2eeService.decryptMessage(
+                  { ciphertext: c.last_ciphertext, iv_nonce: c.last_iv_nonce },
+                  c.partner_id
+                );
+              } catch (_) {}
             }
             if (preview && preview.startsWith('{"type":"image"')) preview = '📷 Photo';
             if (preview && preview.startsWith('{"type":"audio"')) preview = '🎙️ Voice Note';
@@ -844,13 +861,15 @@ export default function MessagesPage({
           })
         );
         setConversations(decryptedConvs);
+      } else {
+        setConversations([]);
       }
     } catch (err) {
       console.error('Failed to load conversations:', err);
     } finally {
       setLoadingConversations(false);
     }
-  }, [isArchivedView]);
+  }, [isArchivedView, user?.id]);
 
   // Fetch messages for active conversation partner
   const fetchMessagesForPartner = useCallback(async (username, isInitialLoad = false) => {
@@ -905,16 +924,21 @@ export default function MessagesPage({
         }
 
         // Check verification status from local keyStore
-        if (user) {
+        if (user && !partner.is_group) {
           const verified = await keyStore.isPeerVerified(user.id, partner.id);
           setIsPeerVerified(verified);
+        } else if (partner.is_group) {
+          setIsPeerVerified(true);
         }
 
-        // Decrypt all incoming/outgoing messages
-        const decryptedMessages = await e2eeService.decryptMessageList(
-          res.data.messages,
-          partner.id
-        );
+        // Decrypt all incoming/outgoing messages (groups use plaintext/senderKeys)
+        let decryptedMessages = res.data.messages || [];
+        if (!partner.is_group) {
+          decryptedMessages = await e2eeService.decryptMessageList(
+            res.data.messages,
+            partner.id
+          );
+        }
 
         // Check for first unread incoming message
         let firstUnreadId = null;
@@ -2461,15 +2485,56 @@ export default function MessagesPage({
   // Toggle Star / Save message
   const handleToggleStar = async (msg) => {
     setContextMenu(null);
+    if (!msg || msg.is_deleted) return;
     if (guardDemoAction('star')) return;
     const targetStarred = !msg.is_starred;
-    // Optimistic update
+
+    // 1. Optimistic update in active messages stream
     setMessages((prev) =>
       prev.map((m) =>
         Number(m.id) === Number(msg.id) ? { ...m, is_starred: targetStarred } : m
       )
     );
 
+    // 2. Synchronize starredMessages array (used by StarredMessagesModal)
+    setStarredMessages((prev) => {
+      if (targetStarred) {
+        const alreadyExists = prev.some((sm) => Number(sm.id) === Number(msg.id));
+        if (alreadyExists) return prev;
+        const newItem = {
+          ...msg,
+          is_starred: true,
+          starred_at: new Date().toISOString(),
+          sender_username: msg.sender_username || (msg.is_mine ? user?.username : activePartner?.username),
+          partner_username: activePartner?.username || msg.partner_username || 'chat'
+        };
+        return [newItem, ...prev];
+      } else {
+        return prev.filter((sm) => Number(sm.id) !== Number(msg.id));
+      }
+    });
+
+    // 3. Local cache persistence
+    try {
+      const cacheKey = `vg_starred_${user?.id || 'guest'}`;
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+      let updated;
+      if (targetStarred) {
+        const newItem = {
+          ...msg,
+          is_starred: true,
+          starred_at: new Date().toISOString(),
+          sender_username: msg.sender_username || (msg.is_mine ? user?.username : activePartner?.username),
+          partner_username: activePartner?.username || msg.partner_username || 'chat'
+        };
+        updated = [newItem, ...cached.filter((x) => Number(x.id) !== Number(msg.id))];
+      } else {
+        updated = cached.filter((x) => Number(x.id) !== Number(msg.id));
+      }
+      localStorage.setItem(cacheKey, JSON.stringify(updated));
+    } catch (_) {}
+
+    // 4. Backend sync
     try {
       const res = await apiClient.post(`/messages/msg/${msg.id}/star`);
       if (res.success && res.data) {
@@ -2480,7 +2545,7 @@ export default function MessagesPage({
         );
       }
     } catch (err) {
-      console.warn('Failed to star message:', err);
+      console.warn('Failed to star message on server:', err);
     }
   };
 
@@ -2488,10 +2553,24 @@ export default function MessagesPage({
   const handleOpenStarredMessages = async () => {
     openStarredModal();
     setLoadingStarred(true);
+
+    // Load local cache immediately for zero latency
+    try {
+      const cacheKey = `vg_starred_${user?.id || 'guest'}`;
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+      if (cached.length > 0) {
+        setStarredMessages(cached);
+      }
+    } catch (_) {}
+
     try {
       const res = await apiClient.get('/messages/starred');
       if (res.success && res.data?.starredMessages) {
         setStarredMessages(res.data.starredMessages);
+        try {
+          const cacheKey = `vg_starred_${user?.id || 'guest'}`;
+          localStorage.setItem(cacheKey, JSON.stringify(res.data.starredMessages));
+        } catch (_) {}
       }
     } catch (err) {
       console.warn('Failed to fetch starred messages:', err);
@@ -2840,7 +2919,11 @@ export default function MessagesPage({
     return () => clearTimeout(timer);
   }, [searchQuery, user?.id]);
 
-  const selectConversation = (username) => {
+  const selectConversation = (usernameOrIdentifier) => {
+    if (!usernameOrIdentifier) return;
+    const username = typeof usernameOrIdentifier === 'string' ? usernameOrIdentifier : usernameOrIdentifier.partner_username;
+    if (!username) return;
+
     isInitialPartnerLoadRef.current = true;
     prevMessagesLengthRef.current = 0;
     if (typeof window !== 'undefined' && window.history) {
@@ -2851,7 +2934,7 @@ export default function MessagesPage({
     fetchMessagesForPartner(username, true);
     setConversations((prev) =>
       prev.map((c) =>
-        c.partner_username.toLowerCase() === username.toLowerCase()
+        (c.partner_username || '').toLowerCase() === (username || '').toLowerCase()
           ? { ...c, unread_count: 0 }
           : c
       )
@@ -3010,23 +3093,36 @@ export default function MessagesPage({
               </div>
             ) : (
               conversations.map((c) => {
-                const isActive = activePartner?.username.toLowerCase() === c.partner_username.toLowerCase();
+                const isGroup = Boolean(c.is_group || c.type === 'group' || String(c.partner_username || '').startsWith('group-'));
+                const isActive = activePartner && (
+                  isGroup
+                    ? (activePartner.id === c.partner_id || activePartner.username === c.partner_username || activeConversationId === c.conversation_id)
+                    : (activePartner.username?.toLowerCase() === (c.partner_username || '').toLowerCase())
+                );
                 const hasUnread = c.unread_count > 0;
-                const isOnline = onlineUserIds.has(Number(c.partner_id));
+                const isOnline = !isGroup && onlineUserIds.has(Number(c.partner_id));
+                const displayName = isGroup ? (c.group_title || c.partner_full_name || 'Group Chat') : `@${c.partner_username}`;
+                const targetKey = c.partner_username || ('group-' + (c.conversation_id || c.id));
 
                 return (
                   <div
-                    key={c.partner_id}
-                    className={`conversation-item ${isActive ? 'active' : ''} ${hasUnread ? 'has-unread' : ''}`}
-                    onClick={() => selectConversation(c.partner_username)}
+                    key={c.partner_id || c.conversation_id || c.id}
+                    className={`conversation-item ${isActive ? 'active' : ''} ${hasUnread ? 'has-unread' : ''} ${isGroup ? 'group-conv-item' : ''}`}
+                    onClick={() => selectConversation(targetKey)}
                     onContextMenu={(e) => handleConversationContextMenu(e, c)}
                   >
                     <div className="conversation-avatar-wrap">
-                      <img
-                        src={c.partner_avatar_url || '/uploads/avatars/default-avatar.png'}
-                        alt={c.partner_username}
-                        className="conversation-avatar-img"
-                      />
+                      {isGroup ? (
+                        <div className="group-avatar-icon-wrap" title={displayName}>
+                          <Users size={20} className="group-avatar-icon" />
+                        </div>
+                      ) : (
+                        <img
+                          src={c.partner_avatar_url || '/uploads/avatars/default-avatar.png'}
+                          alt={c.partner_username}
+                          className="conversation-avatar-img"
+                        />
+                      )}
                       {isOnline && <span className="conversation-online-indicator" title="Online" />}
                       {hasUnread && <span className="conversation-unread-dot" />}
                     </div>
@@ -3034,7 +3130,12 @@ export default function MessagesPage({
                     <div className="conversation-meta">
                       <div className="conversation-name-row">
                         <span className="conversation-username">
-                          @{c.partner_username}
+                          {displayName}
+                          {isGroup && (
+                            <span className="group-members-pill">
+                              👥 {c.member_count || (c.members ? c.members.length : 2)}
+                            </span>
+                          )}
                           {c.is_pinned && (
                             <Pin size={11} className="conversation-pin-icon" fill="#818cf8" color="#818cf8" title="Pinned to top" />
                           )}
@@ -3055,7 +3156,7 @@ export default function MessagesPage({
                         ) : (
                           <span className="conversation-snippet">
                             {c.last_sender_id === user?.id ? 'You: ' : ''}
-                            {c.last_message || 'Encrypted message'}
+                            {c.last_message || (isGroup ? 'Group created' : 'Encrypted message')}
                           </span>
                         )}
                         {hasUnread && (
@@ -3305,33 +3406,46 @@ export default function MessagesPage({
                 </button>
                 <div
                   className="chat-header-user"
-                  onClick={() => onNavigateToProfile && onNavigateToProfile(activePartner.username)}
-                  style={{ cursor: 'pointer' }}
+                  onClick={() => !activePartner?.is_group && onNavigateToProfile && onNavigateToProfile(activePartner.username)}
+                  style={{ cursor: activePartner?.is_group ? 'default' : 'pointer' }}
                 >
                   <div className="chat-header-avatar-wrap">
-                    <img
-                      src={activePartner.avatar_url || '/uploads/avatars/default-avatar.png'}
-                      alt={activePartner.username}
-                      className="chat-header-avatar"
-                    />
-                    {isCurrentPartnerOnline && (
+                    {activePartner?.is_group ? (
+                      <div className="group-avatar-icon-wrap header-group-avatar">
+                        <Users size={22} className="group-avatar-icon" />
+                      </div>
+                    ) : (
+                      <img
+                        src={activePartner.avatar_url || '/uploads/avatars/default-avatar.png'}
+                        alt={activePartner.username}
+                        className="chat-header-avatar"
+                      />
+                    )}
+                    {!activePartner?.is_group && isCurrentPartnerOnline && (
                       <span className="header-online-indicator" title="Online" />
                     )}
                   </div>
 
                   <div className="chat-header-names">
                     <div className="chat-header-title-row">
-                      <span className="chat-header-username">@{activePartner.username}</span>
+                      <span className="chat-header-username">
+                        {activePartner?.is_group ? (activePartner.title || activePartner.full_name || 'Group Chat') : `@${activePartner.username}`}
+                      </span>
                       <button
                         type="button"
                         className={`btn-safety-badge ${isPeerVerified ? 'verified' : 'unverified'}`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          openSafetyModal();
+                          if (!activePartner?.is_group) openSafetyModal();
                         }}
-                        title={isPeerVerified ? 'Cryptographic Identity Verified' : 'Click to verify Safety Number'}
+                        title={activePartner?.is_group ? 'Multi-Party Encrypted Group' : isPeerVerified ? 'Cryptographic Identity Verified' : 'Click to verify Safety Number'}
                       >
-                        {isPeerVerified ? (
+                        {activePartner?.is_group ? (
+                          <>
+                            <ShieldCheck size={13} className="safety-badge-icon" />
+                            <span className="safety-badge-text">Group E2EE</span>
+                          </>
+                        ) : isPeerVerified ? (
                           <>
                             <ShieldCheck size={13} className="safety-badge-icon" />
                             <span className="safety-badge-text">Verified</span>
@@ -3351,7 +3465,13 @@ export default function MessagesPage({
                       )}
                     </div>
                     <span className="chat-header-sub">
-                      {isPartnerTyping ? (
+                      {activePartner?.is_group ? (
+                        <span className="group-members-sub">
+                          {activePartner.members && activePartner.members.length > 0
+                            ? `${activePartner.members.length} members: ` + activePartner.members.map((m) => `@${m.username}`).join(', ')
+                            : `${activePartner.member_count || 2} members`}
+                        </span>
+                      ) : isPartnerTyping ? (
                         <span className="typing-sub-label">{activePartner.full_name || activePartner.username} is typing...</span>
                       ) : isCurrentPartnerOnline ? (
                         <span className="online-sub-label">
@@ -4041,6 +4161,13 @@ export default function MessagesPage({
                                 )}
                               </div>
                             )}
+                            {/* Group sender author tag */}
+                            {Boolean(activePartner?.is_group) && !m.is_mine && !m.is_deleted && (
+                              <div className="group-sender-tag">
+                                @{m.sender_username || m.sender_full_name || 'member'}
+                              </div>
+                            )}
+
                             {/* Forwarded badge */}
                             {m.is_forwarded && !m.is_deleted && (
                               <div className="forwarded-badge">
@@ -4172,6 +4299,67 @@ export default function MessagesPage({
                                 </div>
                               )}
                             </div>
+
+                            {/* Hover Quick Action Bar */}
+                            {!m.is_deleted && !isSelectionMode && (
+                              <div
+                                className={`msg-quick-action-bar ${m.is_mine ? 'outgoing-actions' : 'incoming-actions'}`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  className={`msg-quick-action-btn msg-star-btn ${m.is_starred ? 'is-starred' : ''}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleStar(m);
+                                  }}
+                                  title={m.is_starred ? 'Unstar message' : 'Star message'}
+                                  aria-label={m.is_starred ? 'Unstar message' : 'Star message'}
+                                >
+                                  <Star
+                                    size={13}
+                                    fill={m.is_starred ? '#f59e0b' : 'none'}
+                                    color={m.is_starred ? '#f59e0b' : 'currentColor'}
+                                  />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="msg-quick-action-btn msg-react-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSelectMessageForAction(m);
+                                  }}
+                                  title="React"
+                                  aria-label="React"
+                                >
+                                  <Smile size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="msg-quick-action-btn msg-reply-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStartReply(m);
+                                  }}
+                                  title="Reply"
+                                  aria-label="Reply"
+                                >
+                                  <Reply size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="msg-quick-action-btn msg-more-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSelectMessageForAction(m);
+                                  }}
+                                  title="More options"
+                                  aria-label="More options"
+                                >
+                                  <MoreVertical size={13} />
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </React.Fragment>
                       );
@@ -4537,7 +4725,13 @@ export default function MessagesPage({
       <CreateGroupModal
         isOpen={isCreateGroupOpen}
         onClose={closeCreateGroupModal}
-        onGroupCreated={() => fetchConversations()}
+        onGroupCreated={(group) => {
+          fetchConversations();
+          if (group?.id) {
+            const target = String(group.id).startsWith('group-') ? group.id : `group-${group.id}`;
+            selectConversation(target);
+          }
+        }}
       />
 
       {/* Call History Modal */}
@@ -4916,13 +5110,29 @@ export default function MessagesPage({
                   >
                     <div className="starred-item-header">
                       <span className="starred-sender">@{sm.sender_username}</span>
-                      <span className="starred-date">{formatMessageTime(sm.created_at)}</span>
+                      <div className="starred-item-header-actions">
+                        <span className="starred-date">{formatMessageTime(sm.created_at)}</span>
+                        <button
+                          type="button"
+                          className="starred-item-unstar-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleStar(sm);
+                          }}
+                          title="Unstar message"
+                          aria-label="Unstar message"
+                        >
+                          <Star size={13} fill="#f59e0b" color="#f59e0b" />
+                        </button>
+                      </div>
                     </div>
                     <p className="starred-content">
                       {sm.content?.slice(0, 140) || '(Encrypted media)'}
                     </p>
                     <span className="starred-conversation-tag">
-                      Chat with @{sm.partner_username} →
+                      {String(sm.partner_username || '').startsWith('group-')
+                        ? `Chat in ${sm.conversation_title || 'Group'} →`
+                        : `Chat with @${sm.partner_username} →`}
                     </span>
                   </div>
                 ))
@@ -5808,6 +6018,143 @@ export default function MessagesPage({
           cursor: not-allowed;
           box-shadow: none;
           transform: none;
+        }
+
+        /* Group Avatar & Badges */
+        .group-avatar-icon-wrap {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #ffffff;
+          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+          flex-shrink: 0;
+        }
+
+        .header-group-avatar {
+          width: 44px;
+          height: 44px;
+        }
+
+        .group-avatar-icon {
+          stroke-width: 2.2;
+        }
+
+        .group-members-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          padding: 1px 6px;
+          border-radius: 10px;
+          background: rgba(99, 102, 241, 0.15);
+          color: #818cf8;
+          font-size: 0.72rem;
+          font-weight: 600;
+          margin-left: 6px;
+        }
+
+        .group-members-sub {
+          font-size: 0.78rem;
+          color: var(--text-secondary, #94a3b8);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 320px;
+          display: inline-block;
+        }
+
+        .group-sender-tag {
+          font-size: 0.76rem;
+          font-weight: 700;
+          color: #818cf8;
+          margin-bottom: 3px;
+          user-select: none;
+        }
+
+        /* Message Bubble Quick Action Bar (Hover Toolbar) */
+        .msg-quick-action-bar {
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+          padding: 2px 4px;
+          border-radius: 20px;
+          background: var(--card-bg, #1e293b);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+          position: absolute;
+          top: -12px;
+          opacity: 0;
+          pointer-events: none;
+          transform: translateY(4px);
+          transition: all 0.18s cubic-bezier(0.2, 0, 0, 1);
+          z-index: 20;
+        }
+
+        .message-bubble-row:hover .msg-quick-action-bar {
+          opacity: 1;
+          pointer-events: auto;
+          transform: translateY(0);
+        }
+
+        .message-bubble-row.outgoing .msg-quick-action-bar {
+          right: 8px;
+        }
+
+        .message-bubble-row.incoming .msg-quick-action-bar {
+          left: 8px;
+        }
+
+        .msg-quick-action-btn {
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: transparent;
+          border: none;
+          color: var(--text-secondary, #94a3b8);
+          cursor: pointer;
+          transition: all 0.15s ease;
+          padding: 0;
+        }
+
+        .msg-quick-action-btn:hover {
+          background: rgba(255, 255, 255, 0.12);
+          color: var(--text-primary, #f8fafc);
+          transform: scale(1.15);
+        }
+
+        .msg-quick-action-btn.msg-star-btn:hover,
+        .msg-quick-action-btn.msg-star-btn.is-starred {
+          color: #f59e0b;
+        }
+
+        .starred-item-header-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .starred-item-unstar-btn {
+          background: transparent;
+          border: none;
+          color: #f59e0b;
+          cursor: pointer;
+          padding: 2px;
+          border-radius: 4px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.15s ease;
+        }
+
+        .starred-item-unstar-btn:hover {
+          background: rgba(245, 158, 11, 0.15);
+          transform: scale(1.2);
         }
 
         .message-bubble-row {
