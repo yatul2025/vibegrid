@@ -113,8 +113,8 @@ export default function VibiEmptyState({
             <circle cx="42" cy="51" r="0.9" fill="#ffffff" />
 
             <ellipse cx="60" cy="49" rx="4.8" ry="5.8" fill="#1e293b" />
-            <circle cx="60.5" cy="49.5" r="2.2" fill="#ffffff" />
-            <circle cx="64.5" cy="54.5" r="1.1" fill="#ffffff" />
+            <circle cx="58.5" cy="46.8" r="1.9" fill="#ffffff" />
+            <circle cx="62" cy="51" r="0.9" fill="#ffffff" />
           </g>
 
           {/* Snout & Nose */}
