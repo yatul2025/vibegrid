@@ -1181,19 +1181,25 @@ export default function MessagesPage({
       }
 
       const currentPartner = activePartnerRef.current;
-      const convId = msg.conversation_id ? String(msg.conversation_id) : null;
+      const rawConvId = msg.conversation_id ? String(msg.conversation_id) : null;
+      const cleanConvId = rawConvId ? rawConvId.replace(/^(group-)+/i, '').trim().toLowerCase() : null;
+
+      const partnerIdClean = currentPartner?.id ? String(currentPartner.id).replace(/^(group-)+/i, '').trim().toLowerCase() : null;
+      const partnerConvIdClean = currentPartner?.conversation_id ? String(currentPartner.conversation_id).replace(/^(group-)+/i, '').trim().toLowerCase() : null;
+      const partnerUsernameClean = currentPartner?.username ? String(currentPartner.username).replace(/^(group-)+/i, '').trim().toLowerCase() : null;
+      const activeConvClean = activeConversationIdRef.current ? String(activeConversationIdRef.current).replace(/^(group-)+/i, '').trim().toLowerCase() : null;
+
       const isGroupChat = Boolean(
-        currentPartner?.is_group && (
-          (convId && (
-            String(currentPartner.id).replace(/^group-/, '') === convId ||
-            String(activeConversationIdRef.current) === convId ||
-            currentPartner.username === `group-${convId}`
-          ))
+        currentPartner?.is_group && cleanConvId && (
+          cleanConvId === partnerIdClean ||
+          cleanConvId === partnerConvIdClean ||
+          cleanConvId === partnerUsernameClean ||
+          cleanConvId === activeConvClean
         )
       );
       const isCurrentChat = isGroupChat || (currentPartner && (
         Number(msg.sender_id) === Number(currentPartner.id) ||
-        (Number(msg.recipient_id) === Number(currentPartner.id) && Number(msg.sender_id) === Number(user.id))
+        (Number(msg.recipient_id) === Number(currentPartner.id) && Number(msg.sender_id) === Number(user?.id))
       ));
 
       // Decrypt message content (group chats use plaintext content)
@@ -1475,23 +1481,41 @@ export default function MessagesPage({
     };
 
     const handleGroupUpdatedEvent = (payload) => {
-      const updatedConv = payload?.conversation;
-      if (!updatedConv) return;
-      const gId = String(updatedConv.id).replace(/^group-/, '');
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.conversation_id === gId || c.partner_username === `group-${gId}`
-            ? { ...c, partner_full_name: updatedConv.title, group_title: updatedConv.title, title: updatedConv.title }
-            : c
-        )
-      );
-      if (
-        activePartnerRef.current &&
-        (String(activePartnerRef.current.id).replace(/^group-/, '') === gId ||
-         activePartnerRef.current.username === `group-${gId}`)
-      ) {
-        setActivePartner((prev) => (prev ? { ...prev, title: updatedConv.title, full_name: updatedConv.title } : prev));
+      const gId = String(payload?.conversation?.id || payload?.conversationId || '').replace(/^(group-)+/i, '').trim();
+      if (!gId) {
+        fetchConversations();
+        return;
       }
+      const updatedTitle = payload?.conversation?.title;
+      const updatedMemberCount = payload?.memberCount || payload?.members?.length;
+
+      setConversations((prev) =>
+        prev.map((c) => {
+          const cId = String(c.conversation_id || c.partner_id || '').replace(/^(group-)+/i, '').trim();
+          const cUser = String(c.partner_username || '').replace(/^(group-)+/i, '').trim();
+          if (cId === gId || cUser === gId) {
+            return {
+              ...c,
+              ...(updatedTitle ? { partner_full_name: updatedTitle, group_title: updatedTitle, title: updatedTitle } : {}),
+              ...(updatedMemberCount ? { member_count: updatedMemberCount } : {})
+            };
+          }
+          return c;
+        })
+      );
+
+      if (activePartnerRef.current) {
+        const curId = String(activePartnerRef.current.id || activePartnerRef.current.conversation_id || '').replace(/^(group-)+/i, '').trim();
+        const curUser = String(activePartnerRef.current.username || '').replace(/^(group-)+/i, '').trim();
+        if (curId === gId || curUser === gId) {
+          setActivePartner((prev) => (prev ? {
+            ...prev,
+            ...(updatedTitle ? { title: updatedTitle, full_name: updatedTitle } : {}),
+            ...(updatedMemberCount ? { member_count: updatedMemberCount } : {})
+          } : prev));
+        }
+      }
+      fetchConversations();
     };
 
     socketService.on('message:receive', handleReceiveMessage);
@@ -1507,6 +1531,9 @@ export default function MessagesPage({
     socketService.on('group:left', handleGroupDeletedEvent);
     socketService.on('group:removed', handleGroupDeletedEvent);
     socketService.on('group:updated', handleGroupUpdatedEvent);
+    socketService.on('group:members_added', handleGroupUpdatedEvent);
+    socketService.on('group:member_removed', handleGroupUpdatedEvent);
+    socketService.on('group:member_left', handleGroupUpdatedEvent);
 
     return () => {
       socketService.off('message:receive', handleReceiveMessage);
@@ -1522,8 +1549,32 @@ export default function MessagesPage({
       socketService.off('group:left', handleGroupDeletedEvent);
       socketService.off('group:removed', handleGroupDeletedEvent);
       socketService.off('group:updated', handleGroupUpdatedEvent);
+      socketService.off('group:members_added', handleGroupUpdatedEvent);
+      socketService.off('group:member_removed', handleGroupUpdatedEvent);
+      socketService.off('group:member_left', handleGroupUpdatedEvent);
     };
   }, [user, activeConversationId, fetchConversations, onUnreadCountChange]);
+
+  // Join/leave active conversation room on socket
+  useEffect(() => {
+    const rawId = activeConversationId || (activePartner?.is_group ? (activePartner.conversation_id || activePartner.id) : null);
+    if (!rawId) return;
+
+    const cleanId = String(rawId).replace(/^(group-)+/i, '').trim();
+    if (!cleanId) return;
+
+    socketService.joinConversation(cleanId);
+    if (activePartner?.is_group) {
+      socketService.joinConversation(`group-${cleanId}`);
+    }
+
+    return () => {
+      socketService.leaveConversation(cleanId);
+      if (activePartner?.is_group) {
+        socketService.leaveConversation(`group-${cleanId}`);
+      }
+    };
+  }, [activeConversationId, activePartner?.id, activePartner?.is_group]);
 
   // Window-level escape and click dismissal for Context Menu & Active Banners
   useEffect(() => {
@@ -1974,7 +2025,9 @@ export default function MessagesPage({
         }
       }
 
-      const targetParam = activePartner.username || (activePartner.id ? `group-${activePartner.id}` : '');
+      const targetParam = activePartner.is_group
+        ? `group-${String(activePartner.conversation_id || activePartner.id || activePartner.username).replace(/^(group-)+/i, '')}`
+        : (activePartner.username || activePartner.id);
       const res = await apiClient.post(`/messages/${targetParam}`, {
         content: payloadString,
         ciphertext: encEnvelope.ciphertext || null,
@@ -2396,10 +2449,16 @@ export default function MessagesPage({
   const handleStartReply = (msg) => {
     setContextMenu(null);
     setEditingMessage(null);
+    const cleanSender = msg.is_mine
+      ? user?.username
+      : (msg.sender_username && !msg.sender_username.startsWith('group-')
+          ? msg.sender_username
+          : (msg.sender_full_name || (activePartner?.is_group ? 'member' : String(activePartner?.username || '').replace(/^(group-)+/i, ''))));
+
     setReplyingTo({
       id: msg.id,
       sender_id: msg.sender_id,
-      sender_username: msg.is_mine ? user?.username : activePartner?.username,
+      sender_username: cleanSender,
       content: msg.content,
       is_deleted: msg.is_deleted,
       is_mine: msg.is_mine
@@ -4424,7 +4483,7 @@ export default function MessagesPage({
                       <Pin size={14} className="pinned-banner-icon" />
                       <div className="pinned-banner-text">
                         <span className="pinned-banner-label">
-                          Pinned Message {count > 1 ? `(${((activePinIndex % count) + 1)}/${count})` : ''} {currentPin.sender_username && `· @${currentPin.sender_username}`}
+                          Pinned Message {count > 1 ? `(${((activePinIndex % count) + 1)}/${count})` : ''} {currentPin.sender_username && `· @${String(currentPin.sender_username).replace(/^(group-)+/i, '')}`}
                         </span>
                         <p className="pinned-banner-snippet">
                           {currentPin.content?.slice(0, 90) || '…'}
@@ -4726,7 +4785,7 @@ export default function MessagesPage({
                             {/* Group sender author tag */}
                             {Boolean(activePartner?.is_group) && !m.is_mine && !m.is_deleted && (
                               <div className="group-sender-tag">
-                                @{m.sender_username || m.sender_full_name || 'member'}
+                                @{String(m.sender_username || m.sender_full_name || 'member').replace(/^(group-)+/i, '')}
                               </div>
                             )}
 
@@ -4745,7 +4804,7 @@ export default function MessagesPage({
                                 <span className="reply-quote-author">
                                   <CornerUpLeft size={12} />
                                   {m.reply_to_message.sender_username
-                                    ? `@${m.reply_to_message.sender_username}`
+                                    ? `@${String(m.reply_to_message.sender_username).replace(/^(group-)+/i, '')}`
                                     : 'Unknown'}
                                 </span>
                                 <p className="reply-quote-text">
@@ -5021,7 +5080,9 @@ export default function MessagesPage({
                           <Reply size={14} className="reply-preview-icon" />
                           <div className="reply-preview-meta">
                             <span className="reply-preview-author">
-                              Replying to @{replyingTo.sender_username}
+                              {replyingTo.is_mine
+                                ? 'Replying to yourself'
+                                : `Replying to @${String(replyingTo.sender_username || 'member').replace(/^(group-)+/i, '')}`}
                             </span>
                             <p className="reply-preview-snippet">
                               {replyingTo.is_deleted
@@ -5163,7 +5224,13 @@ export default function MessagesPage({
                           <textarea
                             ref={chatInputRef}
                             rows={1}
-                            placeholder={uploadingMedia ? "Encrypting..." : `Message @${activePartner.username}...`}
+                            placeholder={
+                              uploadingMedia
+                                ? "Encrypting..."
+                                : (activePartner.is_group
+                                    ? `Message ${activePartner.title || activePartner.full_name || 'group'}...`
+                                    : `Message @${String(activePartner.username || '').replace(/^(group-)+/i, '')}...`)
+                            }
                             value={messageInput}
                             onFocus={() => {
                               setIsInputFocused(true);
@@ -5182,7 +5249,11 @@ export default function MessagesPage({
                             className="chat-input-field"
                             maxLength={5000}
                             disabled={uploadingMedia}
-                            aria-label={`Message @${activePartner.username}`}
+                            aria-label={
+                              activePartner.is_group
+                                ? `Message ${activePartner.title || activePartner.full_name || 'group'}`
+                                : `Message @${String(activePartner.username || '').replace(/^(group-)+/i, '')}`
+                            }
                           />
                         </div>
 

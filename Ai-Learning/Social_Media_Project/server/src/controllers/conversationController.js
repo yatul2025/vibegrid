@@ -405,6 +405,20 @@ const sendMessage = async (req, res, next) => {
           is_mine: false
         });
       }
+      try {
+        const otherMembersRes = await query(
+          'SELECT user_id FROM conversation_members WHERE conversation_id = $1 AND user_id != $2',
+          [conversationId, senderId]
+        );
+        if (otherMembersRes?.rows) {
+          for (const mRow of otherMembersRes.rows) {
+            io.to(`user:${mRow.user_id}`).emit('message:receive', {
+              ...newMessage,
+              is_mine: false
+            });
+          }
+        }
+      } catch (_) {}
     }
 
     res.status(201).json({
@@ -815,7 +829,7 @@ const leaveGroup = async (req, res, next) => {
     }
 
     // If leaving user is creator/admin, transfer admin to another member if no admins remain
-    const remainingMembers = allMembersRes.rows.filter((m) => m.user_id !== userId);
+    const remainingMembers = allMembersRes.rows.filter((m) => Number(m.user_id) !== Number(userId));
     const hasRemainingAdmin = remainingMembers.some((m) => m.role === 'admin');
     if (!hasRemainingAdmin && remainingMembers.length > 0) {
       const nextAdminId = remainingMembers[0].user_id;
@@ -852,7 +866,18 @@ const leaveGroup = async (req, res, next) => {
         userId,
         username: req.user.username
       });
+      io.to(`conv:${cleanId}`).emit('group:updated', {
+        conversationId: cleanId,
+        memberCount: remainingMembers.length
+      });
       io.to(`user:${userId}`).emit('group:left', { conversationId: cleanId });
+
+      remainingMembers.forEach((rm) => {
+        io.to(`user:${rm.user_id}`).emit('group:updated', {
+          conversationId: cleanId,
+          memberCount: remainingMembers.length
+        });
+      });
     }
 
     res.status(200).json({
@@ -963,10 +988,21 @@ const addMembers = async (req, res, next) => {
         conversationId: cleanId,
         members: membersRes.rows
       });
+      io.to(`conv:${cleanId}`).emit('group:updated', {
+        conversationId: cleanId,
+        memberCount: membersRes.rows.length,
+        members: membersRes.rows
+      });
       memberIds.forEach((mId) => {
         io.to(`user:${mId}`).emit('conversation:created', {
           conversation: convRes.rows[0],
           members: membersRes.rows
+        });
+      });
+      membersRes.rows.forEach((m) => {
+        io.to(`user:${m.id}`).emit('group:updated', {
+          conversationId: cleanId,
+          memberCount: membersRes.rows.length
         });
       });
     }
@@ -1010,7 +1046,7 @@ const removeMember = async (req, res, next) => {
 
     // Check conversation owner
     const convRes = await query('SELECT created_by FROM conversations WHERE id = $1 LIMIT 1', [cleanId]);
-    if (convRes.rows.length > 0 && convRes.rows[0].created_by === targetUserId) {
+    if (convRes.rows.length > 0 && Number(convRes.rows[0].created_by) === Number(targetUserId)) {
       return res.status(403).json({ success: false, error: 'Cannot remove the group owner.' });
     }
 
@@ -1041,7 +1077,18 @@ const removeMember = async (req, res, next) => {
         userId: targetUserId,
         username: targetUsername
       });
+      io.to(`conv:${cleanId}`).emit('group:updated', { conversationId: cleanId });
       io.to(`user:${targetUserId}`).emit('group:removed', { conversationId: cleanId });
+
+      try {
+        const remainingMembers = await query('SELECT user_id FROM conversation_members WHERE conversation_id = $1', [cleanId]);
+        for (const rm of remainingMembers.rows) {
+          io.to(`user:${rm.user_id}`).emit('group:updated', {
+            conversationId: cleanId,
+            memberCount: remainingMembers.rows.length
+          });
+        }
+      } catch (_) {}
     }
 
     res.status(200).json({
