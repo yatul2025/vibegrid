@@ -22,6 +22,7 @@ import apiClient from '../api/client';
 import { getDefaultAvatar, isDefaultAvatar } from '../utils/avatar';
 import ConfirmModal from '../components/ConfirmModal';
 import PasswordToggleButton from '../components/PasswordToggleIcon';
+import SpringToggle from '../components/SpringToggle';
 import pushNotificationService from '../services/pushNotificationService';
 import { THEMES, getThemeById } from '../constants/themes';
 import {
@@ -1971,15 +1972,12 @@ export default function SettingsPage({
                         <strong>Private Account</strong>
                         <p>When private, only people you approve can see your photos, videos, and profile details.</p>
                       </div>
-                      <label className="switch-toggle">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(privacySettings.is_private)}
-                          onChange={(e) => handleUpdatePrivacy({ is_private: e.target.checked })}
-                          disabled={savingPrivacy || isDemoUser}
-                        />
-                        <span className="switch-slider" />
-                      </label>
+                      <SpringToggle
+                        checked={Boolean(privacySettings.is_private)}
+                        onChange={(e) => handleUpdatePrivacy({ is_private: e.target.checked })}
+                        disabled={savingPrivacy || isDemoUser}
+                        aria-label="Private Account"
+                      />
                     </div>
 
                     <div className="privacy-divider" />
@@ -2114,15 +2112,12 @@ export default function SettingsPage({
                           <strong>Show Activity Status</strong>
                           <p>Allow accounts you follow and anyone you message to see when you were last active.</p>
                         </div>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(privacySettings.show_online_status)}
-                            onChange={(e) => handleUpdatePrivacy({ show_online_status: e.target.checked })}
-                            disabled={savingPrivacy || isDemoUser}
-                          />
-                          <span className="switch-slider" />
-                        </label>
+                        <SpringToggle
+                          checked={Boolean(privacySettings.show_online_status)}
+                          onChange={(e) => handleUpdatePrivacy({ show_online_status: e.target.checked })}
+                          disabled={savingPrivacy || isDemoUser}
+                          aria-label="Show Activity Status"
+                        />
                       </div>
 
                       {/* Read Receipts Toggle */}
@@ -2131,15 +2126,12 @@ export default function SettingsPage({
                           <strong>Show Read Receipts</strong>
                           <p>Allow message senders to see when you have read their messages.</p>
                         </div>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(privacySettings.show_read_receipts)}
-                            onChange={(e) => handleUpdatePrivacy({ show_read_receipts: e.target.checked })}
-                            disabled={savingPrivacy || isDemoUser}
-                          />
-                          <span className="switch-slider" />
-                        </label>
+                        <SpringToggle
+                          checked={Boolean(privacySettings.show_read_receipts)}
+                          onChange={(e) => handleUpdatePrivacy({ show_read_receipts: e.target.checked })}
+                          disabled={savingPrivacy || isDemoUser}
+                          aria-label="Show Read Receipts"
+                        />
                       </div>
                     </div>
                   </div>
@@ -2251,15 +2243,12 @@ export default function SettingsPage({
                           <strong>Likes</strong>
                           <p>Receive notifications when someone likes your posts.</p>
                         </div>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(notificationSettings.notif_likes)}
-                            onChange={(e) => handleUpdateNotification({ notif_likes: e.target.checked })}
-                            disabled={savingNotif || isDemoUser}
-                          />
-                          <span className="switch-slider" />
-                        </label>
+                        <SpringToggle
+                          checked={Boolean(notificationSettings.notif_likes)}
+                          onChange={(e) => handleUpdateNotification({ notif_likes: e.target.checked })}
+                          disabled={savingNotif || isDemoUser}
+                          aria-label="Likes Notifications"
+                        />
                       </div>
 
                       {/* Comments */}
@@ -2268,15 +2257,12 @@ export default function SettingsPage({
                           <strong>Comments</strong>
                           <p>Receive notifications when someone comments on your posts.</p>
                         </div>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(notificationSettings.notif_comments)}
-                            onChange={(e) => handleUpdateNotification({ notif_comments: e.target.checked })}
-                            disabled={savingNotif || isDemoUser}
-                          />
-                          <span className="switch-slider" />
-                        </label>
+                        <SpringToggle
+                          checked={Boolean(notificationSettings.notif_comments)}
+                          onChange={(e) => handleUpdateNotification({ notif_comments: e.target.checked })}
+                          disabled={savingNotif || isDemoUser}
+                          aria-label="Comments Notifications"
+                        />
                       </div>
 
                       {/* Followers */}
@@ -2285,15 +2271,12 @@ export default function SettingsPage({
                           <strong>New Followers</strong>
                           <p>Receive notifications when someone starts following you.</p>
                         </div>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(notificationSettings.notif_follows)}
-                            onChange={(e) => handleUpdateNotification({ notif_follows: e.target.checked })}
-                            disabled={savingNotif || isDemoUser}
-                          />
-                          <span className="switch-slider" />
-                        </label>
+                        <SpringToggle
+                          checked={Boolean(notificationSettings.notif_follows)}
+                          onChange={(e) => handleUpdateNotification({ notif_follows: e.target.checked })}
+                          disabled={savingNotif || isDemoUser}
+                          aria-label="Followers Notifications"
+                        />
                       </div>
 
                       {/* Direct Messages */}
@@ -2302,15 +2285,12 @@ export default function SettingsPage({
                           <strong>Direct Messages</strong>
                           <p>Receive notifications for incoming direct chat messages.</p>
                         </div>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(notificationSettings.notif_messages)}
-                            onChange={(e) => handleUpdateNotification({ notif_messages: e.target.checked })}
-                            disabled={savingNotif || isDemoUser}
-                          />
-                          <span className="switch-slider" />
-                        </label>
+                        <SpringToggle
+                          checked={Boolean(notificationSettings.notif_messages)}
+                          onChange={(e) => handleUpdateNotification({ notif_messages: e.target.checked })}
+                          disabled={savingNotif || isDemoUser}
+                          aria-label="Direct Messages Notifications"
+                        />
                       </div>
 
                       {/* Incoming Calls */}
@@ -2319,15 +2299,12 @@ export default function SettingsPage({
                           <strong>Incoming Audio & Video Calls</strong>
                           <p>Receive high-urgency ringing push alerts when someone calls you.</p>
                         </div>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(notificationSettings.notif_calls)}
-                            onChange={(e) => handleUpdateNotification({ notif_calls: e.target.checked })}
-                            disabled={savingNotif || isDemoUser}
-                          />
-                          <span className="switch-slider" />
-                        </label>
+                        <SpringToggle
+                          checked={Boolean(notificationSettings.notif_calls)}
+                          onChange={(e) => handleUpdateNotification({ notif_calls: e.target.checked })}
+                          disabled={savingNotif || isDemoUser}
+                          aria-label="Incoming Calls Notifications"
+                        />
                       </div>
 
                       {/* Mentions */}
@@ -2336,15 +2313,12 @@ export default function SettingsPage({
                           <strong>Mentions</strong>
                           <p>Receive notifications when someone mentions your @username.</p>
                         </div>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(notificationSettings.notif_mentions)}
-                            onChange={(e) => handleUpdateNotification({ notif_mentions: e.target.checked })}
-                            disabled={savingNotif || isDemoUser}
-                          />
-                          <span className="switch-slider" />
-                        </label>
+                        <SpringToggle
+                          checked={Boolean(notificationSettings.notif_mentions)}
+                          onChange={(e) => handleUpdateNotification({ notif_mentions: e.target.checked })}
+                          disabled={savingNotif || isDemoUser}
+                          aria-label="Mentions Notifications"
+                        />
                       </div>
 
                       {/* Tags */}
@@ -2353,15 +2327,12 @@ export default function SettingsPage({
                           <strong>Tags</strong>
                           <p>Receive notifications when someone tags you in photos.</p>
                         </div>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(notificationSettings.notif_tags)}
-                            onChange={(e) => handleUpdateNotification({ notif_tags: e.target.checked })}
-                            disabled={savingNotif || isDemoUser}
-                          />
-                          <span className="switch-slider" />
-                        </label>
+                        <SpringToggle
+                          checked={Boolean(notificationSettings.notif_tags)}
+                          onChange={(e) => handleUpdateNotification({ notif_tags: e.target.checked })}
+                          disabled={savingNotif || isDemoUser}
+                          aria-label="Tags Notifications"
+                        />
                       </div>
 
                       {/* Stories */}
@@ -2370,15 +2341,12 @@ export default function SettingsPage({
                           <strong>Story Updates</strong>
                           <p>Receive notifications about new stories and replies.</p>
                         </div>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(notificationSettings.notif_stories)}
-                            onChange={(e) => handleUpdateNotification({ notif_stories: e.target.checked })}
-                            disabled={savingNotif || isDemoUser}
-                          />
-                          <span className="switch-slider" />
-                        </label>
+                        <SpringToggle
+                          checked={Boolean(notificationSettings.notif_stories)}
+                          onChange={(e) => handleUpdateNotification({ notif_stories: e.target.checked })}
+                          disabled={savingNotif || isDemoUser}
+                          aria-label="Story Updates Notifications"
+                        />
                       </div>
                     </div>
 
@@ -2394,15 +2362,12 @@ export default function SettingsPage({
                           <strong>Security Alerts</strong>
                           <p>Alerts about new logins, password modifications, and security events.</p>
                         </div>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(notificationSettings.notif_security)}
-                            onChange={(e) => handleUpdateNotification({ notif_security: e.target.checked })}
-                            disabled={savingNotif || isDemoUser}
-                          />
-                          <span className="switch-slider" />
-                        </label>
+                        <SpringToggle
+                          checked={Boolean(notificationSettings.notif_security)}
+                          onChange={(e) => handleUpdateNotification({ notif_security: e.target.checked })}
+                          disabled={savingNotif || isDemoUser}
+                          aria-label="Security Alerts Notifications"
+                        />
                       </div>
 
                       {/* Email Notifications */}
@@ -2411,15 +2376,12 @@ export default function SettingsPage({
                           <strong>Email Notifications</strong>
                           <p>Receive periodic digest emails and important product updates.</p>
                         </div>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(notificationSettings.notif_email)}
-                            onChange={(e) => handleUpdateNotification({ notif_email: e.target.checked })}
-                            disabled={savingNotif || isDemoUser}
-                          />
-                          <span className="switch-slider" />
-                        </label>
+                        <SpringToggle
+                          checked={Boolean(notificationSettings.notif_email)}
+                          onChange={(e) => handleUpdateNotification({ notif_email: e.target.checked })}
+                          disabled={savingNotif || isDemoUser}
+                          aria-label="Email Notifications"
+                        />
                       </div>
                     </div>
                   </div>
