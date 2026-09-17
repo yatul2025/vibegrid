@@ -199,6 +199,7 @@ const testConnection = async () => {
 
         ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
         ALTER TABLE messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+        ALTER TABLE messages ALTER COLUMN recipient_id DROP NOT NULL;
         CREATE INDEX IF NOT EXISTS idx_messages_recipient_delivered ON messages(recipient_id, delivered_at);
 
         CREATE TABLE IF NOT EXISTS chat_typing (

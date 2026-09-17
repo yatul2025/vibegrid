@@ -31,9 +31,12 @@ export function registerServiceWorker(onUpdateAvailable) {
           registration.update();
         } catch {}
 
-        // Check if there is already a waiting service worker
-        if (registration.waiting && navigator.serviceWorker.controller) {
-          console.log('🔄 [PWA] Existing waiting worker detected.');
+        // Check if there is already a waiting service worker and activate immediately
+        if (registration.waiting) {
+          console.log('🔄 [PWA] Existing waiting worker detected — activating immediately.');
+          try {
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+          } catch {}
           if (onUpdateAvailable) onUpdateAvailable();
           if (updateAvailableListener) updateAvailableListener();
         }
@@ -43,13 +46,23 @@ export function registerServiceWorker(onUpdateAvailable) {
           if (installingWorker == null) return;
 
           installingWorker.addEventListener('statechange', () => {
-            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              console.log('🔄 [PWA] New version deployed and ready to activate.');
+            if (installingWorker.state === 'installed') {
+              console.log('🔄 [PWA] New version deployed — activating immediately.');
+              try {
+                installingWorker.postMessage({ type: 'SKIP_WAITING' });
+              } catch {}
               if (onUpdateAvailable) onUpdateAvailable();
               if (updateAvailableListener) updateAvailableListener();
             }
           });
         });
+
+        // Periodically check for updates every 30 seconds so app automatically updates after every deployment
+        setInterval(() => {
+          try {
+            registration.update();
+          } catch {}
+        }, 30000);
 
         // Check for updates whenever the tab becomes visible again
         document.addEventListener('visibilitychange', () => {

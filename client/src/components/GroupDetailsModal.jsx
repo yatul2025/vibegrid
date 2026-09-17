@@ -160,13 +160,41 @@ export default function GroupDetailsModal({
   // Add Member
   const handleAddMember = async (candidate) => {
     if (addingMemberId || !groupId) return;
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Add member operation timed out. Please retry.')), 10000);
+    });
+
     try {
       setAddingMemberId(candidate.id);
-      const res = await apiClient.post(`/conversations/${groupId}/members`, {
-        memberIds: [candidate.id]
-      });
-      if (res.success && res.data?.members) {
-        setMembers(res.data.members);
+      setStatusMessage({ text: '', type: '' });
+      const res = await Promise.race([
+        apiClient.post(`/conversations/${groupId}/members`, {
+          memberIds: [candidate.id]
+        }),
+        timeoutPromise
+      ]);
+      clearTimeout(timeoutId);
+
+      if (res.success) {
+        if (res.data?.members) {
+          setMembers(res.data.members);
+          if (onGroupUpdated) {
+            onGroupUpdated({
+              ...group,
+              member_count: res.data.members.length,
+              members: res.data.members
+            });
+          }
+        } else {
+          setMembers((prev) => [...prev, { ...candidate, role: 'member' }]);
+          if (onGroupUpdated) {
+            onGroupUpdated({
+              ...group,
+              member_count: members.length + 1
+            });
+          }
+        }
         setStatusMessage({ text: `@${candidate.username} added to the group.`, type: 'success' });
         setSearchResults((prev) => prev.filter((u) => u.id !== candidate.id));
       } else {
@@ -185,16 +213,36 @@ export default function GroupDetailsModal({
     const confirmed = window.confirm(`Remove @${targetUser.username} from this group?`);
     if (!confirmed) return;
 
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Remove member operation timed out. Please retry.')), 10000);
+    });
+
     try {
       setActionLoading(true);
-      const res = await apiClient.delete(`/conversations/${groupId}/members/${targetUser.id}`);
+      setStatusMessage({ text: '', type: '' });
+      const res = await Promise.race([
+        apiClient.delete(`/conversations/${groupId}/members/${targetUser.id}`),
+        timeoutPromise
+      ]);
+      clearTimeout(timeoutId);
+
       if (res.success) {
-        setMembers((prev) => prev.filter((m) => Number(m.id) !== Number(targetUser.id)));
+        const remaining = members.filter((m) => Number(m.id) !== Number(targetUser.id));
+        setMembers(remaining);
         setStatusMessage({ text: `@${targetUser.username} removed.`, type: 'success' });
+        if (onGroupUpdated) {
+          onGroupUpdated({
+            ...group,
+            member_count: remaining.length,
+            members: remaining
+          });
+        }
       } else {
         throw new Error(res.error || 'Failed to remove member');
       }
     } catch (err) {
+      clearTimeout(timeoutId);
       setStatusMessage({ text: err.message || 'Failed to remove member', type: 'error' });
     } finally {
       setActionLoading(false);
@@ -204,9 +252,20 @@ export default function GroupDetailsModal({
   // Leave Group
   const handleLeaveGroup = async () => {
     if (!groupId || actionLoading) return;
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Leave operation timed out. Please retry.')), 10000);
+    });
+
     try {
       setActionLoading(true);
-      const res = await apiClient.post(`/conversations/${groupId}/leave`);
+      setStatusMessage({ text: '', type: '' });
+      const res = await Promise.race([
+        apiClient.post(`/conversations/${groupId}/leave`),
+        timeoutPromise
+      ]);
+      clearTimeout(timeoutId);
+
       if (res.success) {
         // Remove from local cache
         try {
@@ -221,7 +280,9 @@ export default function GroupDetailsModal({
         throw new Error(res.error || 'Failed to leave group');
       }
     } catch (err) {
+      clearTimeout(timeoutId);
       setStatusMessage({ text: err.message || 'Failed to leave group', type: 'error' });
+    } finally {
       setActionLoading(false);
     }
   };
@@ -634,6 +695,11 @@ export default function GroupDetailsModal({
                 <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginBottom: '12px' }}>
                   You will no longer receive updates or messages from this conversation.
                 </div>
+                {statusMessage.type === 'error' && (
+                  <div style={{ fontSize: '0.8rem', color: '#ef4444', marginBottom: '12px', background: 'rgba(239, 68, 68, 0.15)', padding: '6px 10px', borderRadius: '6px' }}>
+                    {statusMessage.text}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                   <button
                     type="button"

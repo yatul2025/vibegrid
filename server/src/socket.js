@@ -151,13 +151,19 @@ function initSocket(httpServer) {
     // ========================================================================
     socket.on('conversation:join', (conversationId) => {
       if (conversationId) {
-        socket.join(`conv:${conversationId}`);
+        const rawId = String(conversationId).trim();
+        const cleanId = rawId.replace(/^(group-)+/i, '');
+        if (cleanId) socket.join(`conv:${cleanId}`);
+        if (cleanId !== rawId) socket.join(`conv:${rawId}`);
       }
     });
 
     socket.on('conversation:leave', (conversationId) => {
       if (conversationId) {
-        socket.leave(`conv:${conversationId}`);
+        const rawId = String(conversationId).trim();
+        const cleanId = rawId.replace(/^(group-)+/i, '');
+        if (cleanId) socket.leave(`conv:${cleanId}`);
+        if (cleanId !== rawId) socket.leave(`conv:${rawId}`);
       }
     });
 

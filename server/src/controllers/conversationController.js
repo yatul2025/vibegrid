@@ -228,7 +228,7 @@ const getOrCreateConversation = async (req, res, next) => {
 const getMessages = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const conversationId = req.params.id;
+    const conversationId = (req.params.id || '').replace(/^(group-)+/i, '').trim();
 
     // Verify membership
     const memberCheck = await query(
@@ -302,7 +302,7 @@ const getMessages = async (req, res, next) => {
 const sendMessage = async (req, res, next) => {
   try {
     const senderId = req.user.id;
-    const conversationId = req.params.id;
+    const conversationId = (req.params.id || '').replace(/^(group-)+/i, '').trim();
     const { ciphertext, ivNonce, senderDeviceId, content, messageType = 'text', replyToId = null } = req.body;
 
     // Verify membership
@@ -311,7 +311,23 @@ const sendMessage = async (req, res, next) => {
       [conversationId]
     );
 
-    const isMember = membersRes.rows.some((m) => m.user_id === senderId);
+    let isMember = membersRes.rows.some((m) => Number(m.user_id) === Number(senderId));
+    if (!isMember) {
+      try {
+        const creatorCheck = await query(
+          'SELECT created_by FROM conversations WHERE id = $1 LIMIT 1',
+          [conversationId]
+        );
+        if (creatorCheck.rows.length > 0 && Number(creatorCheck.rows[0].created_by) === Number(senderId)) {
+          await query(
+            "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, 'admin') ON CONFLICT DO NOTHING",
+            [conversationId, senderId]
+          );
+          isMember = true;
+        }
+      } catch (_) {}
+    }
+
     if (!isMember) {
       return res.status(403).json({
         success: false,
@@ -320,7 +336,7 @@ const sendMessage = async (req, res, next) => {
     }
 
     // Check blocked status with conversation partners
-    const otherMembers = membersRes.rows.filter((m) => m.user_id !== senderId);
+    const otherMembers = membersRes.rows.filter((m) => Number(m.user_id) !== Number(senderId));
     for (const partner of otherMembers) {
       const blockRes = await query(
         'SELECT 1 FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1',
@@ -405,6 +421,20 @@ const sendMessage = async (req, res, next) => {
           is_mine: false
         });
       }
+      try {
+        const otherMembersRes = await query(
+          'SELECT user_id FROM conversation_members WHERE conversation_id = $1 AND user_id != $2',
+          [conversationId, senderId]
+        );
+        if (otherMembersRes?.rows) {
+          for (const mRow of otherMembersRes.rows) {
+            io.to(`user:${mRow.user_id}`).emit('message:receive', {
+              ...newMessage,
+              is_mine: false
+            });
+          }
+        }
+      } catch (_) {}
     }
 
     res.status(201).json({
@@ -695,7 +725,7 @@ const deleteGroup = async (req, res, next) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const cleanId = id.replace(/^group-/, '').trim();
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
     if (!isUuid) {
@@ -729,7 +759,7 @@ const deleteGroup = async (req, res, next) => {
       [cleanId, userId]
     );
 
-    const isCreator = conv.created_by === userId;
+    const isCreator = conv.created_by && Number(conv.created_by) === Number(userId);
     const isAdmin = memberRes.rows.length > 0 && memberRes.rows[0].role === 'admin';
 
     if (!isCreator && !isAdmin) {
@@ -776,7 +806,7 @@ const leaveGroup = async (req, res, next) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const cleanId = id.replace(/^group-/, '').trim();
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
     if (!isUuid) {
@@ -815,7 +845,7 @@ const leaveGroup = async (req, res, next) => {
     }
 
     // If leaving user is creator/admin, transfer admin to another member if no admins remain
-    const remainingMembers = allMembersRes.rows.filter((m) => m.user_id !== userId);
+    const remainingMembers = allMembersRes.rows.filter((m) => Number(m.user_id) !== Number(userId));
     const hasRemainingAdmin = remainingMembers.some((m) => m.role === 'admin');
     if (!hasRemainingAdmin && remainingMembers.length > 0) {
       const nextAdminId = remainingMembers[0].user_id;
@@ -852,7 +882,18 @@ const leaveGroup = async (req, res, next) => {
         userId,
         username: req.user.username
       });
+      io.to(`conv:${cleanId}`).emit('group:updated', {
+        conversationId: cleanId,
+        memberCount: remainingMembers.length
+      });
       io.to(`user:${userId}`).emit('group:left', { conversationId: cleanId });
+
+      remainingMembers.forEach((rm) => {
+        io.to(`user:${rm.user_id}`).emit('group:updated', {
+          conversationId: cleanId,
+          memberCount: remainingMembers.length
+        });
+      });
     }
 
     res.status(200).json({
@@ -874,10 +915,15 @@ const addMembers = async (req, res, next) => {
     const { id } = req.params;
     const userId = req.user.id;
     const { memberIds } = req.body;
-    const cleanId = id.replace(/^group-/, '').trim();
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     if (!Array.isArray(memberIds) || memberIds.length === 0) {
       return res.status(400).json({ success: false, error: 'memberIds array is required.' });
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
+    if (!isUuid) {
+      return res.status(400).json({ success: false, error: 'Invalid group conversation ID.' });
     }
 
     // Verify requester is in the group
@@ -963,10 +1009,21 @@ const addMembers = async (req, res, next) => {
         conversationId: cleanId,
         members: membersRes.rows
       });
+      io.to(`conv:${cleanId}`).emit('group:updated', {
+        conversationId: cleanId,
+        memberCount: membersRes.rows.length,
+        members: membersRes.rows
+      });
       memberIds.forEach((mId) => {
         io.to(`user:${mId}`).emit('conversation:created', {
           conversation: convRes.rows[0],
           members: membersRes.rows
+        });
+      });
+      membersRes.rows.forEach((m) => {
+        io.to(`user:${m.id}`).emit('group:updated', {
+          conversationId: cleanId,
+          memberCount: membersRes.rows.length
         });
       });
     }
@@ -992,10 +1049,15 @@ const removeMember = async (req, res, next) => {
     const { id, userId: targetUserIdStr } = req.params;
     const requesterId = req.user.id;
     const targetUserId = parseInt(targetUserIdStr, 10);
-    const cleanId = id.replace(/^group-/, '').trim();
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     if (isNaN(targetUserId)) {
       return res.status(400).json({ success: false, error: 'Invalid target user ID.' });
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
+    if (!isUuid) {
+      return res.status(400).json({ success: false, error: 'Invalid group conversation ID.' });
     }
 
     // Check requester role
@@ -1010,7 +1072,7 @@ const removeMember = async (req, res, next) => {
 
     // Check conversation owner
     const convRes = await query('SELECT created_by FROM conversations WHERE id = $1 LIMIT 1', [cleanId]);
-    if (convRes.rows.length > 0 && convRes.rows[0].created_by === targetUserId) {
+    if (convRes.rows.length > 0 && Number(convRes.rows[0].created_by) === Number(targetUserId)) {
       return res.status(403).json({ success: false, error: 'Cannot remove the group owner.' });
     }
 
@@ -1041,7 +1103,18 @@ const removeMember = async (req, res, next) => {
         userId: targetUserId,
         username: targetUsername
       });
+      io.to(`conv:${cleanId}`).emit('group:updated', { conversationId: cleanId });
       io.to(`user:${targetUserId}`).emit('group:removed', { conversationId: cleanId });
+
+      try {
+        const remainingMembers = await query('SELECT user_id FROM conversation_members WHERE conversation_id = $1', [cleanId]);
+        for (const rm of remainingMembers.rows) {
+          io.to(`user:${rm.user_id}`).emit('group:updated', {
+            conversationId: cleanId,
+            memberCount: remainingMembers.rows.length
+          });
+        }
+      } catch (_) {}
     }
 
     res.status(200).json({
@@ -1063,10 +1136,15 @@ const updateGroup = async (req, res, next) => {
     const { id } = req.params;
     const userId = req.user.id;
     const { title } = req.body;
-    const cleanId = id.replace(/^group-/, '').trim();
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     if (!title || !title.trim()) {
       return res.status(400).json({ success: false, error: 'Group title is required.' });
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
+    if (!isUuid) {
+      return res.status(400).json({ success: false, error: 'Invalid group conversation ID.' });
     }
 
     const memberRes = await query(
@@ -1111,7 +1189,7 @@ const getGroupMembers = async (req, res, next) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const cleanId = id.replace(/^group-/, '').trim();
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
     if (!isUuid) {
