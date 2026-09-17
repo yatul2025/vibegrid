@@ -311,7 +311,23 @@ const sendMessage = async (req, res, next) => {
       [conversationId]
     );
 
-    const isMember = membersRes.rows.some((m) => m.user_id === senderId);
+    let isMember = membersRes.rows.some((m) => Number(m.user_id) === Number(senderId));
+    if (!isMember) {
+      try {
+        const creatorCheck = await query(
+          'SELECT created_by FROM conversations WHERE id = $1 LIMIT 1',
+          [conversationId]
+        );
+        if (creatorCheck.rows.length > 0 && Number(creatorCheck.rows[0].created_by) === Number(senderId)) {
+          await query(
+            "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, 'admin') ON CONFLICT DO NOTHING",
+            [conversationId, senderId]
+          );
+          isMember = true;
+        }
+      } catch (_) {}
+    }
+
     if (!isMember) {
       return res.status(403).json({
         success: false,
@@ -320,7 +336,7 @@ const sendMessage = async (req, res, next) => {
     }
 
     // Check blocked status with conversation partners
-    const otherMembers = membersRes.rows.filter((m) => m.user_id !== senderId);
+    const otherMembers = membersRes.rows.filter((m) => Number(m.user_id) !== Number(senderId));
     for (const partner of otherMembers) {
       const blockRes = await query(
         'SELECT 1 FROM blocked_users WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1',

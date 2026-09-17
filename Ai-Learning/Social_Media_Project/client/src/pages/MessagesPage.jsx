@@ -996,7 +996,12 @@ export default function MessagesPage({
         }
 
         setMessages((prev) => {
-          if (!isInitialLoad && prev.length === uniqueMessages.length && prev.length > 0) {
+          // Retain any pending or failed optimistic messages awaiting network response or retry
+          const pendingOrFailed = prev.filter(
+            (m) => (m.pending || m.failed) && String(m.id).startsWith('temp-')
+          );
+
+          if (!isInitialLoad && prev.length === uniqueMessages.length && prev.length > 0 && pendingOrFailed.length === 0) {
             const isUnchanged =
               prev[0]?.id === uniqueMessages[0]?.id &&
               prev[prev.length - 1]?.id === uniqueMessages[uniqueMessages.length - 1]?.id &&
@@ -1025,6 +1030,14 @@ export default function MessagesPage({
               stopPartnerTypingImmediately();
             }
           }
+
+          if (pendingOrFailed.length > 0) {
+            const remaining = pendingOrFailed.filter(
+              (p) => !uniqueMessages.some((m) => m.content === p.content && m.is_mine)
+            );
+            return [...uniqueMessages, ...remaining];
+          }
+
           return uniqueMessages;
         });
 
@@ -1826,8 +1839,17 @@ export default function MessagesPage({
     try {
       setSending(true);
 
+      const isGroup = Boolean(
+        activePartner.is_group ||
+        activePartner.type === 'group' ||
+        String(activePartner.username || '').startsWith('group-') ||
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          String(activePartner.id || activePartner.conversation_id || '').replace(/^(group-)+/i, '')
+        )
+      );
+
       let encEnvelope = { ciphertext: null, ivNonce: null, senderDeviceId: null };
-      if (!activePartner.is_group) {
+      if (!isGroup) {
         try {
           encEnvelope = await e2eeService.encryptMessage(activePartner.id, textToSend);
         } catch (e2eeErr) {
@@ -1835,7 +1857,7 @@ export default function MessagesPage({
         }
       }
 
-      const targetParam = activePartner.is_group
+      const targetParam = isGroup
         ? `group-${String(activePartner.conversation_id || activePartner.id || activePartner.username).replace(/^(group-)+/i, '')}`
         : (activePartner.username || activePartner.id);
       const res = await apiClient.post(`/messages/${targetParam}`, {
@@ -1874,7 +1896,7 @@ export default function MessagesPage({
 
         setConversations((prev) =>
           prev.map((c) => {
-            const isMatch = activePartner.is_group
+            const isMatch = isGroup
               ? (c.conversation_id === activePartner.id || c.partner_username === targetParam || c.partner_id === targetParam)
               : (c.partner_username?.toLowerCase() === activePartner.username?.toLowerCase());
             return isMatch
@@ -1910,8 +1932,18 @@ export default function MessagesPage({
 
     try {
       setSending(true);
+
+      const isGroup = Boolean(
+        activePartner.is_group ||
+        activePartner.type === 'group' ||
+        String(activePartner.username || '').startsWith('group-') ||
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          String(activePartner.id || activePartner.conversation_id || '').replace(/^(group-)+/i, '')
+        )
+      );
+
       let encEnvelope = { ciphertext: null, ivNonce: null, senderDeviceId: null };
-      if (!activePartner.is_group) {
+      if (!isGroup) {
         try {
           encEnvelope = await e2eeService.encryptMessage(activePartner.id, textToSend);
         } catch (e2eeErr) {
@@ -1919,11 +1951,11 @@ export default function MessagesPage({
         }
       }
 
-      const targetParam = activePartner.is_group
+      const targetParam = isGroup
         ? `group-${String(activePartner.conversation_id || activePartner.id || activePartner.username).replace(/^(group-)+/i, '')}`
         : (activePartner.username || activePartner.id);
       const res = await apiClient.post(`/messages/${targetParam}`, {
-        content: textToSend,
+        content: encEnvelope.ciphertext ? '' : textToSend,
         ciphertext: encEnvelope.ciphertext || null,
         ivNonce: encEnvelope.ivNonce || null,
         senderDeviceId: encEnvelope.senderDeviceId || null,
@@ -1931,8 +1963,18 @@ export default function MessagesPage({
       });
 
       if (res.success && res.data?.message) {
-        setMessages((prev) =>
-          prev.map((m) =>
+        const realId = Number(res.data.message.id);
+        newlySentMsgIdsRef.current.add(realId);
+        setTimeout(() => {
+          newlySentMsgIdsRef.current.delete(realId);
+        }, 2500);
+
+        setMessages((prev) => {
+          const alreadyHasRealMsg = prev.some((m) => Number(m.id) === realId);
+          if (alreadyHasRealMsg) {
+            return prev.filter((m) => m.id !== retryId);
+          }
+          return prev.map((m) =>
             m.id === retryId
               ? {
                   ...res.data.message,
@@ -1943,12 +1985,12 @@ export default function MessagesPage({
                   pending: false
                 }
               : m
-          )
-        );
+          );
+        });
 
         setConversations((prev) =>
           prev.map((c) => {
-            const isMatch = activePartner.is_group
+            const isMatch = isGroup
               ? (c.conversation_id === activePartner.id || c.partner_username === targetParam || c.partner_id === targetParam)
               : (c.partner_username?.toLowerCase() === activePartner.username?.toLowerCase());
             return isMatch
