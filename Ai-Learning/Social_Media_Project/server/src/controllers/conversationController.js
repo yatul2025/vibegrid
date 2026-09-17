@@ -905,6 +905,11 @@ const addMembers = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'memberIds array is required.' });
     }
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
+    if (!isUuid) {
+      return res.status(400).json({ success: false, error: 'Invalid group conversation ID.' });
+    }
+
     // Verify requester is in the group
     const requesterRes = await query(
       'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
@@ -1034,6 +1039,11 @@ const removeMember = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Invalid target user ID.' });
     }
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
+    if (!isUuid) {
+      return res.status(400).json({ success: false, error: 'Invalid group conversation ID.' });
+    }
+
     // Check requester role
     const reqMemberRes = await query(
       'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
@@ -1114,6 +1124,11 @@ const updateGroup = async (req, res, next) => {
 
     if (!title || !title.trim()) {
       return res.status(400).json({ success: false, error: 'Group title is required.' });
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
+    if (!isUuid) {
+      return res.status(400).json({ success: false, error: 'Invalid group conversation ID.' });
     }
 
     const memberRes = await query(

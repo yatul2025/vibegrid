@@ -160,11 +160,22 @@ export default function GroupDetailsModal({
   // Add Member
   const handleAddMember = async (candidate) => {
     if (addingMemberId || !groupId) return;
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Add member operation timed out. Please retry.')), 10000);
+    });
+
     try {
       setAddingMemberId(candidate.id);
-      const res = await apiClient.post(`/conversations/${groupId}/members`, {
-        memberIds: [candidate.id]
-      });
+      setStatusMessage({ text: '', type: '' });
+      const res = await Promise.race([
+        apiClient.post(`/conversations/${groupId}/members`, {
+          memberIds: [candidate.id]
+        }),
+        timeoutPromise
+      ]);
+      clearTimeout(timeoutId);
+
       if (res.success) {
         if (res.data?.members) {
           setMembers(res.data.members);
@@ -202,9 +213,20 @@ export default function GroupDetailsModal({
     const confirmed = window.confirm(`Remove @${targetUser.username} from this group?`);
     if (!confirmed) return;
 
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Remove member operation timed out. Please retry.')), 10000);
+    });
+
     try {
       setActionLoading(true);
-      const res = await apiClient.delete(`/conversations/${groupId}/members/${targetUser.id}`);
+      setStatusMessage({ text: '', type: '' });
+      const res = await Promise.race([
+        apiClient.delete(`/conversations/${groupId}/members/${targetUser.id}`),
+        timeoutPromise
+      ]);
+      clearTimeout(timeoutId);
+
       if (res.success) {
         const remaining = members.filter((m) => Number(m.id) !== Number(targetUser.id));
         setMembers(remaining);
@@ -220,6 +242,7 @@ export default function GroupDetailsModal({
         throw new Error(res.error || 'Failed to remove member');
       }
     } catch (err) {
+      clearTimeout(timeoutId);
       setStatusMessage({ text: err.message || 'Failed to remove member', type: 'error' });
     } finally {
       setActionLoading(false);

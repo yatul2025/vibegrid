@@ -375,6 +375,22 @@ const getMessages = async (req, res, next) => {
         }
       } catch (msgErr) {}
 
+      // Fetch pinned messages for group
+      let pinnedMessages = [];
+      try {
+        const multiPinRes = await query(
+          `SELECT m.id, m.content, m.sender_id, m.created_at, u.username AS sender_username, cpm.pinned_at
+           FROM conversation_pinned_messages cpm
+           JOIN messages m ON cpm.message_id = m.id
+           JOIN users u ON m.sender_id = u.id
+           WHERE cpm.conversation_id = $1 AND m.is_deleted = FALSE
+           ORDER BY cpm.pinned_at ASC`,
+          [groupId]
+        );
+        pinnedMessages = multiPinRes.rows || [];
+      } catch (_) {}
+      const pinnedMessage = pinnedMessages.length > 0 ? pinnedMessages[pinnedMessages.length - 1] : null;
+
       const groupPartner = {
         id: groupId,
         username: `group-${groupId}`,
@@ -396,8 +412,8 @@ const getMessages = async (req, res, next) => {
           partner: groupPartner,
           conversationId: groupId,
           ephemeralTimerSeconds: cmRow.ephemeral_timer_seconds || null,
-          pinnedMessage: null,
-          pinnedMessages: [],
+          pinnedMessage: pinnedMessage,
+          pinnedMessages: pinnedMessages,
           isMuted: Boolean(cmRow.is_muted && (!cmRow.muted_until || new Date(cmRow.muted_until) > new Date())),
           mutedUntil: cmRow.muted_until || null,
           isPinned: Boolean(cmRow.is_pinned),
