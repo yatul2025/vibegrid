@@ -74,8 +74,40 @@ export default function SettingsPage({
   const [feedbackMsg, setFeedbackMsg] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null);
 
-  // Theme selection state
+  // Theme selection state (Phase 10 Option 6 Complete Suite)
   const [selectedTheme, setSelectedTheme] = useState(() => currentTheme || (typeof window !== 'undefined' ? localStorage.getItem('vibegrid_theme') : null) || 'dark');
+  const [themeFilter, setThemeFilter] = useState('all');
+  const [previewHoverTheme, setPreviewHoverTheme] = useState(null);
+  const [copiedSwatch, setCopiedSwatch] = useState(null);
+  const [showcaseTab, setShowcaseTab] = useState('feed');
+  const [autoSyncDevice, setAutoSyncDevice] = useState(() => {
+    try {
+      return typeof window !== 'undefined' && localStorage.getItem('vibegrid_theme_auto_sync') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [scheduledDayTheme, setScheduledDayTheme] = useState(() => {
+    try {
+      return (typeof window !== 'undefined' && localStorage.getItem('vibegrid_theme_day')) || 'light';
+    } catch {
+      return 'light';
+    }
+  });
+  const [scheduledNightTheme, setScheduledNightTheme] = useState(() => {
+    try {
+      return (typeof window !== 'undefined' && localStorage.getItem('vibegrid_theme_night')) || 'dark';
+    } catch {
+      return 'dark';
+    }
+  });
+  const [batteryOledEnabled, setBatteryOledEnabled] = useState(() => {
+    try {
+      return typeof window !== 'undefined' && localStorage.getItem('vibegrid_theme_battery_oled') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     if (currentTheme) {
@@ -93,11 +125,76 @@ export default function SettingsPage({
         document.documentElement.setAttribute('data-theme', themeId);
       } catch {}
     }
+    try {
+      soundFx.play('refresh');
+    } catch {}
     const t = THEMES.find((item) => item.id === themeId);
     setFeedbackMsg({
       type: 'success',
       text: `Applied "${t?.name || themeId}" theme!`
     });
+  };
+
+  // Smart OS Appearance Auto-Sync
+  useEffect(() => {
+    if (!autoSyncDevice || typeof window === 'undefined') return;
+
+    try {
+      localStorage.setItem('vibegrid_theme_auto_sync', 'true');
+    } catch {}
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleSchemeChange = (e) => {
+      const targetId = e.matches ? scheduledNightTheme : scheduledDayTheme;
+      handleThemeSelect(targetId);
+    };
+
+    if (mediaQuery.matches && selectedTheme !== scheduledNightTheme) {
+      handleThemeSelect(scheduledNightTheme);
+    } else if (!mediaQuery.matches && selectedTheme !== scheduledDayTheme) {
+      handleThemeSelect(scheduledDayTheme);
+    }
+
+    mediaQuery.addEventListener('change', handleSchemeChange);
+    return () => mediaQuery.removeEventListener('change', handleSchemeChange);
+  }, [autoSyncDevice, scheduledDayTheme, scheduledNightTheme]);
+
+  // Battery OLED Auto-Saver
+  useEffect(() => {
+    if (!batteryOledEnabled || typeof navigator === 'undefined' || !navigator.getBattery) return;
+
+    try {
+      localStorage.setItem('vibegrid_theme_battery_oled', 'true');
+    } catch {}
+
+    let isMounted = true;
+    navigator.getBattery().then((battery) => {
+      if (!isMounted) return;
+      const checkBattery = () => {
+        if (battery.level <= 0.20 && !battery.charging && selectedTheme !== 'amoled-black') {
+          handleThemeSelect('amoled-black');
+          setFeedbackMsg({
+            type: 'info',
+            text: '⚡ Low battery detected (<20%). Switched to AMOLED Black for maximum power efficiency.'
+          });
+        }
+      };
+      checkBattery();
+      battery.addEventListener('levelchange', checkBattery);
+      battery.addEventListener('chargingchange', checkBattery);
+    }).catch(() => {});
+
+    return () => { isMounted = false; };
+  }, [batteryOledEnabled, selectedTheme]);
+
+  const handleCopySwatch = (e, hex) => {
+    e.stopPropagation();
+    try {
+      navigator.clipboard.writeText(hex);
+      setCopiedSwatch(hex);
+      soundFx.play('click');
+      setTimeout(() => setCopiedSwatch(null), 1500);
+    } catch {}
   };
 
   // Profile data & form states (initialized with currentUser to prevent flash of empty/undefined data)
@@ -1410,128 +1507,562 @@ export default function SettingsPage({
               )}
 
               {/* ========================================================== */}
-              {/* CATEGORY: APPEARANCE & THEMES                               */}
+              {/* CATEGORY: APPEARANCE & THEMES (Phase 10 Option 6 Suite)     */}
               {/* ========================================================== */}
-              {activeSection === 'appearance' && (
-                <div className="settings-section-body appearance-section-wrapper">
-                  <div className="settings-panel-header">
-                    <h3>🎨 Appearance & Themes</h3>
-                    <p>Customize VibeGrid with 10 hand-crafted themes. Changes apply instantly across the entire application.</p>
-                  </div>
+              {activeSection === 'appearance' && (() => {
+                const activeDisplayTheme = previewHoverTheme || getThemeById(selectedTheme);
+                const filteredThemes = THEMES.filter((t) => {
+                  if (themeFilter === 'dark') return t.category === 'dark' || t.id === 'amoled-black';
+                  if (themeFilter === 'light') return t.category === 'light';
+                  if (themeFilter === 'cyber') return ['neon-glow', 'sunset-gradient', 'purple-dream', 'rose-pink'].includes(t.id);
+                  return true;
+                });
 
-                  <div className="appearance-banner">
-                    <div className="appearance-banner-icon">
-                      <Palette size={22} />
+                return (
+                  <div className="settings-section-body appearance-section-wrapper">
+                    <div className="settings-panel-header">
+                      <h3>🎨 Appearance & Themes</h3>
+                      <p>Customize VibeGrid with 10 hand-crafted themes. Changes apply instantly across the entire application.</p>
                     </div>
-                    <div className="appearance-banner-text">
-                      <h3>Active Theme: {getThemeById(selectedTheme).name}</h3>
-                      <p>
-                        Selected theme persists across refreshes, app restarts, and mobile PWA sessions.
-                        Enjoy high contrast readability across Feed, Explore, SMS/Messages, and Chat.
-                      </p>
+
+                    <div className="appearance-banner">
+                      <div className="appearance-banner-icon">
+                        <Palette size={22} />
+                      </div>
+                      <div className="appearance-banner-text">
+                        <h3>Active Theme: {getThemeById(selectedTheme).name}</h3>
+                        <p>
+                          Selected theme persists across refreshes, app restarts, and mobile PWA sessions.
+                          Enjoy high contrast readability across Feed, Explore, Messages, and Chat.
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="themes-grid" role="radiogroup" aria-label="Theme selection">
-                    {THEMES.map((t) => {
-                      const isSelected = selectedTheme === t.id;
-                      return (
-                        <div
-                          key={t.id}
-                          className={`theme-card ${isSelected ? 'is-active' : ''}`}
-                          style={{ '--card-accent': t.primary }}
-                          onClick={() => handleThemeSelect(t.id)}
-                          role="radio"
-                          aria-checked={isSelected}
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              handleThemeSelect(t.id);
-                            }
-                          }}
-                        >
-                          <div className="theme-card-header">
-                            <div className="theme-card-title-group">
-                              <span className="theme-card-name">{t.name}</span>
-                              <span className="theme-badge">{t.badge}</span>
-                            </div>
-                            {isSelected ? (
-                              <div className="theme-check-indicator" title="Currently Active">
-                                <Check size={14} strokeWidth={3} />
-                              </div>
-                            ) : (
-                              <div className="theme-uncheck-indicator" />
-                            )}
-                          </div>
-
-                          {/* Interactive Mini-UI Preview Box */}
+                    {/* Top-Anchored Live Interactive Showcase Canvas */}
+                    <div
+                      className="theme-showcase-canvas"
+                      data-testid="theme-showcase-canvas"
+                      style={{
+                        background: activeDisplayTheme.bgPage,
+                        border: `2px solid ${activeDisplayTheme.borderColor}`,
+                        color: activeDisplayTheme.textPrimary
+                      }}
+                    >
+                      <div className="theme-showcase-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <div
-                            className="theme-preview-box"
                             style={{
-                              background: t.bgPage,
-                              borderColor: t.borderColor
+                              width: '34px',
+                              height: '34px',
+                              borderRadius: '50%',
+                              background: activeDisplayTheme.primary,
+                              color: '#ffffff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 700,
+                              fontSize: '14px',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
                             }}
                           >
-                            <div className="theme-preview-header">
-                              <div className="theme-preview-dot-group">
-                                <span className="theme-preview-dot" style={{ background: t.primary }} />
-                                <span className="theme-preview-dot" style={{ background: t.textSecondary, opacity: 0.5 }} />
-                              </div>
-                              <span className="theme-preview-bar" style={{ background: t.borderColor }} />
-                            </div>
-
-                            <div className="theme-preview-bubbles">
-                              <div
-                                className="theme-preview-bubble-incoming"
-                                style={{
-                                  background: t.incomingBubble,
-                                  color: t.textPrimary,
-                                  border: `1px solid ${t.borderColor}`
-                                }}
-                              >
-                                Hey there! 👋
-                              </div>
-                              <div
-                                className="theme-preview-bubble-outgoing"
-                                style={{
-                                  background: t.outgoingBubble,
-                                  color: '#ffffff'
-                                }}
-                              >
-                                Love this theme! ✨
-                              </div>
-                            </div>
+                            V
                           </div>
-
-                          {/* Swatches Row */}
-                          <div className="theme-swatches-row" title="Palette swatches">
-                            {t.swatches.map((color, i) => (
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <strong style={{ fontSize: '15px' }}>{activeDisplayTheme.name}</strong>
                               <span
-                                key={i}
-                                className="theme-swatch-circle"
-                                style={{ background: color }}
-                              />
-                            ))}
-                          </div>
-
-                          <p className="theme-card-desc">{t.description}</p>
-
-                          <div className="theme-card-footer">
-                            {isSelected ? (
-                              <span className="theme-active-status">
-                                <Check size={13} strokeWidth={2.5} /> Active Theme
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  background: activeDisplayTheme.primary,
+                                  color: '#ffffff',
+                                  padding: '2px 7px',
+                                  borderRadius: '9999px',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.04em'
+                                }}
+                              >
+                                {activeDisplayTheme.badge}
                               </span>
-                            ) : (
-                              <span className="theme-apply-btn">Apply Theme</span>
-                            )}
+                            </div>
+                            <span style={{ fontSize: '11px', opacity: 0.75 }}>
+                              {previewHoverTheme ? '🔍 Live Hover Preview' : '✨ Current Active Theme'}
+                            </span>
                           </div>
                         </div>
-                      );
-                    })}
+
+                        {/* Showcase Preview Component Switcher */}
+                        <div className="theme-showcase-tabs">
+                          <button
+                            type="button"
+                            className={`theme-showcase-tab ${showcaseTab === 'feed' ? 'is-active' : ''}`}
+                            onClick={() => setShowcaseTab('feed')}
+                          >
+                            📱 Feed Post
+                          </button>
+                          <button
+                            type="button"
+                            className={`theme-showcase-tab ${showcaseTab === 'chat' ? 'is-active' : ''}`}
+                            onClick={() => setShowcaseTab('chat')}
+                          >
+                            💬 Direct Message
+                          </button>
+                          <button
+                            type="button"
+                            className={`theme-showcase-tab ${showcaseTab === 'profile' ? 'is-active' : ''}`}
+                            onClick={() => setShowcaseTab('profile')}
+                          >
+                            👤 Profile Card
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Showcase Dynamic Component Body */}
+                      <div style={{ transition: 'all 0.3s ease' }}>
+                        {showcaseTab === 'feed' && (
+                          <div
+                            style={{
+                              background: activeDisplayTheme.bgCard,
+                              border: `1px solid ${activeDisplayTheme.borderColor}`,
+                              borderRadius: '12px',
+                              padding: '14px 16px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div
+                                  style={{
+                                    width: '28px',
+                                    height: '28px',
+                                    borderRadius: '50%',
+                                    background: activeDisplayTheme.primary,
+                                    opacity: 0.85
+                                  }}
+                                />
+                                <div>
+                                  <div style={{ fontSize: '12px', fontWeight: 700 }}>Alex Mercer</div>
+                                  <div style={{ fontSize: '10px', opacity: 0.6 }}>@alex_vibe • 2m ago</div>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                style={{
+                                  background: activeDisplayTheme.primary,
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  padding: '4px 10px',
+                                  borderRadius: '9999px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Follow
+                              </button>
+                            </div>
+                            <p style={{ fontSize: '12px', lineHeight: 1.5, margin: '0 0 10px 0', opacity: 0.9 }}>
+                              VibeGrid in <strong>{activeDisplayTheme.name}</strong> mode is pure visual delight! Clean contrast, responsive spring animations, and native Web Audio FX. ✨
+                            </p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '11px', fontWeight: 600, color: activeDisplayTheme.primary }}>
+                              <span style={{ cursor: 'pointer' }}>❤️ 84 Likes</span>
+                              <span style={{ cursor: 'pointer' }}>💬 19 Comments</span>
+                              <span style={{ cursor: 'pointer' }}>⚡ Share</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {showcaseTab === 'chat' && (
+                          <div
+                            style={{
+                              background: activeDisplayTheme.bgCard,
+                              border: `1px solid ${activeDisplayTheme.borderColor}`,
+                              borderRadius: '12px',
+                              padding: '14px 16px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                              <div
+                                style={{
+                                  alignSelf: 'flex-start',
+                                  background: activeDisplayTheme.incomingBubble,
+                                  border: `1px solid ${activeDisplayTheme.borderColor}`,
+                                  color: activeDisplayTheme.textPrimary,
+                                  borderRadius: '10px 10px 10px 2px',
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  maxWidth: '75%'
+                                }}
+                              >
+                                Hey there! Have you tested the new theme engine? 👋
+                              </div>
+                              <div
+                                style={{
+                                  alignSelf: 'flex-end',
+                                  background: activeDisplayTheme.outgoingBubble,
+                                  color: '#ffffff',
+                                  borderRadius: '10px 10px 2px 10px',
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  maxWidth: '75%',
+                                  fontWeight: 500
+                                }}
+                              >
+                                Yes! Loving the crisp contrast and live preview. 🚀
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderTop: `1px solid ${activeDisplayTheme.borderColor}`, paddingTop: '8px' }}>
+                              <input
+                                disabled
+                                placeholder="Message @alex_vibe..."
+                                style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: '12px', color: 'inherit', opacity: 0.6 }}
+                              />
+                              <button
+                                type="button"
+                                style={{
+                                  background: activeDisplayTheme.primary,
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Send
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {showcaseTab === 'profile' && (
+                          <div
+                            style={{
+                              background: activeDisplayTheme.bgCard,
+                              border: `1px solid ${activeDisplayTheme.borderColor}`,
+                              borderRadius: '12px',
+                              overflow: 'hidden'
+                            }}
+                          >
+                            <div style={{ height: '45px', background: activeDisplayTheme.outgoingBubble }} />
+                            <div style={{ padding: '0 16px 14px 16px', marginTop: '-20px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}>
+                                <div
+                                  style={{
+                                    width: '42px',
+                                    height: '42px',
+                                    borderRadius: '50%',
+                                    background: activeDisplayTheme.primary,
+                                    border: `3px solid ${activeDisplayTheme.bgCard}`,
+                                    color: '#ffffff',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontWeight: 700,
+                                    fontSize: '16px'
+                                  }}
+                                >
+                                  A
+                                </div>
+                                <div style={{ marginBottom: '2px' }}>
+                                  <strong style={{ fontSize: '13px', display: 'block' }}>Alex Mercer</strong>
+                                  <span style={{ fontSize: '10px', opacity: 0.6 }}>@alex_vibe</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                style={{
+                                  background: activeDisplayTheme.primary,
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  padding: '5px 12px',
+                                  borderRadius: '9999px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Edit Profile
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ marginTop: '12px', fontSize: '11px', opacity: 0.65, textAlign: 'center' }}>
+                        💡 Tip: Hover any theme card below for instant simulation, or click to apply permanently.
+                      </div>
+                    </div>
+
+                    {/* Smart OS Sync & Battery Saver Card (Phase 10 Option 3) */}
+                    <div className="theme-smart-sync-card" data-testid="theme-smart-sync-card">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: autoSyncDevice ? '14px' : '0' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '20px' }}>🌓</span>
+                          <div>
+                            <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>Sync with Device Appearance</strong>
+                            <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              Automatically switches between your preferred Day and Night themes matching your system OS schedule.
+                            </p>
+                          </div>
+                        </div>
+                        <SpringToggle
+                          checked={autoSyncDevice}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setAutoSyncDevice(val);
+                            try {
+                              localStorage.setItem('vibegrid_theme_auto_sync', String(val));
+                            } catch {}
+                          }}
+                          aria-label="Toggle Auto-Sync with Device Appearance"
+                          data-testid="theme-auto-sync-toggle"
+                        />
+                      </div>
+
+                      {autoSyncDevice && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                              ☀️ Daytime Theme (OS Light)
+                            </label>
+                            <select
+                              value={scheduledDayTheme}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setScheduledDayTheme(val);
+                                try {
+                                  localStorage.setItem('vibegrid_theme_day', val);
+                                } catch {}
+                              }}
+                              className="form-input"
+                              style={{ width: '100%', fontSize: '12px', padding: '6px 10px' }}
+                            >
+                              <option value="light">Light (Classic Clean)</option>
+                              <option value="pastel-light">Pastel Light (Soft Creamy)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                              🌙 Nighttime Theme (OS Dark)
+                            </label>
+                            <select
+                              value={scheduledNightTheme}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setScheduledNightTheme(val);
+                                try {
+                                  localStorage.setItem('vibegrid_theme_night', val);
+                                } catch {}
+                              }}
+                              className="form-input"
+                              style={{ width: '100%', fontSize: '12px', padding: '6px 10px' }}
+                            >
+                              <option value="dark">Dark (Midnight Navy)</option>
+                              <option value="amoled-black">AMOLED Black (Pure OLED)</option>
+                              <option value="neon-glow">Neon Glow (Cyberpunk)</option>
+                              <option value="ocean-blue">Ocean Blue (Maritime)</option>
+                              <option value="forest-green">Forest Green (Emerald)</option>
+                              <option value="sunset-gradient">Sunset Gradient (Twilight)</option>
+                              <option value="rose-pink">Rose Pink (Elegance)</option>
+                              <option value="purple-dream">Purple Dream (Amethyst)</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '20px' }}>🔋</span>
+                          <div>
+                            <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>Low-Battery Auto AMOLED Mode</strong>
+                            <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                              Automatically switches to pure AMOLED Black when your battery drops below 20% to save device power.
+                            </p>
+                          </div>
+                        </div>
+                        <SpringToggle
+                          checked={batteryOledEnabled}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setBatteryOledEnabled(val);
+                            try {
+                              localStorage.setItem('vibegrid_theme_battery_oled', String(val));
+                            } catch {}
+                          }}
+                          aria-label="Toggle Low-Battery Auto AMOLED Mode"
+                          data-testid="theme-battery-oled-toggle"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Category Filter Chips */}
+                    <div className="theme-filter-chips" role="tablist" aria-label="Filter theme categories">
+                      <button
+                        type="button"
+                        className={`theme-filter-chip ${themeFilter === 'all' ? 'is-active' : ''}`}
+                        onClick={() => {
+                          setThemeFilter('all');
+                          soundFx.play('click');
+                        }}
+                      >
+                        All Themes ({THEMES.length})
+                      </button>
+                      <button
+                        type="button"
+                        className={`theme-filter-chip ${themeFilter === 'dark' ? 'is-active' : ''}`}
+                        onClick={() => {
+                          setThemeFilter('dark');
+                          soundFx.play('click');
+                        }}
+                      >
+                        🌙 Dark & OLED (7)
+                      </button>
+                      <button
+                        type="button"
+                        className={`theme-filter-chip ${themeFilter === 'light' ? 'is-active' : ''}`}
+                        onClick={() => {
+                          setThemeFilter('light');
+                          soundFx.play('click');
+                        }}
+                      >
+                        ☀️ Light & Soft (3)
+                      </button>
+                      <button
+                        type="button"
+                        className={`theme-filter-chip ${themeFilter === 'cyber' ? 'is-active' : ''}`}
+                        onClick={() => {
+                          setThemeFilter('cyber');
+                          soundFx.play('click');
+                        }}
+                      >
+                        ⚡ Cyber & Vibrant (4)
+                      </button>
+                    </div>
+
+                    {/* Themes Grid */}
+                    <div className="themes-grid" role="radiogroup" aria-label="Theme selection">
+                      {filteredThemes.map((t) => {
+                        const isSelected = selectedTheme === t.id;
+                        return (
+                          <div
+                            key={t.id}
+                            className={`theme-card ${isSelected ? 'is-active' : ''}`}
+                            style={{
+                              '--card-accent': t.primary,
+                              boxShadow: isSelected ? `0 0 20px -3px ${t.primary}55` : 'none'
+                            }}
+                            onClick={() => handleThemeSelect(t.id)}
+                            onMouseEnter={() => setPreviewHoverTheme(t)}
+                            onMouseLeave={() => setPreviewHoverTheme(null)}
+                            role="radio"
+                            aria-checked={isSelected}
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleThemeSelect(t.id);
+                              }
+                            }}
+                          >
+                            {/* Ambient Glow flare */}
+                            <div className="theme-card-ambient-glow" style={{ background: t.primary }} />
+
+                            <div className="theme-card-header">
+                              <div className="theme-card-title-group">
+                                <span className="theme-card-name">{t.name}</span>
+                                <span className="theme-badge">{t.badge}</span>
+                              </div>
+                              {isSelected ? (
+                                <div className="theme-check-indicator" title="Currently Active">
+                                  <Check size={14} strokeWidth={3} />
+                                </div>
+                              ) : (
+                                <div className="theme-uncheck-indicator" />
+                              )}
+                            </div>
+
+                            {/* Interactive Mini-UI Preview Box */}
+                            <div
+                              className="theme-preview-box"
+                              style={{
+                                background: t.bgPage,
+                                borderColor: t.borderColor
+                              }}
+                            >
+                              <div className="theme-preview-header">
+                                <div className="theme-preview-dot-group">
+                                  <span className="theme-preview-dot" style={{ background: t.primary }} />
+                                  <span className="theme-preview-dot" style={{ background: t.textSecondary, opacity: 0.5 }} />
+                                </div>
+                                <span className="theme-preview-bar" style={{ background: t.borderColor }} />
+                              </div>
+
+                              <div className="theme-preview-bubbles">
+                                <div
+                                  className="theme-preview-bubble-incoming"
+                                  style={{
+                                    background: t.incomingBubble,
+                                    color: t.textPrimary,
+                                    border: `1px solid ${t.borderColor}`
+                                  }}
+                                >
+                                  Hey there! 👋
+                                </div>
+                                <div
+                                  className="theme-preview-bubble-outgoing"
+                                  style={{
+                                    background: t.outgoingBubble,
+                                    color: '#ffffff'
+                                  }}
+                                >
+                                  Love this theme! ✨
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Swatches Row with 1-Click Copy Inspector */}
+                            <div className="theme-swatches-row" title="Click swatch to copy HEX">
+                              {t.swatches.map((color, i) => (
+                                <span
+                                  key={i}
+                                  className="theme-swatch-circle"
+                                  style={{ background: color }}
+                                  title={`Click to copy ${color}`}
+                                  onClick={(e) => handleCopySwatch(e, color)}
+                                >
+                                  {copiedSwatch === color && (
+                                    <span className="theme-swatch-copied-badge">Copied!</span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+
+                            <p className="theme-card-desc">{t.description}</p>
+
+                            {t.id === 'amoled-black' && (
+                              <div style={{ fontSize: '10px', color: '#38bdf8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span>⚡ 100% OLED Battery Saver</span>
+                              </div>
+                            )}
+
+                            <div className="theme-card-footer">
+                              {isSelected ? (
+                                <span className="theme-active-status">
+                                  <Check size={13} strokeWidth={2.5} /> Active Theme
+                                </span>
+                              ) : (
+                                <span className="theme-apply-btn">Apply Theme</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* ========================================================== */}
               {/* CATEGORY 2: ACCOUNT & CONTACT                               */}
