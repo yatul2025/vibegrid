@@ -233,6 +233,20 @@ export default function ProfilePage({
   // Hashtag State (Phase 13)
   const [activeHashtag, setActiveHashtag] = useState(null);
 
+  // Phase 8 Option 6 Delight: Jelly Stat Bounce
+  const [bumpedStat, setBumpedStat] = useState(null);
+  const triggerStatBump = (type) => {
+    setBumpedStat(type);
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      try {
+        navigator.vibrate([10, 25]);
+      } catch {}
+    }
+    setTimeout(() => {
+      setBumpedStat((prev) => (prev === type ? null : prev));
+    }, 500);
+  };
+
   // Fetch Profile Data from API
   const fetchProfile = async () => {
     if (!usernameToFetch) return;
@@ -1371,23 +1385,33 @@ export default function ProfilePage({
 
           {avatarError && <div className="avatar-error-badge">⚠️ {avatarError}</div>}
 
-          {/* Social Stats Counters */}
+          {/* Social Stats Counters — Phase 8 Option 6: Jelly Stat Bounce */}
           <ul className="profile-stats-list">
-            <li className="profile-stat-item">
+            <li
+              className={`profile-stat-item clickable-stat ${bumpedStat === 'posts' ? 'bump' : ''}`}
+              onClick={() => triggerStatBump('posts')}
+              title={`${stats.posts} posts`}
+            >
               <strong className="stat-count">{stats.posts}</strong>
               <span className="stat-label">posts</span>
             </li>
             <li
-              className="profile-stat-item clickable-stat"
-              onClick={() => setFollowModal({ type: 'followers', username: profile.username })}
+              className={`profile-stat-item clickable-stat ${bumpedStat === 'followers' ? 'bump' : ''}`}
+              onClick={() => {
+                triggerStatBump('followers');
+                setFollowModal({ type: 'followers', username: profile.username });
+              }}
               title="View followers"
             >
               <strong className="stat-count">{stats.followers}</strong>
               <span className="stat-label">followers</span>
             </li>
             <li
-              className="profile-stat-item clickable-stat"
-              onClick={() => setFollowModal({ type: 'following', username: profile.username })}
+              className={`profile-stat-item clickable-stat ${bumpedStat === 'following' ? 'bump' : ''}`}
+              onClick={() => {
+                triggerStatBump('following');
+                setFollowModal({ type: 'following', username: profile.username });
+              }}
               title="View accounts followed"
             >
               <strong className="stat-count">{stats.following}</strong>
@@ -1417,11 +1441,24 @@ export default function ProfilePage({
                 )
               )}
 
-              {/* Location and Website Links */}
+              {/* Location and Website Links — Phase 8 Option 6: Interactive Bio Chips & Quick Copy */}
               {(profile.location || profile.website) && (
                 <div className="profile-extra-info">
                   {profile.location && (
-                    <span className="profile-info-pill">
+                    <span
+                      className="profile-info-pill"
+                      style={{ cursor: 'pointer' }}
+                      title="Click to copy location"
+                      onClick={() => {
+                        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                          navigator.clipboard.writeText(profile.location);
+                          if (navigator.vibrate) {
+                            try { navigator.vibrate(18); } catch {}
+                          }
+                          setProfileMsg({ type: 'success', text: `Copied "${profile.location}" to clipboard! ✨` });
+                        }
+                      }}
+                    >
                       <span>📍</span> {profile.location}
                     </span>
                   )}
@@ -1673,12 +1710,19 @@ export default function ProfilePage({
         </div>
       </section>
 
-      {/* Grid Tabs: Posts & Saved (Saved is private to own profile) */}
-      <div className="profile-tabs-bar">
+      {/* Grid Tabs: Posts & Saved (Saved is private to own profile) — Phase 8 Option 6: Sliding Pill Tabs */}
+      <div className="profile-tabs-bar" role="tablist">
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'posts'}
           className={`tab-item ${activeTab === 'posts' ? 'active' : ''}`}
-          onClick={() => setActiveTab('posts')}
+          onClick={() => {
+            setActiveTab('posts');
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+              try { navigator.vibrate(12); } catch {}
+            }
+          }}
           aria-label={`Posts (${userPosts.length})`}
         >
           <Grid size={15} />
@@ -1688,10 +1732,15 @@ export default function ProfilePage({
         {isOwnProfile && (
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === 'saved'}
             className={`tab-item ${activeTab === 'saved' ? 'active' : ''}`}
             onClick={() => {
               setActiveTab('saved');
               fetchSavedPosts();
+              if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                try { navigator.vibrate(12); } catch {}
+              }
             }}
             aria-label={`Saved posts (${savedPosts.length})`}
           >
