@@ -14,6 +14,7 @@
 const express = require('express');
 const router = express.Router();
 const messageController = require('../controllers/messageController');
+const conversationController = require('../controllers/conversationController');
 const { protect } = require('../middlewares/authMiddleware');
 
 // All direct messaging routes require authentication
@@ -47,6 +48,14 @@ router.put('/conv/:id/pin-conv', messageController.togglePinConversation);
 router.put('/conv/:id/archive', messageController.toggleArchiveConversation);
 router.delete('/conv/:id/clear', messageController.clearConversationMessages);
 router.post('/report', messageController.reportEntity);
+
+// Group Lifecycle & Management Routes
+router.delete('/group/:id', conversationController.deleteGroup);
+router.post('/group/:id/leave', conversationController.leaveGroup);
+router.get('/group/:id/members', conversationController.getGroupMembers);
+router.post('/group/:id/members', conversationController.addMembers);
+router.delete('/group/:id/members/:userId', conversationController.removeMember);
+router.put('/group/:id', conversationController.updateGroup);
 
 // Parameterized routes
 router.get('/:username/typing', messageController.getTypingStatus);

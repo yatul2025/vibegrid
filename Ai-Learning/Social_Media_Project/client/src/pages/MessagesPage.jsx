@@ -35,6 +35,7 @@ import SafetyNumberModal from '../components/SafetyNumberModal';
 import VoiceRecorder from '../components/VoiceRecorder';
 import EncryptedMediaRenderer from '../components/EncryptedMediaRenderer';
 import CreateGroupModal from '../components/CreateGroupModal';
+import GroupDetailsModal from '../components/GroupDetailsModal';
 import CallHistoryModal from '../components/CallHistoryModal';
 import KeyBackupModal from '../components/KeyBackupModal';
 import senderKeysService from '../services/crypto/senderKeys';
@@ -263,6 +264,7 @@ export default function MessagesPage({
   const [ephemeralTimer, setEphemeralTimer] = useState(null);
   const [isEphemeralMenuOpen, setIsEphemeralMenuOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [isGroupDetailsOpen, setIsGroupDetailsOpen] = useState(false);
   const [isCallHistoryOpen, setIsCallHistoryOpen] = useState(false);
   const [isKeyBackupOpen, setIsKeyBackupOpen] = useState(false);
 
@@ -459,6 +461,10 @@ export default function MessagesPage({
   isKeyBackupOpenRef.current = isKeyBackupOpen;
   const isCreateGroupOpenRef = useRef(isCreateGroupOpen);
   isCreateGroupOpenRef.current = isCreateGroupOpen;
+  const isGroupDetailsOpenRef = useRef(isGroupDetailsOpen);
+  isGroupDetailsOpenRef.current = isGroupDetailsOpen;
+  const activeConversationIdRef = useRef(activeConversationId);
+  activeConversationIdRef.current = activeConversationId;
   const isStarredModalOpenRef = useRef(isStarredModalOpen);
   isStarredModalOpenRef.current = isStarredModalOpen;
   const deleteModalTargetRef = useRef(deleteModalTarget);
@@ -546,6 +552,15 @@ export default function MessagesPage({
     closeModalWithHistory('create_group', () => setIsCreateGroupOpen(false));
   };
 
+  const openGroupDetailsModal = () => {
+    pushModalHistory('group_details');
+    setIsGroupDetailsOpen(true);
+  };
+
+  const closeGroupDetailsModal = () => {
+    closeModalWithHistory('group_details', () => setIsGroupDetailsOpen(false));
+  };
+
   const openStarredModal = () => {
     pushModalHistory('starred');
     setIsStarredModalOpen(true);
@@ -577,6 +592,10 @@ export default function MessagesPage({
       }
       if (isCreateGroupOpenRef.current) {
         setIsCreateGroupOpen(false);
+        return;
+      }
+      if (isGroupDetailsOpenRef.current) {
+        setIsGroupDetailsOpen(false);
         return;
       }
       if (isStarredModalOpenRef.current) {
@@ -1095,6 +1114,47 @@ export default function MessagesPage({
     return () => clearInterval(interval);
   }, [user]);
 
+  // Clean up deleted or left group from conversation list and active chat
+  const handleGroupDeletedOrLeft = useCallback((deletedGroupId) => {
+    if (!deletedGroupId) return;
+    const cleanId = String(deletedGroupId).replace(/^group-/, '');
+
+    // Remove from conversations list
+    setConversations((prev) =>
+      prev.filter(
+        (c) =>
+          c.conversation_id !== cleanId &&
+          c.partner_id !== `group-${cleanId}` &&
+          c.partner_username !== `group-${cleanId}` &&
+          c.id !== cleanId
+      )
+    );
+
+    // Remove from localStorage cache
+    try {
+      const cacheKey = `vg_local_groups_${user?.id || 'guest'}`;
+      const existing = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify(existing.filter((g) => g.id !== cleanId))
+      );
+    } catch {}
+
+    // If active conversation is the one deleted/left, clear and navigate back
+    const currentPartner = activePartnerRef.current;
+    if (
+      currentPartner &&
+      (String(currentPartner.id).replace(/^group-/, '') === cleanId ||
+       currentPartner.username === `group-${cleanId}` ||
+       String(activeConversationIdRef.current) === cleanId)
+    ) {
+      setActivePartner(null);
+      setActiveConversationId(null);
+      setMessages([]);
+      if (onBack) onBack();
+    }
+  }, [user?.id, onBack]);
+
   // ==========================================================================
   // 2. Real-Time Socket Event Subscriptions (No Polling)
   // ==========================================================================
@@ -1112,16 +1172,29 @@ export default function MessagesPage({
       }
 
       const currentPartner = activePartnerRef.current;
-      const isCurrentChat = currentPartner && (
+      const convId = msg.conversation_id ? String(msg.conversation_id) : null;
+      const isGroupChat = Boolean(
+        currentPartner?.is_group && (
+          (convId && (
+            String(currentPartner.id).replace(/^group-/, '') === convId ||
+            String(activeConversationIdRef.current) === convId ||
+            currentPartner.username === `group-${convId}`
+          ))
+        )
+      );
+      const isCurrentChat = isGroupChat || (currentPartner && (
         Number(msg.sender_id) === Number(currentPartner.id) ||
         (Number(msg.recipient_id) === Number(currentPartner.id) && Number(msg.sender_id) === Number(user.id))
-      );
+      ));
 
-      // Decrypt message content
-      const decryptedContent = await e2eeService.decryptMessage(
-        msg,
-        isCurrentChat ? currentPartner.id : msg.sender_id
-      );
+      // Decrypt message content (group chats use plaintext content)
+      let decryptedContent = msg.content;
+      if (!isGroupChat && (msg.ciphertext || !msg.content)) {
+        decryptedContent = await e2eeService.decryptMessage(
+          msg,
+          isCurrentChat ? currentPartner.id : msg.sender_id
+        );
+      }
 
       const processedMsg = {
         ...msg,
@@ -1157,8 +1230,10 @@ export default function MessagesPage({
 
       setConversations((prev) => {
         const partnerId = processedMsg.is_mine ? processedMsg.recipient_id : processedMsg.sender_id;
-        const exists = prev.some((c) => Number(c.partner_id) === Number(partnerId));
-        const matchedConv = prev.find((c) => Number(c.partner_id) === Number(partnerId));
+        const matchedConv = isGroupChat || convId
+          ? prev.find((c) => c.conversation_id === convId || c.partner_username === `group-${convId}` || c.partner_id === `group-${convId}`)
+          : prev.find((c) => Number(c.partner_id) === Number(partnerId));
+        const exists = Boolean(matchedConv);
         const isConvMuted = Boolean(matchedConv?.is_muted);
 
         // Trigger desktop notification if not muted and in background
@@ -1180,7 +1255,10 @@ export default function MessagesPage({
         }
 
         return prev.map((c) => {
-          if (Number(c.partner_id) === Number(partnerId)) {
+          const isThisConv = (isGroupChat || convId)
+            ? (c.conversation_id === convId || c.partner_username === `group-${convId}` || c.partner_id === `group-${convId}`)
+            : (Number(c.partner_id) === Number(partnerId));
+          if (isThisConv) {
             return {
               ...c,
               last_message: snippet,
@@ -1229,74 +1307,129 @@ export default function MessagesPage({
       }
     };
 
-    // 4. Delivery Receipts
-    const handleDeliveryReceipt = (payload) => {
-      const currentPartner = activePartnerRef.current;
-      if (currentPartner && Number(payload.recipientId) === Number(currentPartner.id)) {
-        setMessages((prev) =>
-          prev.map((m) => {
-            if (m.is_mine && (!payload.messageId || Number(m.id) === Number(payload.messageId))) {
-              return { ...m, delivered_at: payload.deliveredAt || m.delivered_at || new Date().toISOString() };
-            }
-            return m;
-          })
-        );
-      }
-    };
-
-    // 5. Read Receipts
-    const handleReadReceipt = ({ readerId }) => {
-      const currentPartner = activePartnerRef.current;
-      if (currentPartner && Number(readerId) === Number(currentPartner.id)) {
-        setMessages((prev) =>
-          prev.map((m) => (m.is_mine ? { ...m, is_read: true, read_at: new Date().toISOString() } : m))
-        );
-      }
-    };
-
-    // 6. Real-Time Message Edit
-    const handleMessageEdit = (payload) => {
+    // 4. Delivery & Read Receipts
+    const handleDeliveryReceipt = ({ messageId, conversationId }) => {
       setMessages((prev) =>
         prev.map((m) =>
-          Number(m.id) === Number(payload.messageId)
-            ? {
-                ...m,
-                content: payload.content,
-                ciphertext: payload.ciphertext,
-                iv_nonce: payload.ivNonce,
-                edited_at: payload.editedAt
-              }
+          Number(m.id) === Number(messageId) ? { ...m, is_delivered: true } : m
+        )
+      );
+    };
+
+    const handleReadReceipt = ({ messageId, conversationId }) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          Number(m.id) === Number(messageId)
+            ? { ...m, is_read: true, is_delivered: true }
             : m
         )
       );
     };
 
-    // 7. Real-Time Message Delete
-    const handleMessageDelete = (payload) => {
+    // 5. Real-Time Message Edit
+    const handleMessageEdit = async (payload) => {
+      if (!payload?.id) return;
+      const currentPartner = activePartnerRef.current;
+      const isCurrentChat = currentPartner && Number(payload.conversation_id) === Number(currentPartner.id);
+
+      let decryptedContent = payload.content;
+      if (payload.ciphertext && currentPartner) {
+        decryptedContent = await e2eeService.decryptMessage(payload, currentPartner.id);
+      }
+
       setMessages((prev) =>
         prev.map((m) =>
-          Number(m.id) === Number(payload.messageId)
+          Number(m.id) === Number(payload.id)
             ? {
                 ...m,
-                is_deleted: true,
-                content: 'This message was deleted',
-                ciphertext: null,
-                iv_nonce: null
+                ...payload,
+                content: decryptedContent,
+                is_edited: true,
+                edited_at: payload.edited_at || new Date().toISOString()
               }
             : m
         )
       );
-      setPinnedMessages((prev) => prev.filter((pm) => Number(pm.id) !== Number(payload.messageId)));
-      setPinnedMessage((prev) => (prev && Number(prev.id) === Number(payload.messageId) ? null : prev));
+
+      // Update sidebar if last message was edited
+      setConversations((prev) =>
+        prev.map((c) =>
+          Number(c.id) === Number(payload.id)
+            ? { ...c, last_message: decryptedContent }
+            : c
+        )
+      );
     };
 
-    // 8. Real-Time Message Reaction
+    // 6. Real-Time Message Delete
+    const handleMessageDelete = ({ messageId, deleteForEveryone }) => {
+      if (deleteForEveryone) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            Number(m.id) === Number(messageId)
+              ? {
+                  ...m,
+                  is_deleted: true,
+                  content: 'This message was deleted',
+                  ciphertext: null,
+                  iv_nonce: null
+                }
+              : m
+          )
+        );
+
+        setConversations((prev) =>
+          prev.map((c) =>
+            Number(c.id) === Number(messageId)
+              ? { ...c, last_message: 'This message was deleted', is_deleted: true }
+              : c
+          )
+        );
+      } else {
+        setMessages((prev) => prev.filter((m) => Number(m.id) !== Number(messageId)));
+      }
+    };
+
+    // 7. Real-Time Message Reaction
     const handleMessageReaction = (payload) => {
       setMessages((prev) =>
-        prev.map((m) =>
-          Number(m.id) === Number(payload.messageId)
-            ? { ...m, reactions: payload.reactions }
-            : m
+        prev.map((m) => {
+          if (Number(m.id) !== Number(payload.messageId)) return m;
+          const currentReactions = Array.isArray(m.reactions) ? [...m.reactions] : [];
+          const existingIdx = currentReactions.findIndex(
+            (r) => Number(r.user_id) === Number(payload.userId)
+          );
+
+          if (payload.action === 'removed') {
+            if (existingIdx !== -1) currentReactions.splice(existingIdx, 1);
+          } else if (payload.action === 'added') {
+            if (existingIdx !== -1) {
+              currentReactions[existingIdx] = {
+                reaction: payload.reaction,
+                user_id: payload.userId,
+                username: payload.username
+              };
+            } else {
+              currentReactions.push({
+                reaction: payload.reaction,
+                user_id: payload.userId,
+                username: payload.username
+              });
+            }
+          }
+
+          return { ...m, reactions: currentReactions };
+        })
+      );
+    };
+
+    // 8. Real-Time Conversation Pin
+    const handleConvPin = (payload) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.conversation_id === payload.conversationId
+            ? { ...c, is_pinned: payload.isPinned }
+            : c
         )
       );
     };
@@ -1315,6 +1448,33 @@ export default function MessagesPage({
       }
     };
 
+    // 10. Real-Time Group Events
+    const handleGroupDeletedEvent = (payload) => {
+      const gId = payload?.conversationId ? String(payload.conversationId).replace(/^group-/, '') : null;
+      if (!gId) return;
+      handleGroupDeletedOrLeft(gId);
+    };
+
+    const handleGroupUpdatedEvent = (payload) => {
+      const updatedConv = payload?.conversation;
+      if (!updatedConv) return;
+      const gId = String(updatedConv.id).replace(/^group-/, '');
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.conversation_id === gId || c.partner_username === `group-${gId}`
+            ? { ...c, partner_full_name: updatedConv.title, group_title: updatedConv.title, title: updatedConv.title }
+            : c
+        )
+      );
+      if (
+        activePartnerRef.current &&
+        (String(activePartnerRef.current.id).replace(/^group-/, '') === gId ||
+         activePartnerRef.current.username === `group-${gId}`)
+      ) {
+        setActivePartner((prev) => (prev ? { ...prev, title: updatedConv.title, full_name: updatedConv.title } : prev));
+      }
+    };
+
     socketService.on('message:receive', handleReceiveMessage);
     socketService.on('typing:status', handleTypingStatus);
     socketService.on('presence:update', handlePresenceUpdate);
@@ -1324,6 +1484,10 @@ export default function MessagesPage({
     socketService.on('message:delete', handleMessageDelete);
     socketService.on('message:reaction', handleMessageReaction);
     socketService.on('message:pin', handleMessagePin);
+    socketService.on('group:deleted', handleGroupDeletedEvent);
+    socketService.on('group:left', handleGroupDeletedEvent);
+    socketService.on('group:removed', handleGroupDeletedEvent);
+    socketService.on('group:updated', handleGroupUpdatedEvent);
 
     return () => {
       socketService.off('message:receive', handleReceiveMessage);
@@ -1335,6 +1499,10 @@ export default function MessagesPage({
       socketService.off('message:delete', handleMessageDelete);
       socketService.off('message:reaction', handleMessageReaction);
       socketService.off('message:pin', handleMessagePin);
+      socketService.off('group:deleted', handleGroupDeletedEvent);
+      socketService.off('group:left', handleGroupDeletedEvent);
+      socketService.off('group:removed', handleGroupDeletedEvent);
+      socketService.off('group:updated', handleGroupUpdatedEvent);
     };
   }, [user, activeConversationId, fetchConversations, onUnreadCountChange]);
 
@@ -1489,7 +1657,14 @@ export default function MessagesPage({
       setEditingMessage(null);
       try {
         setSending(true);
-        const encEnvelope = await e2eeService.encryptMessage(activePartner.id, textToSend);
+        let encEnvelope = { ciphertext: null, ivNonce: null, senderDeviceId: null };
+        if (!activePartner.is_group) {
+          try {
+            encEnvelope = await e2eeService.encryptMessage(activePartner.id, textToSend);
+          } catch (e2eeErr) {
+            console.warn('E2EE pairwise encrypt skipped for edit:', e2eeErr);
+          }
+        }
 
         const res = await apiClient.put(`/messages/msg/${targetId}/edit`, {
           content: encEnvelope.ciphertext ? '' : textToSend,
@@ -1547,7 +1722,7 @@ export default function MessagesPage({
       is_read: false,
       created_at: new Date().toISOString(),
       is_mine: true,
-      is_encrypted: true,
+      is_encrypted: !activePartner.is_group,
       pending: true,
       failed: false,
       reply_to_id: activeReply?.id || null,
@@ -1571,9 +1746,17 @@ export default function MessagesPage({
     try {
       setSending(true);
 
-      const encEnvelope = await e2eeService.encryptMessage(activePartner.id, textToSend);
+      let encEnvelope = { ciphertext: null, ivNonce: null, senderDeviceId: null };
+      if (!activePartner.is_group) {
+        try {
+          encEnvelope = await e2eeService.encryptMessage(activePartner.id, textToSend);
+        } catch (e2eeErr) {
+          console.warn('E2EE pairwise encrypt skipped/fallback:', e2eeErr);
+        }
+      }
 
-      const res = await apiClient.post(`/messages/${activePartner.username}`, {
+      const targetParam = activePartner.username || (activePartner.id ? `group-${activePartner.id}` : '');
+      const res = await apiClient.post(`/messages/${targetParam}`, {
         content: encEnvelope.ciphertext ? '' : textToSend,
         ciphertext: encEnvelope.ciphertext || null,
         ivNonce: encEnvelope.ivNonce || null,
@@ -1608,18 +1791,21 @@ export default function MessagesPage({
         });
 
         setConversations((prev) =>
-          prev.map((c) =>
-            c.partner_username.toLowerCase() === activePartner.username.toLowerCase()
+          prev.map((c) => {
+            const isMatch = activePartner.is_group
+              ? (c.conversation_id === activePartner.id || c.partner_username === targetParam || c.partner_id === targetParam)
+              : (c.partner_username?.toLowerCase() === activePartner.username?.toLowerCase());
+            return isMatch
               ? { ...c, last_message: textToSend, last_message_at: new Date().toISOString() }
-              : c
-          )
+              : c;
+          })
         );
       } else {
         throw new Error(res?.error || 'Send failed');
       }
     } catch (err) {
       console.error('Failed to send message:', err);
-      // Phase 4: Retain optimistic message in state marked as failed
+      // Retain optimistic message in state marked as failed
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId ? { ...m, failed: true, pending: false } : m
@@ -1642,9 +1828,17 @@ export default function MessagesPage({
 
     try {
       setSending(true);
-      const encEnvelope = await e2eeService.encryptMessage(activePartner.id, textToSend);
+      let encEnvelope = { ciphertext: null, ivNonce: null, senderDeviceId: null };
+      if (!activePartner.is_group) {
+        try {
+          encEnvelope = await e2eeService.encryptMessage(activePartner.id, textToSend);
+        } catch (e2eeErr) {
+          console.warn('E2EE pairwise encrypt skipped on retry:', e2eeErr);
+        }
+      }
 
-      const res = await apiClient.post(`/messages/${activePartner.username}`, {
+      const targetParam = activePartner.username || (activePartner.id ? `group-${activePartner.id}` : '');
+      const res = await apiClient.post(`/messages/${targetParam}`, {
         content: textToSend,
         ciphertext: encEnvelope.ciphertext || null,
         ivNonce: encEnvelope.ivNonce || null,
@@ -1669,11 +1863,14 @@ export default function MessagesPage({
         );
 
         setConversations((prev) =>
-          prev.map((c) =>
-            c.partner_username.toLowerCase() === activePartner.username.toLowerCase()
+          prev.map((c) => {
+            const isMatch = activePartner.is_group
+              ? (c.conversation_id === activePartner.id || c.partner_username === targetParam || c.partner_id === targetParam)
+              : (c.partner_username?.toLowerCase() === activePartner.username?.toLowerCase());
+            return isMatch
               ? { ...c, last_message: textToSend, last_message_at: new Date().toISOString() }
-              : c
-          )
+              : c;
+          })
         );
       } else {
         throw new Error(res?.error || 'Send failed');
@@ -1745,9 +1942,17 @@ export default function MessagesPage({
       const payloadString = JSON.stringify(mediaPayload);
 
       // 3. Encrypt payload metadata inside E2EE envelope
-      const encEnvelope = await e2eeService.encryptMessage(activePartner.id, payloadString);
+      let encEnvelope = { ciphertext: null, ivNonce: null, senderDeviceId: null };
+      if (!activePartner.is_group) {
+        try {
+          encEnvelope = await e2eeService.encryptMessage(activePartner.id, payloadString);
+        } catch (e2eeErr) {
+          console.warn('E2EE photo encrypt notice:', e2eeErr);
+        }
+      }
 
-      const res = await apiClient.post(`/messages/${activePartner.username}`, {
+      const targetParam = activePartner.username || (activePartner.id ? `group-${activePartner.id}` : '');
+      const res = await apiClient.post(`/messages/${targetParam}`, {
         content: payloadString,
         ciphertext: encEnvelope.ciphertext || null,
         ivNonce: encEnvelope.ivNonce || null,
@@ -1823,9 +2028,17 @@ export default function MessagesPage({
       const payloadString = JSON.stringify(mediaPayload);
 
       // 3. Encrypt payload metadata inside E2EE envelope
-      const encEnvelope = await e2eeService.encryptMessage(activePartner.id, payloadString);
+      let encEnvelope = { ciphertext: null, ivNonce: null, senderDeviceId: null };
+      if (!activePartner.is_group) {
+        try {
+          encEnvelope = await e2eeService.encryptMessage(activePartner.id, payloadString);
+        } catch (e2eeErr) {
+          console.warn('E2EE file encrypt notice:', e2eeErr);
+        }
+      }
 
-      const res = await apiClient.post(`/messages/${activePartner.username}`, {
+      const targetParam = activePartner.username || (activePartner.id ? `group-${activePartner.id}` : '');
+      const res = await apiClient.post(`/messages/${targetParam}`, {
         content: payloadString,
         ciphertext: encEnvelope.ciphertext || null,
         ivNonce: encEnvelope.ivNonce || null,
@@ -1898,9 +2111,17 @@ export default function MessagesPage({
       const payloadString = JSON.stringify(mediaPayload);
 
       // 3. Encrypt payload metadata inside E2EE envelope
-      const encEnvelope = await e2eeService.encryptMessage(activePartner.id, payloadString);
+      let encEnvelope = { ciphertext: null, ivNonce: null, senderDeviceId: null };
+      if (!activePartner.is_group) {
+        try {
+          encEnvelope = await e2eeService.encryptMessage(activePartner.id, payloadString);
+        } catch (e2eeErr) {
+          console.warn('E2EE voice encrypt notice:', e2eeErr);
+        }
+      }
 
-      const res = await apiClient.post(`/messages/${activePartner.username}`, {
+      const targetParam = activePartner.username || (activePartner.id ? `group-${activePartner.id}` : '');
+      const res = await apiClient.post(`/messages/${targetParam}`, {
         content: payloadString,
         ciphertext: encEnvelope.ciphertext || null,
         ivNonce: encEnvelope.ivNonce || null,
@@ -3452,8 +3673,14 @@ export default function MessagesPage({
                 </button>
                 <div
                   className="chat-header-user"
-                  onClick={() => !activePartner?.is_group && onNavigateToProfile && onNavigateToProfile(activePartner.username)}
-                  style={{ cursor: activePartner?.is_group ? 'default' : 'pointer' }}
+                  onClick={() => {
+                    if (activePartner?.is_group) {
+                      openGroupDetailsModal();
+                    } else if (onNavigateToProfile) {
+                      onNavigateToProfile(activePartner.username);
+                    }
+                  }}
+                  style={{ cursor: 'pointer' }}
                 >
                   <div className="chat-header-avatar-wrap">
                     {activePartner?.is_group ? (
@@ -3482,9 +3709,13 @@ export default function MessagesPage({
                         className={`btn-safety-badge ${isPeerVerified ? 'verified' : 'unverified'}`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (!activePartner?.is_group) openSafetyModal();
+                          if (activePartner?.is_group) {
+                            openGroupDetailsModal();
+                          } else {
+                            openSafetyModal();
+                          }
                         }}
-                        title={activePartner?.is_group ? 'Multi-Party Encrypted Group' : isPeerVerified ? 'Cryptographic Identity Verified' : 'Click to verify Safety Number'}
+                        title={activePartner?.is_group ? 'Multi-Party Encrypted Group (Click for details)' : isPeerVerified ? 'Cryptographic Identity Verified' : 'Click to verify Safety Number'}
                       >
                         {activePartner?.is_group ? (
                           <>
@@ -3638,17 +3869,89 @@ export default function MessagesPage({
                     </button>
                     {isConvMenuOpen && (
                       <div className="conv-dropdown-menu" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="conv-dropdown-item"
-                          onClick={() => {
-                            setIsConvMenuOpen(false);
-                            initiateAudioCall();
-                          }}
-                        >
-                          <Phone size={16} />
-                          <span>Voice Call</span>
-                        </button>
+                        {activePartner?.is_group ? (
+                          <>
+                            <button
+                              type="button"
+                              className="conv-dropdown-item"
+                              onClick={() => {
+                                setIsConvMenuOpen(false);
+                                openGroupDetailsModal();
+                              }}
+                            >
+                              <Users size={16} />
+                              <span>Group Info & Members</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="conv-dropdown-item"
+                              onClick={() => {
+                                setIsConvMenuOpen(false);
+                                if (isMuted) {
+                                  handleToggleMute(null, null);
+                                } else {
+                                  setMuteTargetConv(null);
+                                  setIsMuteModalOpen(true);
+                                }
+                              }}
+                            >
+                              {isMuted ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                              <span>{isMuted ? 'Unmute Notifications' : 'Mute Notifications'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="conv-dropdown-item"
+                              onClick={() => {
+                                setIsConvMenuOpen(false);
+                                handleTogglePinConv();
+                              }}
+                            >
+                              {isPinned ? <PinOff size={16} /> : <Pin size={16} />}
+                              <span>{isPinned ? 'Unpin Conversation' : 'Pin to Top'}</span>
+                            </button>
+
+                            <div className="conv-dropdown-divider" />
+
+                            <button
+                              type="button"
+                              className="conv-dropdown-item text-danger"
+                              onClick={() => {
+                                setIsConvMenuOpen(false);
+                                setClearChatTargetConv(null);
+                                setIsClearChatModalOpen(true);
+                              }}
+                            >
+                              <Trash2 size={16} />
+                              <span>Clear Chat History</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="conv-dropdown-item text-danger"
+                              onClick={() => {
+                                setIsConvMenuOpen(false);
+                                openGroupDetailsModal();
+                              }}
+                            >
+                              <LogOut size={16} />
+                              <span>Leave / Manage Group</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="conv-dropdown-item"
+                              onClick={() => {
+                                setIsConvMenuOpen(false);
+                                initiateAudioCall();
+                              }}
+                            >
+                              <Phone size={16} />
+                              <span>Voice Call</span>
+                            </button>
 
                         <button
                           type="button"
@@ -3793,7 +4096,9 @@ export default function MessagesPage({
                           <Flag size={16} />
                           <span>Report User / Chat</span>
                         </button>
-                      </div>
+                      </>
+                    )}
+                  </div>
                     )}
                   </div>
                 </div>
@@ -4780,6 +5085,23 @@ export default function MessagesPage({
           if (group) {
             selectConversation(group);
           }
+        }}
+      />
+
+      {/* Group Details / Settings Modal */}
+      <GroupDetailsModal
+        isOpen={isGroupDetailsOpen}
+        onClose={closeGroupDetailsModal}
+        group={activePartner}
+        onGroupUpdated={(updatedGroup) => {
+          setActivePartner((prev) => (prev ? { ...prev, ...updatedGroup } : prev));
+          fetchConversations();
+        }}
+        onGroupDeleted={(gId) => {
+          handleGroupDeletedOrLeft(gId);
+        }}
+        onGroupLeft={(gId) => {
+          handleGroupDeletedOrLeft(gId);
         }}
       />
 

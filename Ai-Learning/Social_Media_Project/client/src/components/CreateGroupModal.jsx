@@ -121,27 +121,28 @@ export default function CreateGroupModal({ isOpen, onClose, onGroupCreated }) {
         };
       }
 
+      const fullGroupRecord = {
+        ...group,
+        is_group: true,
+        group_title: group.title,
+        partner_id: `group-${group.id}`,
+        partner_username: `group-${group.id}`,
+        partner_full_name: group.title,
+        partner_avatar_url: '/uploads/avatars/default-group.png',
+        member_count: selectedMembers.length + 1,
+        last_message: 'Group created',
+        last_message_at: new Date().toISOString(),
+        unread_count: 0,
+        is_pinned: false,
+        is_muted: false,
+        is_archived: false,
+        members: [user, ...selectedMembers].filter(Boolean)
+      };
+
       // Persist in localStorage for instant offline access and recovery
       try {
         const cacheKey = `vg_local_groups_${user?.id || 'guest'}`;
         const existing = JSON.parse(localStorage.getItem(cacheKey) || '[]');
-        const fullGroupRecord = {
-          ...group,
-          is_group: true,
-          group_title: group.title,
-          partner_id: `group-${group.id}`,
-          partner_username: `group-${group.id}`,
-          partner_full_name: group.title,
-          partner_avatar_url: '/uploads/avatars/default-group.png',
-          member_count: selectedMembers.length + 1,
-          last_message: 'Group created',
-          last_message_at: new Date().toISOString(),
-          unread_count: 0,
-          is_pinned: false,
-          is_muted: false,
-          is_archived: false,
-          members: [user, ...selectedMembers].filter(Boolean)
-        };
         const filtered = existing.filter((g) => g.id !== group.id);
         localStorage.setItem(cacheKey, JSON.stringify([fullGroupRecord, ...filtered]));
       } catch (saveErr) {}

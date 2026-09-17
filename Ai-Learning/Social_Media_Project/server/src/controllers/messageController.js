@@ -224,7 +224,8 @@ const getMessages = async (req, res, next) => {
     const cleanUsername = username.trim().toLowerCase();
 
     // 0. Handle Group Conversation Messages
-    if (cleanUsername.startsWith('group-')) {
+    const isCleanUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanUsername);
+    if (cleanUsername.startsWith('group-') || isCleanUuid) {
       const groupId = cleanUsername.replace(/^group-/, '');
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(groupId);
 
@@ -718,7 +719,8 @@ const sendMessage = async (req, res, next) => {
     const cleanUsername = username.trim().toLowerCase();
 
     // 0. Handle Group Messages
-    if (cleanUsername.startsWith('group-')) {
+    const isCleanUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanUsername);
+    if (cleanUsername.startsWith('group-') || isCleanUuid) {
       const groupId = cleanUsername.replace(/^group-/, '');
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(groupId);
 

@@ -101,6 +101,70 @@ const getConversations = async (req, res, next) => {
 
     const result = await query(conversationsQuery, [userId, showArchived]);
 
+    // Query group conversations where user is a participant
+    let groupRows = [];
+    try {
+      const groupQuery = `
+        SELECT 
+          NULL::int AS id,
+          CASE 
+            WHEN (lm.is_deleted) THEN 'This message was deleted'
+            ELSE COALESCE(lm.content, 'Group created')
+          END AS last_message,
+          CASE WHEN lm.is_deleted THEN NULL ELSE lm.ciphertext END AS last_ciphertext,
+          CASE WHEN lm.is_deleted THEN NULL ELSE lm.iv_nonce END AS last_iv_nonce,
+          c.id AS conversation_id,
+          COALESCE(lm.created_at, c.created_at) AS last_message_at,
+          lm.sender_id AS last_sender_id,
+          COALESCE(lm.is_deleted, FALSE) AS last_is_deleted,
+          ('group-' || c.id::text) AS partner_id,
+          ('group-' || c.id::text) AS partner_username,
+          c.title AS partner_full_name,
+          '/uploads/avatars/default-group.png' AS partner_avatar_url,
+          FALSE AS show_online_status,
+          NULL::timestamp AS last_seen_at,
+          COALESCE(uc.unread_count, 0) AS unread_count,
+          COALESCE(cm.is_pinned, FALSE) AS is_pinned,
+          (COALESCE(cm.is_muted, FALSE) AND (cm.muted_until IS NULL OR cm.muted_until > CURRENT_TIMESTAMP)) AS is_muted,
+          cm.muted_until,
+          COALESCE(cm.is_archived, FALSE) AS is_archived,
+          TRUE AS is_group,
+          c.title AS group_title,
+          COALESCE(mc.count, 1) AS member_count
+        FROM conversations c
+        JOIN conversation_members cm ON c.id = cm.conversation_id AND cm.user_id = $1
+        LEFT JOIN LATERAL (
+          SELECT m.id, m.content, m.ciphertext, m.iv_nonce, m.created_at, m.sender_id, m.is_deleted
+          FROM messages m
+          WHERE m.conversation_id = c.id
+            AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
+          ORDER BY m.created_at DESC
+          LIMIT 1
+        ) lm ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS unread_count
+          FROM messages m
+          WHERE m.conversation_id = c.id
+            AND m.sender_id <> $1
+            AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+            AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
+        ) uc ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS count
+          FROM conversation_members
+          WHERE conversation_id = c.id
+        ) mc ON TRUE
+        WHERE c.type = 'group' AND COALESCE(cm.is_archived, FALSE) = $2
+      `;
+      const groupRes = await query(groupQuery, [userId, showArchived]);
+      if (groupRes && groupRes.rows) {
+        groupRows = groupRes.rows;
+      }
+    } catch (gErr) {
+      // Non-fatal query fallback for testing or minimal environments
+      console.warn('Group conversations query notice:', gErr.message);
+    }
+
     let socketActiveIds = [];
     try {
       const { onlineUsers } = require('../socket');
@@ -109,7 +173,7 @@ const getConversations = async (req, res, next) => {
       }
     } catch (e) {}
 
-    const convsWithOnline = result.rows.map((row) => {
+    const dmConvsWithOnline = (result.rows || []).map((row) => {
       let isOnline = false;
       if (row.show_online_status !== false) {
         if (socketActiveIds.map(Number).includes(Number(row.partner_id))) {
@@ -123,14 +187,24 @@ const getConversations = async (req, res, next) => {
       }
       return {
         ...row,
+        is_group: false,
+        member_count: 2,
         is_online: isOnline
       };
+    });
+
+    const combinedConvs = [...dmConvsWithOnline, ...groupRows];
+    combinedConvs.sort((a, b) => {
+      if (Boolean(a.is_pinned) !== Boolean(b.is_pinned)) return a.is_pinned ? -1 : 1;
+      const timeA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+      const timeB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+      return timeB - timeA;
     });
 
     res.status(200).json({
       success: true,
       data: {
-        conversations: convsWithOnline
+        conversations: combinedConvs
       }
     });
   } catch (error) {
@@ -148,6 +222,188 @@ const getMessages = async (req, res, next) => {
     const userId = req.user.id;
     const { username } = req.params;
     const cleanUsername = username.trim().toLowerCase();
+
+    // 0. Handle Group Conversation Messages
+    const isCleanUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanUsername);
+    if (cleanUsername.startsWith('group-') || isCleanUuid) {
+      const groupId = cleanUsername.replace(/^group-/, '');
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(groupId);
+
+      if (!isUuid) {
+        return res.status(200).json({
+          success: true,
+          data: {
+            partner: {
+              id: groupId,
+              username: `group-${groupId}`,
+              full_name: 'Group Chat',
+              title: 'Group Chat',
+              avatar_url: '/uploads/avatars/default-group.png',
+              is_group: true,
+              member_count: 2,
+              members: [],
+              is_online: false,
+              show_online_status: false
+            },
+            conversationId: groupId,
+            ephemeralTimerSeconds: null,
+            pinnedMessage: null,
+            pinnedMessages: [],
+            isMuted: false,
+            mutedUntil: null,
+            isPinned: false,
+            isArchived: false,
+            isBlocked: false,
+            isBlockedBy: false,
+            messages: [],
+            isPartnerTyping: false
+          }
+        });
+      }
+
+      let memberCheck = await query(
+        `SELECT cm.role, cm.is_pinned, cm.is_muted, cm.muted_until, cm.is_archived, c.title, c.ephemeral_timer_seconds, c.created_at
+         FROM conversation_members cm
+         JOIN conversations c ON cm.conversation_id = c.id
+         WHERE cm.conversation_id = $1 AND cm.user_id = $2 LIMIT 1`,
+        [groupId, userId]
+      );
+
+      // If user created conversation but membership record was delayed, auto-register creator
+      if (memberCheck.rows.length === 0) {
+        const creatorCheck = await query(
+          `SELECT id, title, created_by, ephemeral_timer_seconds, created_at FROM conversations WHERE id = $1 LIMIT 1`,
+          [groupId]
+        );
+        if (creatorCheck.rows.length > 0 && creatorCheck.rows[0].created_by === userId) {
+          await query(
+            `INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, 'admin') ON CONFLICT DO NOTHING`,
+            [groupId, userId]
+          );
+          memberCheck = await query(
+            `SELECT cm.role, cm.is_pinned, cm.is_muted, cm.muted_until, cm.is_archived, c.title, c.ephemeral_timer_seconds, c.created_at
+             FROM conversation_members cm
+             JOIN conversations c ON cm.conversation_id = c.id
+             WHERE cm.conversation_id = $1 AND cm.user_id = $2 LIMIT 1`,
+            [groupId, userId]
+          );
+        }
+      }
+
+      if (memberCheck.rows.length === 0) {
+        return res.status(403).json({
+          success: false,
+          error: 'You are not a member of this group conversation.'
+        });
+      }
+
+      const cmRow = memberCheck.rows[0];
+
+      // Update last_read_at
+      await query(
+        `UPDATE conversation_members SET last_read_at = CURRENT_TIMESTAMP WHERE conversation_id = $1 AND user_id = $2`,
+        [groupId, userId]
+      );
+
+      // Fetch all members
+      let members = [];
+      try {
+        const membersRes = await query(
+          `SELECT u.id, u.username, u.full_name, u.avatar_url, cm.role
+           FROM conversation_members cm
+           JOIN users u ON cm.user_id = u.id
+           WHERE cm.conversation_id = $1
+           ORDER BY cm.role = 'admin' DESC, u.username ASC`,
+          [groupId]
+        );
+        if (membersRes && membersRes.rows) members = membersRes.rows;
+      } catch (mErr) {}
+
+      // Fetch group messages
+      let messages = [];
+      try {
+        const messagesRes = await query(
+          `SELECT 
+             m.id,
+             m.conversation_id,
+             m.sender_id,
+             m.recipient_id,
+             m.ciphertext,
+             m.iv_nonce,
+             m.content,
+             m.message_type,
+             m.reply_to_id,
+             m.is_deleted,
+             m.is_read,
+             m.created_at,
+             m.edited_at,
+             (m.sender_id = $1) AS is_mine,
+             u.username AS sender_username,
+             u.full_name AS sender_full_name,
+             u.avatar_url AS sender_avatar_url,
+             EXISTS(SELECT 1 FROM message_stars ms WHERE ms.message_id = m.id AND ms.user_id = $1) AS is_starred,
+             COALESCE(
+               (
+                 SELECT json_agg(json_build_object(
+                   'reaction', mr.reaction,
+                   'user_id', mr.user_id,
+                   'username', ru.username
+                 ))
+                 FROM message_reactions mr
+                 JOIN users ru ON mr.user_id = ru.id
+                 WHERE mr.message_id = m.id
+               ),
+               '[]'::json
+             ) AS reactions
+           FROM messages m
+           LEFT JOIN users u ON m.sender_id = u.id
+           WHERE m.conversation_id = $2
+             AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
+           ORDER BY m.created_at ASC`,
+          [userId, groupId]
+        );
+        if (messagesRes && messagesRes.rows) {
+          messages = messagesRes.rows.map((msg) => ({
+            ...msg,
+            is_mine: Boolean(msg.is_mine),
+            reactions: Array.isArray(msg.reactions) ? msg.reactions : [],
+            is_starred: Boolean(msg.is_starred)
+          }));
+        }
+      } catch (msgErr) {}
+
+      const groupPartner = {
+        id: groupId,
+        username: `group-${groupId}`,
+        full_name: cmRow.title || 'Group Chat',
+        title: cmRow.title || 'Group Chat',
+        avatar_url: '/uploads/avatars/default-group.png',
+        is_group: true,
+        member_count: members.length,
+        members: members,
+        is_online: false,
+        show_online_status: false
+      };
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          partner: groupPartner,
+          conversationId: groupId,
+          ephemeralTimerSeconds: cmRow.ephemeral_timer_seconds || null,
+          pinnedMessage: null,
+          pinnedMessages: [],
+          isMuted: Boolean(cmRow.is_muted && (!cmRow.muted_until || new Date(cmRow.muted_until) > new Date())),
+          mutedUntil: cmRow.muted_until || null,
+          isPinned: Boolean(cmRow.is_pinned),
+          isArchived: Boolean(cmRow.is_archived),
+          isBlocked: false,
+          isBlockedBy: false,
+          messages: messages,
+          isPartnerTyping: false
+        }
+      });
+    }
 
     // 1. Resolve partner user
     const partnerRes = await query(
@@ -461,6 +717,132 @@ const sendMessage = async (req, res, next) => {
     const { username } = req.params;
     const { content, ciphertext, ivNonce, senderDeviceId, replyToId } = req.body;
     const cleanUsername = username.trim().toLowerCase();
+
+    // 0. Handle Group Messages
+    const isCleanUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanUsername);
+    if (cleanUsername.startsWith('group-') || isCleanUuid) {
+      const groupId = cleanUsername.replace(/^group-/, '');
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(groupId);
+
+      const cleanContent = ciphertext
+        ? '[Encrypted Message]'
+        : ((content && typeof content === 'string') ? content.trim().slice(0, 10000) : '');
+
+      if (!cleanContent && !ciphertext) {
+        return res.status(400).json({
+          success: false,
+          error: 'Message content cannot be empty.'
+        });
+      }
+
+      if (!isUuid) {
+        const localMsg = {
+          id: Date.now(),
+          conversation_id: groupId,
+          sender_id: senderId,
+          sender_device_id: senderDeviceId || null,
+          ciphertext: ciphertext || null,
+          iv_nonce: ivNonce || null,
+          content: cleanContent,
+          message_type: 'text',
+          reply_to_id: replyToId || null,
+          is_read: true,
+          is_deleted: false,
+          created_at: new Date().toISOString(),
+          is_mine: true,
+          sender_username: req.user.username,
+          sender_full_name: req.user.full_name,
+          sender_avatar_url: req.user.avatar_url,
+          reactions: [],
+          is_starred: false
+        };
+        return res.status(201).json({
+          success: true,
+          data: {
+            message: localMsg
+          }
+        });
+      }
+
+      const memberCheck = await query(
+        `SELECT cm.role, c.ephemeral_timer_seconds, c.title
+         FROM conversation_members cm
+         JOIN conversations c ON cm.conversation_id = c.id
+         WHERE cm.conversation_id = $1 AND cm.user_id = $2 LIMIT 1`,
+        [groupId, senderId]
+      );
+
+      if (memberCheck.rows.length === 0) {
+        return res.status(403).json({
+          success: false,
+          error: 'You are not a participant in this group conversation.'
+        });
+      }
+
+      const ephemeralSeconds = memberCheck.rows[0]?.ephemeral_timer_seconds;
+      const expiresAt = ephemeralSeconds ? new Date(Date.now() + ephemeralSeconds * 1000).toISOString() : null;
+
+      const insertRes = await query(
+        `INSERT INTO messages (
+           conversation_id, sender_id, recipient_id, sender_device_id,
+           ciphertext, iv_nonce, content, message_type, reply_to_id, expires_at
+         )
+         VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING id, conversation_id, sender_id, sender_device_id, ciphertext, iv_nonce, content, message_type, reply_to_id, is_read, is_deleted, created_at, expires_at`,
+        [
+          groupId,
+          senderId,
+          senderDeviceId || null,
+          ciphertext || null,
+          ivNonce || null,
+          cleanContent,
+          'text',
+          replyToId || null,
+          expiresAt
+        ]
+      );
+
+      const newMessage = {
+        ...insertRes.rows[0],
+        is_mine: true,
+        sender_username: req.user.username,
+        sender_full_name: req.user.full_name,
+        sender_avatar_url: req.user.avatar_url,
+        reactions: [],
+        is_starred: false
+      };
+
+      try {
+        await query(`UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [groupId]);
+        await query(`UPDATE conversation_members SET last_read_at = CURRENT_TIMESTAMP WHERE conversation_id = $1 AND user_id = $2`, [groupId, senderId]);
+      } catch (uErr) {}
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`conv:${groupId}`).emit('message:receive', {
+          ...newMessage,
+          is_mine: false
+        });
+        try {
+          const membersRes = await query(`SELECT user_id FROM conversation_members WHERE conversation_id = $1 AND user_id <> $2`, [groupId, senderId]);
+          if (membersRes && membersRes.rows) {
+            for (const mRow of membersRes.rows) {
+              io.to(`user:${mRow.user_id}`).emit('message:receive', {
+                ...newMessage,
+                is_mine: false
+              });
+            }
+          }
+        } catch (ioErr) {}
+      }
+
+      return res.status(201).json({
+        success: true,
+        data: {
+          message: newMessage
+        }
+      });
+    }
 
     // 1. Resolve partner user with privacy settings
     const userRes = await query(
@@ -892,6 +1274,18 @@ const markConversationAsRead = async (req, res, next) => {
     const { username } = req.params;
     const cleanUsername = username.trim().toLowerCase();
 
+    if (cleanUsername.startsWith('group-')) {
+      const groupId = cleanUsername.replace(/^group-/, '');
+      await query(
+        `UPDATE conversation_members SET last_read_at = CURRENT_TIMESTAMP WHERE conversation_id = $1 AND user_id = $2`,
+        [groupId, userId]
+      );
+      return res.status(200).json({
+        success: true,
+        message: 'Group messages marked as read.'
+      });
+    }
+
     const userRes = await query(
       'SELECT id FROM users WHERE LOWER(username) = $1 LIMIT 1',
       [cleanUsername]
@@ -1295,7 +1689,7 @@ const toggleStarMessage = async (req, res, next) => {
 
     // Verify message exists and user is part of the conversation
     const msgRes = await query(
-      `SELECT id, sender_id, recipient_id, is_deleted FROM messages WHERE id = $1 LIMIT 1`,
+      `SELECT id, sender_id, recipient_id, conversation_id, is_deleted FROM messages WHERE id = $1 LIMIT 1`,
       [id]
     );
 
@@ -1304,7 +1698,20 @@ const toggleStarMessage = async (req, res, next) => {
     }
 
     const msg = msgRes.rows[0];
-    if (Number(msg.sender_id) !== Number(userId) && Number(msg.recipient_id) !== Number(userId)) {
+    let isAuthorized = (Number(msg.sender_id) === Number(userId) || Number(msg.recipient_id) === Number(userId));
+    if (!isAuthorized && msg.conversation_id) {
+      try {
+        const convCheck = await query(
+          `SELECT 1 FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1`,
+          [msg.conversation_id, userId]
+        );
+        if (convCheck.rows && convCheck.rows.length > 0) {
+          isAuthorized = true;
+        }
+      } catch (cErr) {}
+    }
+
+    if (!isAuthorized) {
       return res.status(403).json({ success: false, error: 'Not authorized to star this message.' });
     }
 
@@ -1357,11 +1764,17 @@ const getStarredMessages = async (req, res, next) => {
         ms.created_at AS starred_at,
         sender.username AS sender_username,
         sender.avatar_url AS sender_avatar,
-        CASE WHEN m.sender_id = $1 THEN recip.username ELSE sender.username END AS partner_username
+        c.title AS conversation_title,
+        CASE 
+          WHEN c.type = 'group' THEN ('group-' || c.id::text)
+          WHEN m.sender_id = $1 THEN recip.username 
+          ELSE sender.username 
+        END AS partner_username
       FROM message_stars ms
       JOIN messages m ON ms.message_id = m.id
       JOIN users sender ON m.sender_id = sender.id
-      JOIN users recip ON m.recipient_id = recip.id
+      LEFT JOIN users recip ON m.recipient_id = recip.id
+      LEFT JOIN conversations c ON m.conversation_id = c.id
       WHERE ms.user_id = $1
         AND m.is_deleted = FALSE
         AND m.id NOT IN (SELECT message_id FROM message_deletions WHERE user_id = $1)

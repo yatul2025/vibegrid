@@ -686,10 +686,486 @@ const createGroupConversation = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Delete a group conversation
+ * @route   DELETE /api/conversations/:id
+ * @access  Private (Admin / Owner only)
+ */
+const deleteGroup = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const cleanId = id.replace(/^group-/, '').trim();
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
+    if (!isUuid) {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`conv:${cleanId}`).emit('group:deleted', { conversationId: cleanId });
+      }
+      return res.status(200).json({
+        success: true,
+        message: 'Group deleted successfully.'
+      });
+    }
+
+    const convRes = await query(
+      'SELECT id, type, title, created_by FROM conversations WHERE id = $1 LIMIT 1',
+      [cleanId]
+    );
+
+    if (convRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Group conversation not found.' });
+    }
+
+    const conv = convRes.rows[0];
+    if (conv.type !== 'group') {
+      return res.status(400).json({ success: false, error: 'This conversation is not a group.' });
+    }
+
+    // Check if requester is admin or created_by
+    const memberRes = await query(
+      'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+      [cleanId, userId]
+    );
+
+    const isCreator = conv.created_by === userId;
+    const isAdmin = memberRes.rows.length > 0 && memberRes.rows[0].role === 'admin';
+
+    if (!isCreator && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Only group admins or the creator can delete this group.'
+      });
+    }
+
+    // Retrieve all member IDs to notify before deleting
+    const membersRes = await query(
+      'SELECT user_id FROM conversation_members WHERE conversation_id = $1',
+      [cleanId]
+    );
+    const memberIds = membersRes.rows.map((r) => r.user_id);
+
+    // Cascade delete conversation
+    await query('DELETE FROM conversations WHERE id = $1', [cleanId]);
+
+    // Socket.IO notifications
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conv:${cleanId}`).emit('group:deleted', { conversationId: cleanId, title: conv.title });
+      memberIds.forEach((uid) => {
+        io.to(`user:${uid}`).emit('group:deleted', { conversationId: cleanId, title: conv.title });
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Group deleted successfully.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Leave a group conversation
+ * @route   POST /api/conversations/:id/leave
+ * @access  Private (Group Member)
+ */
+const leaveGroup = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const cleanId = id.replace(/^group-/, '').trim();
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
+    if (!isUuid) {
+      return res.status(200).json({
+        success: true,
+        message: 'Successfully left the group.'
+      });
+    }
+
+    // Check membership
+    const memberRes = await query(
+      'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+      [cleanId, userId]
+    );
+
+    if (memberRes.rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'You are not a member of this group.' });
+    }
+
+    const allMembersRes = await query(
+      'SELECT user_id, role FROM conversation_members WHERE conversation_id = $1',
+      [cleanId]
+    );
+
+    // If leaving user is the sole member, delete the group entirely
+    if (allMembersRes.rows.length <= 1) {
+      await query('DELETE FROM conversations WHERE id = $1', [cleanId]);
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user:${userId}`).emit('group:deleted', { conversationId: cleanId });
+      }
+      return res.status(200).json({
+        success: true,
+        message: 'You were the last member. Group has been deleted.'
+      });
+    }
+
+    // If leaving user is creator/admin, transfer admin to another member if no admins remain
+    const remainingMembers = allMembersRes.rows.filter((m) => m.user_id !== userId);
+    const hasRemainingAdmin = remainingMembers.some((m) => m.role === 'admin');
+    if (!hasRemainingAdmin && remainingMembers.length > 0) {
+      const nextAdminId = remainingMembers[0].user_id;
+      await query(
+        `UPDATE conversation_members SET role = 'admin' WHERE conversation_id = $1 AND user_id = $2`,
+        [cleanId, nextAdminId]
+      );
+      await query(
+        `UPDATE conversations SET created_by = $1 WHERE id = $2`,
+        [nextAdminId, cleanId]
+      );
+    }
+
+    // Remove membership
+    await query(
+      'DELETE FROM conversation_members WHERE conversation_id = $1 AND user_id = $2',
+      [cleanId, userId]
+    );
+
+    // Insert system message into chat
+    const systemText = `@${req.user.username} left the group`;
+    try {
+      await query(
+        `INSERT INTO messages (conversation_id, sender_id, recipient_id, content, message_type)
+         VALUES ($1, $2, NULL, $3, 'system')`,
+        [cleanId, userId, systemText]
+      );
+    } catch {}
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conv:${cleanId}`).emit('group:member_left', {
+        conversationId: cleanId,
+        userId,
+        username: req.user.username
+      });
+      io.to(`user:${userId}`).emit('group:left', { conversationId: cleanId });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Successfully left the group.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Add member(s) to a group
+ * @route   POST /api/conversations/:id/members
+ * @access  Private (Group Member / Admin)
+ */
+const addMembers = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const { memberIds } = req.body;
+    const cleanId = id.replace(/^group-/, '').trim();
+
+    if (!Array.isArray(memberIds) || memberIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'memberIds array is required.' });
+    }
+
+    // Verify requester is in the group
+    const requesterRes = await query(
+      'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+      [cleanId, userId]
+    );
+
+    if (requesterRes.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'You must be a group member to add participants.' });
+    }
+
+    const addedUsernames = [];
+    for (const rawMemberId of memberIds) {
+      const memberId = Number(rawMemberId);
+      if (!memberId || isNaN(memberId)) continue;
+
+      // Privacy check
+      const privRes = await query(
+        'SELECT username, allow_group_add_from FROM users WHERE id = $1 LIMIT 1',
+        [memberId]
+      );
+      if (privRes.rows.length === 0) continue;
+
+      const setting = privRes.rows[0].allow_group_add_from || 'everyone';
+      const username = privRes.rows[0].username;
+
+      if (setting === 'nobody') {
+        return res.status(403).json({
+          success: false,
+          error: `@${username} does not allow being added to groups.`
+        });
+      }
+
+      if (setting === 'following') {
+        const followRes = await query(
+          'SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1',
+          [memberId, userId]
+        );
+        if (followRes.rows.length === 0) {
+          return res.status(403).json({
+            success: false,
+            error: `@${username} only allows accounts they follow to add them to groups.`
+          });
+        }
+      }
+
+      await query(
+        `INSERT INTO conversation_members (conversation_id, user_id, role)
+         VALUES ($1, $2, 'member')
+         ON CONFLICT DO NOTHING`,
+        [cleanId, memberId]
+      );
+      addedUsernames.push(username);
+    }
+
+    // Insert system message
+    if (addedUsernames.length > 0) {
+      const sysMsg = `@${req.user.username} added ${addedUsernames.map(u => `@${u}`).join(', ')}`;
+      try {
+        await query(
+          `INSERT INTO messages (conversation_id, sender_id, recipient_id, content, message_type)
+           VALUES ($1, $2, NULL, $3, 'system')`,
+          [cleanId, userId, sysMsg]
+        );
+      } catch {}
+    }
+
+    const membersRes = await query(
+      `SELECT u.id, u.username, u.full_name, u.avatar_url, cm.role
+       FROM conversation_members cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.conversation_id = $1
+       ORDER BY cm.role = 'admin' DESC, u.username ASC`,
+      [cleanId]
+    );
+
+    const convRes = await query('SELECT * FROM conversations WHERE id = $1', [cleanId]);
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conv:${cleanId}`).emit('group:members_added', {
+        conversationId: cleanId,
+        members: membersRes.rows
+      });
+      memberIds.forEach((mId) => {
+        io.to(`user:${mId}`).emit('conversation:created', {
+          conversation: convRes.rows[0],
+          members: membersRes.rows
+        });
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        members: membersRes.rows
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Remove a member from a group
+ * @route   DELETE /api/conversations/:id/members/:userId
+ * @access  Private (Admin only)
+ */
+const removeMember = async (req, res, next) => {
+  try {
+    const { id, userId: targetUserIdStr } = req.params;
+    const requesterId = req.user.id;
+    const targetUserId = parseInt(targetUserIdStr, 10);
+    const cleanId = id.replace(/^group-/, '').trim();
+
+    if (isNaN(targetUserId)) {
+      return res.status(400).json({ success: false, error: 'Invalid target user ID.' });
+    }
+
+    // Check requester role
+    const reqMemberRes = await query(
+      'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+      [cleanId, requesterId]
+    );
+
+    if (reqMemberRes.rows.length === 0 || reqMemberRes.rows[0].role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Only group admins can remove members.' });
+    }
+
+    // Check conversation owner
+    const convRes = await query('SELECT created_by FROM conversations WHERE id = $1 LIMIT 1', [cleanId]);
+    if (convRes.rows.length > 0 && convRes.rows[0].created_by === targetUserId) {
+      return res.status(403).json({ success: false, error: 'Cannot remove the group owner.' });
+    }
+
+    // Get target username
+    const targetUserRes = await query('SELECT username FROM users WHERE id = $1 LIMIT 1', [targetUserId]);
+    const targetUsername = targetUserRes.rows[0]?.username || 'User';
+
+    // Remove member
+    await query(
+      'DELETE FROM conversation_members WHERE conversation_id = $1 AND user_id = $2',
+      [cleanId, targetUserId]
+    );
+
+    // Insert system message
+    const sysMsg = `@${req.user.username} removed @${targetUsername}`;
+    try {
+      await query(
+        `INSERT INTO messages (conversation_id, sender_id, recipient_id, content, message_type)
+         VALUES ($1, $2, NULL, $3, 'system')`,
+        [cleanId, requesterId, sysMsg]
+      );
+    } catch {}
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conv:${cleanId}`).emit('group:member_removed', {
+        conversationId: cleanId,
+        userId: targetUserId,
+        username: targetUsername
+      });
+      io.to(`user:${targetUserId}`).emit('group:removed', { conversationId: cleanId });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `@${targetUsername} has been removed from the group.`
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Update group title / details
+ * @route   PUT /api/conversations/:id
+ * @access  Private (Admin only)
+ */
+const updateGroup = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const { title } = req.body;
+    const cleanId = id.replace(/^group-/, '').trim();
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ success: false, error: 'Group title is required.' });
+    }
+
+    const memberRes = await query(
+      'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+      [cleanId, userId]
+    );
+
+    if (memberRes.rows.length === 0 || memberRes.rows[0].role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Only group admins can update group details.' });
+    }
+
+    const updateRes = await query(
+      `UPDATE conversations
+       SET title = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING id, type, title, created_by, updated_at`,
+      [title.trim(), cleanId]
+    );
+
+    const updatedConv = updateRes.rows[0];
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conv:${cleanId}`).emit('group:updated', { conversation: updatedConv });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { conversation: updatedConv }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get all members of a group
+ * @route   GET /api/conversations/:id/members
+ * @access  Private (Group Member)
+ */
+const getGroupMembers = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const cleanId = id.replace(/^group-/, '').trim();
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
+    if (!isUuid) {
+      return res.status(200).json({
+        success: true,
+        data: { members: [] }
+      });
+    }
+
+    const memberCheck = await query(
+      'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+      [cleanId, userId]
+    );
+
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'You are not a member of this group.' });
+    }
+
+    const membersRes = await query(
+      `SELECT u.id, u.username, u.full_name, u.avatar_url, cm.role
+       FROM conversation_members cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.conversation_id = $1
+       ORDER BY cm.role = 'admin' DESC, u.username ASC`,
+      [cleanId]
+    );
+
+    const convRes = await query(
+      'SELECT id, title, type, created_by, created_at FROM conversations WHERE id = $1 LIMIT 1',
+      [cleanId]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        conversation: convRes.rows[0] || null,
+        members: membersRes.rows
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getConversations,
   getOrCreateConversation,
   createGroupConversation,
+  deleteGroup,
+  leaveGroup,
+  addMembers,
+  removeMember,
+  updateGroup,
+  getGroupMembers,
   getMessages,
   sendMessage,
   deleteMessage,
