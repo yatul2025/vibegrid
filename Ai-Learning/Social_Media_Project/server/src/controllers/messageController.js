@@ -2356,6 +2356,7 @@ const toggleMuteConversation = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { id } = req.params; // conversationId
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
     const { isMuted, durationHours } = req.body;
 
     let mutedUntil = null;
@@ -2365,7 +2366,7 @@ const toggleMuteConversation = async (req, res, next) => {
 
     const memberCheck = await query(
       `SELECT 1 FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1`,
-      [id, userId]
+      [cleanId, userId]
     );
 
     if (memberCheck.rows.length === 0) {
@@ -2376,13 +2377,13 @@ const toggleMuteConversation = async (req, res, next) => {
       `UPDATE conversation_members 
        SET is_muted = $1, muted_until = $2 
        WHERE conversation_id = $3 AND user_id = $4`,
-      [Boolean(isMuted), mutedUntil, id, userId]
+      [Boolean(isMuted), mutedUntil, cleanId, userId]
     );
 
     res.status(200).json({
       success: true,
       data: {
-        conversationId: id,
+        conversationId: cleanId,
         isMuted: Boolean(isMuted),
         mutedUntil
       }
@@ -2401,11 +2402,12 @@ const togglePinConversation = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { id } = req.params; // conversationId
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
     const { isPinned } = req.body;
 
     const memberCheck = await query(
       `SELECT is_pinned FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1`,
-      [id, userId]
+      [cleanId, userId]
     );
 
     if (memberCheck.rows.length === 0) {
@@ -2416,13 +2418,13 @@ const togglePinConversation = async (req, res, next) => {
 
     await query(
       `UPDATE conversation_members SET is_pinned = $1 WHERE conversation_id = $2 AND user_id = $3`,
-      [newPinned, id, userId]
+      [newPinned, cleanId, userId]
     );
 
     res.status(200).json({
       success: true,
       data: {
-        conversationId: id,
+        conversationId: cleanId,
         isPinned: newPinned
       }
     });
@@ -2440,11 +2442,12 @@ const toggleArchiveConversation = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { id } = req.params; // conversationId
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
     const { isArchived } = req.body;
 
     const memberCheck = await query(
       `SELECT is_archived FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1`,
-      [id, userId]
+      [cleanId, userId]
     );
 
     if (memberCheck.rows.length === 0) {
@@ -2455,13 +2458,13 @@ const toggleArchiveConversation = async (req, res, next) => {
 
     await query(
       `UPDATE conversation_members SET is_archived = $1 WHERE conversation_id = $2 AND user_id = $3`,
-      [newArchived, id, userId]
+      [newArchived, cleanId, userId]
     );
 
     res.status(200).json({
       success: true,
       data: {
-        conversationId: id,
+        conversationId: cleanId,
         isArchived: newArchived
       }
     });
@@ -2479,10 +2482,11 @@ const clearConversationMessages = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { id } = req.params; // conversationId
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     const memberCheck = await query(
       `SELECT 1 FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1`,
-      [id, userId]
+      [cleanId, userId]
     );
 
     if (memberCheck.rows.length === 0) {
@@ -2497,7 +2501,7 @@ const clearConversationMessages = async (req, res, next) => {
       WHERE m.conversation_id = $2
         AND m.id NOT IN (SELECT message_id FROM message_deletions WHERE user_id = $1)
       ON CONFLICT DO NOTHING
-    `, [userId, id]);
+    `, [userId, cleanId]);
 
     res.status(200).json({
       success: true,

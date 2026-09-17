@@ -2954,10 +2954,11 @@ export default function MessagesPage({
     if (!msg || msg.is_deleted) return;
     if (guardDemoAction('pin')) return;
     if (!activeConversationId) return;
+    const cleanConvId = String(activeConversationId).replace(/^(group-)+/i, '').trim();
     const isCurrentlyPinned = pinnedMessages.some((pm) => Number(pm.id) === Number(msg.id)) || Number(pinnedMessage?.id) === Number(msg.id);
 
     try {
-      const res = await apiClient.post(`/messages/conv/${activeConversationId}/pin`, {
+      const res = await apiClient.post(`/messages/conv/${cleanConvId}/pin`, {
         messageId: msg.id,
         isPinned: !isCurrentlyPinned
       });
@@ -3072,7 +3073,8 @@ export default function MessagesPage({
     setEphemeralTimer(seconds);
     try {
       if (activeConversationId) {
-        await apiClient.put(`/conversations/${activeConversationId}/ephemeral`, {
+        const cleanConvId = String(activeConversationId).replace(/^(group-)+/i, '').trim();
+        await apiClient.put(`/conversations/${cleanConvId}/ephemeral`, {
           timerSeconds: seconds
         });
       }
@@ -3086,8 +3088,9 @@ export default function MessagesPage({
   // ==========================================================================
   const handleToggleMute = async (targetConv = null, durationHours = null) => {
     const target = targetConv || muteTargetConv;
-    const convId = target?.conversation_id || activeConversationId;
-    if (!convId) return;
+    const rawConvId = target?.conversation_id || activeConversationId;
+    if (!rawConvId) return;
+    const convId = String(rawConvId).replace(/^(group-)+/i, '').trim();
     const currentMuted = target ? target.is_muted : isMuted;
     const nextMuted = !currentMuted;
     try {
@@ -3117,8 +3120,9 @@ export default function MessagesPage({
   };
 
   const handleTogglePinConv = async (targetConv = null) => {
-    const convId = targetConv?.conversation_id || activeConversationId;
-    if (!convId) return;
+    const rawConvId = targetConv?.conversation_id || activeConversationId;
+    if (!rawConvId) return;
+    const convId = String(rawConvId).replace(/^(group-)+/i, '').trim();
     const targetIsPinned = targetConv ? targetConv.is_pinned : isPinned;
     const nextPinned = !targetIsPinned;
     try {
@@ -3143,8 +3147,9 @@ export default function MessagesPage({
   };
 
   const handleToggleArchiveConv = async (targetConv = null) => {
-    const convId = targetConv?.conversation_id || activeConversationId;
-    if (!convId) return;
+    const rawConvId = targetConv?.conversation_id || activeConversationId;
+    if (!rawConvId) return;
+    const convId = String(rawConvId).replace(/^(group-)+/i, '').trim();
     const targetIsArchived = targetConv ? targetConv.is_archived : isArchived;
     const nextArchived = !targetIsArchived;
     try {
@@ -3167,8 +3172,9 @@ export default function MessagesPage({
 
   const handleClearChat = async (targetConv = null) => {
     const target = targetConv || clearChatTargetConv;
-    const convId = target?.conversation_id || activeConversationId;
-    if (!convId) return;
+    const rawConvId = target?.conversation_id || activeConversationId;
+    if (!rawConvId) return;
+    const convId = String(rawConvId).replace(/^(group-)+/i, '').trim();
     try {
       const res = await apiClient.delete(`/messages/conv/${convId}/clear`);
       if (res.success) {
@@ -4217,8 +4223,8 @@ export default function MessagesPage({
                               type="button"
                               className="conv-dropdown-item"
                               onClick={() => {
-                                setIsConvMenuOpen(false);
                                 openGroupDetailsModal();
+                                setTimeout(() => setIsConvMenuOpen(false), 50);
                               }}
                             >
                               <Users size={16} />
@@ -4229,13 +4235,13 @@ export default function MessagesPage({
                               type="button"
                               className="conv-dropdown-item"
                               onClick={() => {
-                                setIsConvMenuOpen(false);
                                 if (isMuted) {
                                   handleToggleMute(null, null);
                                 } else {
                                   setMuteTargetConv(null);
                                   setIsMuteModalOpen(true);
                                 }
+                                setTimeout(() => setIsConvMenuOpen(false), 50);
                               }}
                             >
                               {isMuted ? <Volume2 size={16} /> : <VolumeX size={16} />}
@@ -4246,8 +4252,8 @@ export default function MessagesPage({
                               type="button"
                               className="conv-dropdown-item"
                               onClick={() => {
-                                setIsConvMenuOpen(false);
                                 handleTogglePinConv();
+                                setTimeout(() => setIsConvMenuOpen(false), 50);
                               }}
                             >
                               {isPinned ? <PinOff size={16} /> : <Pin size={16} />}
@@ -4260,9 +4266,9 @@ export default function MessagesPage({
                               type="button"
                               className="conv-dropdown-item text-danger"
                               onClick={() => {
-                                setIsConvMenuOpen(false);
                                 setClearChatTargetConv(null);
                                 setIsClearChatModalOpen(true);
+                                setTimeout(() => setIsConvMenuOpen(false), 50);
                               }}
                             >
                               <Trash2 size={16} />
@@ -4273,8 +4279,8 @@ export default function MessagesPage({
                               type="button"
                               className="conv-dropdown-item text-danger"
                               onClick={() => {
-                                setIsConvMenuOpen(false);
                                 openGroupDetailsModal();
+                                setTimeout(() => setIsConvMenuOpen(false), 50);
                               }}
                             >
                               <LogOut size={16} />
