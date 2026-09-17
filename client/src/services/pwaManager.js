@@ -19,17 +19,23 @@ export function registerServiceWorker(onUpdateAvailable) {
     return;
   }
 
-  // Register only when window is loaded for optimal performance
-  window.addEventListener('load', () => {
+  // Register immediately if already interactive/complete, or on load
+  const doRegister = () => {
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {
         console.log('✅ [PWA] Service Worker registered with scope:', registration.scope);
 
-        // Check for updates to the service worker immediately
+        // Check for updates to the service worker immediately and after 2 seconds
         try {
           registration.update();
         } catch {}
+
+        setTimeout(() => {
+          try {
+            registration.update();
+          } catch {}
+        }, 2000);
 
         // Check if there is already a waiting service worker and activate immediately
         if (registration.waiting) {
@@ -57,12 +63,12 @@ export function registerServiceWorker(onUpdateAvailable) {
           });
         });
 
-        // Periodically check for updates every 30 seconds so app automatically updates after every deployment
+        // Fast update polling: check every 10 seconds so deployed updates apply quickly
         setInterval(() => {
           try {
             registration.update();
           } catch {}
-        }, 30000);
+        }, 10000);
 
         // Check for updates whenever the tab becomes visible again
         document.addEventListener('visibilitychange', () => {
@@ -85,7 +91,13 @@ export function registerServiceWorker(onUpdateAvailable) {
         window.location.reload();
       }
     });
-  });
+  };
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    doRegister();
+  } else {
+    window.addEventListener('load', doRegister);
+  }
 
   // Listen for native beforeinstallprompt
   window.addEventListener('beforeinstallprompt', (e) => {
@@ -201,20 +213,7 @@ export function usePWA() {
   };
 
   const applyUpdate = () => {
-    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistration().then((reg) => {
-        if (reg && reg.waiting) {
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-        }
-        setTimeout(() => {
-          window.location.reload();
-        }, 200);
-      }).catch(() => {
-        window.location.reload();
-      });
-    } else {
-      window.location.reload();
-    }
+    forceUpdateApp();
   };
 
   return {
@@ -227,7 +226,37 @@ export function usePWA() {
   };
 }
 
+/**
+ * Hard-force purge caches, unregister service workers, and reload to guaranteed newest release
+ */
+export async function forceUpdateApp() {
+  try {
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const reg of registrations) {
+        await reg.unregister();
+      }
+    }
+    if (typeof window !== 'undefined' && 'caches' in window) {
+      const keys = await caches.keys();
+      for (const key of keys) {
+        await caches.delete(key);
+      }
+    }
+  } catch (err) {
+    console.warn('Purge error:', err);
+  }
+  if (typeof window !== 'undefined') {
+    window.location.reload(true);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.__vg_force_update = forceUpdateApp;
+}
+
 export default {
   registerServiceWorker,
-  usePWA
+  usePWA,
+  forceUpdateApp
 };
