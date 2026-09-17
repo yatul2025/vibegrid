@@ -373,9 +373,10 @@ export default function MessagesPage({
   const [isArchived, setIsArchived] = useState(false);
   const [convContextMenu, setConvContextMenu] = useState(null);
 
-  // Phase 3: Message Micro-Interactions (Option 1: Haptic Pop & Heart Burst Suite)
+  // Phase 3 & 4: Message Micro-Interactions & Reactions (Option 1)
   const [burstingHeartMsgId, setBurstingHeartMsgId] = useState(null);
   const [swipingMessage, setSwipingMessage] = useState(null);
+  const [showExtendedReactions, setShowExtendedReactions] = useState(false);
   const lastTapMsgRef = useRef({ id: null, time: 0 });
   const newlySentMsgIdsRef = useRef(new Set());
   const swipeStateRef = useRef(null);
@@ -1953,6 +1954,7 @@ export default function MessagesPage({
   const handleDeselectMessage = () => {
     setSelectedMessagesForAction([]);
     setIsActionBarMoreOpen(false);
+    setShowExtendedReactions(false);
     if (typeof window !== 'undefined' && window.history && window.history.state?.modal === 'message_action') {
       window.history.back();
     }
@@ -2327,7 +2329,8 @@ export default function MessagesPage({
     }
   };
 
-  const QUICK_REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🙏', '🔥', '👏', '🎉'];
+  const QUICK_REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🙏'];
+  const EXTENDED_REACTIONS = ['🔥', '👏', '🎉', '💯', '🚀', '✨', '👀', '⚡', '🥰', '🥺', '😎', '🤝'];
 
   // Toggle emoji reaction
   const handleToggleReaction = async (messageId, reaction) => {
@@ -3940,29 +3943,78 @@ export default function MessagesPage({
                                 <span className="vibe-heart-particle p6" />
                               </div>
                             )}
-                            {/* Style 1: WhatsApp Classic Floating Quick Reaction Pill directly over selected bubble */}
+                            {/* Phase 4 Option 1: Dynamic Magnifier & Full Picker Pill */}
                             {selectedMessagesForAction.length === 1 && selectedMessagesForAction[0].id === m.id && !m.is_deleted && (
                               <div
-                                className="vg-wa-floating-reactions"
+                                className={`vg-wa-floating-reactions ${showExtendedReactions ? 'extended-open' : ''}`}
                                 onClick={(e) => e.stopPropagation()}
                                 data-testid="wa-floating-reactions"
                               >
-                                {['❤️', '😂', '👍', '😮', '😢', '🙏'].map((emoji) => (
+                                <div className="vg-reactions-main-row">
+                                  {QUICK_REACTIONS.map((emoji) => (
+                                    <button
+                                      key={emoji}
+                                      type="button"
+                                      className="vg-wa-react-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                                          try { navigator.vibrate([15, 25]); } catch (_) {}
+                                        }
+                                        handleToggleReaction(m.id, emoji);
+                                        handleDeselectMessage();
+                                        setShowExtendedReactions(false);
+                                      }}
+                                      title={`React ${emoji}`}
+                                      aria-label={`React ${emoji}`}
+                                    >
+                                      {emoji}
+                                    </button>
+                                  ))}
+
+                                  {/* Plus Button to toggle Extended Emoji Drawer */}
                                   <button
-                                    key={emoji}
                                     type="button"
-                                    className="vg-wa-react-btn"
+                                    className={`vg-wa-more-btn ${showExtendedReactions ? 'is-active' : ''}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleToggleReaction(m.id, emoji);
-                                      handleDeselectMessage();
+                                      setShowExtendedReactions((prev) => !prev);
+                                      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                                        try { navigator.vibrate(15); } catch (_) {}
+                                      }
                                     }}
-                                    title={`React ${emoji}`}
-                                    aria-label={`React ${emoji}`}
+                                    title={showExtendedReactions ? 'Show fewer' : 'More reactions'}
+                                    aria-label={showExtendedReactions ? 'Show fewer' : 'More reactions'}
+                                    data-testid="reaction-more-btn"
                                   >
-                                    {emoji}
+                                    <Plus size={16} className={`vg-plus-icon ${showExtendedReactions ? 'rotated' : ''}`} />
                                   </button>
-                                ))}
+                                </div>
+
+                                {showExtendedReactions && (
+                                  <div className="vg-reactions-extended-grid" data-testid="reactions-extended-grid">
+                                    {EXTENDED_REACTIONS.map((emoji) => (
+                                      <button
+                                        key={emoji}
+                                        type="button"
+                                        className="vg-wa-react-btn extended-btn"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                                            try { navigator.vibrate([15, 25]); } catch (_) {}
+                                          }
+                                          handleToggleReaction(m.id, emoji);
+                                          handleDeselectMessage();
+                                          setShowExtendedReactions(false);
+                                        }}
+                                        title={`React ${emoji}`}
+                                        aria-label={`React ${emoji}`}
+                                      >
+                                        {emoji}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             )}
                             {/* Forwarded badge */}
@@ -6461,23 +6513,39 @@ export default function MessagesPage({
           border-radius: 12px;
         }
 
-        /* Floating Reaction Pill directly over selected bubble */
+        /* ==========================================================================
+           Phase 4: Message Reaction Experience (Option 1: Dynamic Magnifier & Full Picker Pill)
+           ========================================================================== */
         .vg-wa-floating-reactions {
           position: absolute;
-          top: -46px;
+          top: -50px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+          background: rgba(30, 41, 59, 0.94);
+          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.18));
+          border-radius: 9999px;
+          padding: 4px 10px;
+          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+          z-index: 60;
+          animation: waReactionPop 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          user-select: none;
+          transition: border-radius 0.2s ease, padding 0.2s ease, top 0.2s ease;
+        }
+
+        .vg-wa-floating-reactions.extended-open {
+          border-radius: 22px;
+          padding: 8px 12px;
+          top: -110px;
+        }
+
+        .vg-reactions-main-row {
           display: flex;
           align-items: center;
-          gap: 3px;
-          background: var(--bg-card, #1e293b);
-          border: 1px solid var(--border-color, rgba(255, 255, 255, 0.16));
-          border-radius: 9999px;
-          padding: 3px 8px;
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
-          z-index: 50;
-          animation: waReactionPop 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          user-select: none;
+          gap: 4px;
         }
 
         .message-bubble-row.outgoing .vg-wa-floating-reactions {
@@ -6491,7 +6559,7 @@ export default function MessagesPage({
         @keyframes waReactionPop {
           0% {
             opacity: 0;
-            transform: scale(0.6) translateY(8px);
+            transform: scale(0.7) translateY(12px);
           }
           100% {
             opacity: 1;
@@ -6507,22 +6575,154 @@ export default function MessagesPage({
           height: 36px;
           border: none;
           background: transparent;
-          font-size: 1.3rem;
+          font-size: 1.35rem;
           line-height: 1;
           border-radius: 50%;
           cursor: pointer;
           padding: 0;
-          transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.12s ease;
+          transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease, background 0.12s ease;
+          user-select: none;
         }
 
-        .vg-wa-react-btn:hover,
-        .vg-wa-react-btn:focus-visible {
-          transform: scale(1.3);
-          background: rgba(255, 255, 255, 0.12);
+        /* Fluid Magnifier Physics */
+        .vg-reactions-main-row:hover .vg-wa-react-btn {
+          transform: scale(0.92);
+          opacity: 0.85;
+        }
+
+        .vg-wa-react-btn:hover {
+          transform: scale(1.55) translateY(-6px) !important;
+          opacity: 1 !important;
+          z-index: 10;
+        }
+
+        /* Adjacent sibling magnification */
+        .vg-wa-react-btn:hover + .vg-wa-react-btn {
+          transform: scale(1.22) translateY(-2px) !important;
+          opacity: 0.95 !important;
+          z-index: 5;
+        }
+
+        .vg-reactions-main-row:has(.vg-wa-react-btn:nth-child(2):hover) .vg-wa-react-btn:nth-child(1),
+        .vg-reactions-main-row:has(.vg-wa-react-btn:nth-child(3):hover) .vg-wa-react-btn:nth-child(2),
+        .vg-reactions-main-row:has(.vg-wa-react-btn:nth-child(4):hover) .vg-wa-react-btn:nth-child(3),
+        .vg-reactions-main-row:has(.vg-wa-react-btn:nth-child(5):hover) .vg-wa-react-btn:nth-child(4),
+        .vg-reactions-main-row:has(.vg-wa-react-btn:nth-child(6):hover) .vg-wa-react-btn:nth-child(5) {
+          transform: scale(1.22) translateY(-2px) !important;
+          opacity: 0.95 !important;
+          z-index: 5;
         }
 
         .vg-wa-react-btn:active {
-          transform: scale(0.95);
+          transform: scale(1.1) !important;
+        }
+
+        .vg-wa-more-btn {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--text-primary, #ffffff);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          margin-left: 3px;
+          transition: background 0.18s ease, transform 0.18s ease;
+        }
+
+        .vg-wa-more-btn:hover,
+        .vg-wa-more-btn.is-active {
+          background: var(--primary, #6366f1);
+          color: #ffffff;
+          transform: scale(1.1);
+        }
+
+        .vg-plus-icon {
+          transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .vg-plus-icon.rotated {
+          transform: rotate(45deg);
+        }
+
+        /* Extended Mini Emoji Grid Drawer */
+        .vg-reactions-extended-grid {
+          display: grid;
+          grid-template-columns: repeat(6, 1fr);
+          gap: 6px;
+          padding-top: 6px;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          width: 100%;
+          animation: drawerSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes drawerSlideDown {
+          0% {
+            opacity: 0;
+            transform: translateY(-8px) scaleY(0.85);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scaleY(1);
+          }
+        }
+
+        .vg-wa-react-btn.extended-btn {
+          width: 32px;
+          height: 32px;
+          font-size: 1.25rem;
+        }
+
+        .vg-wa-react-btn.extended-btn:hover {
+          transform: scale(1.4) translateY(-3px) !important;
+        }
+
+        /* Enhanced message reaction pill row */
+        .message-reactions-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+          margin-top: 6px;
+        }
+
+        .reaction-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 9999px;
+          padding: 2px 8px;
+          font-size: 0.8rem;
+          color: var(--text-primary, #ffffff);
+          cursor: pointer;
+          transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+          animation: reactionPillPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .reaction-pill:hover {
+          background: rgba(255, 255, 255, 0.15);
+          transform: scale(1.06);
+        }
+
+        .reaction-pill.my-reaction {
+          background: rgba(99, 102, 241, 0.22);
+          border-color: rgba(99, 102, 241, 0.65);
+          color: #a5b4fc;
+          box-shadow: 0 0 8px rgba(99, 102, 241, 0.3);
+        }
+
+        @keyframes reactionPillPop {
+          0% {
+            opacity: 0;
+            transform: scale(0.6);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
         }
 
         /* WhatsApp-style Floating Scroll-to-Bottom Button */

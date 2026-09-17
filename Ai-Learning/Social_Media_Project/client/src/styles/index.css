@@ -11820,6 +11820,219 @@ select.form-input option,
   }
 }
 
+/* ==========================================================================
+   Phase 4: Message Reaction Experience (Option 1: Dynamic Magnifier & Full Picker Pill)
+   ========================================================================== */
+.vg-wa-floating-reactions {
+  position: absolute;
+  top: -50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(30, 41, 59, 0.94);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.18));
+  border-radius: 9999px;
+  padding: 4px 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  z-index: 60;
+  animation: waReactionPop 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  user-select: none;
+  transition: border-radius 0.2s ease, padding 0.2s ease, top 0.2s ease;
+}
+
+.vg-wa-floating-reactions.extended-open {
+  border-radius: 22px;
+  padding: 8px 12px;
+  top: -110px;
+}
+
+.vg-reactions-main-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.message-bubble-row.outgoing .vg-wa-floating-reactions {
+  right: 0;
+}
+
+.message-bubble-row.incoming .vg-wa-floating-reactions {
+  left: 0;
+}
+
+@keyframes waReactionPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.vg-wa-react-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  font-size: 1.35rem;
+  line-height: 1;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease, background 0.12s ease;
+  user-select: none;
+}
+
+/* Fluid Magnifier Physics */
+.vg-reactions-main-row:hover .vg-wa-react-btn {
+  transform: scale(0.92);
+  opacity: 0.85;
+}
+
+.vg-wa-react-btn:hover {
+  transform: scale(1.55) translateY(-6px) !important;
+  opacity: 1 !important;
+  z-index: 10;
+}
+
+/* Adjacent sibling magnification */
+.vg-wa-react-btn:hover + .vg-wa-react-btn {
+  transform: scale(1.22) translateY(-2px) !important;
+  opacity: 0.95 !important;
+  z-index: 5;
+}
+
+.vg-reactions-main-row:has(.vg-wa-react-btn:nth-child(2):hover) .vg-wa-react-btn:nth-child(1),
+.vg-reactions-main-row:has(.vg-wa-react-btn:nth-child(3):hover) .vg-wa-react-btn:nth-child(2),
+.vg-reactions-main-row:has(.vg-wa-react-btn:nth-child(4):hover) .vg-wa-react-btn:nth-child(3),
+.vg-reactions-main-row:has(.vg-wa-react-btn:nth-child(5):hover) .vg-wa-react-btn:nth-child(4),
+.vg-reactions-main-row:has(.vg-wa-react-btn:nth-child(6):hover) .vg-wa-react-btn:nth-child(5) {
+  transform: scale(1.22) translateY(-2px) !important;
+  opacity: 0.95 !important;
+  z-index: 5;
+}
+
+.vg-wa-react-btn:active {
+  transform: scale(1.1) !important;
+}
+
+.vg-wa-more-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #ffffff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-left: 3px;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.vg-wa-more-btn:hover,
+.vg-wa-more-btn.is-active {
+  background: var(--primary, #6366f1);
+  color: #ffffff;
+  transform: scale(1.1);
+}
+
+.vg-plus-icon {
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.vg-plus-icon.rotated {
+  transform: rotate(45deg);
+}
+
+/* Extended Mini Emoji Grid Drawer */
+.vg-reactions-extended-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  width: 100%;
+  animation: drawerSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes drawerSlideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scaleY(0.85);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+.vg-wa-react-btn.extended-btn {
+  width: 32px;
+  height: 32px;
+  font-size: 1.25rem;
+}
+
+.vg-wa-react-btn.extended-btn:hover {
+  transform: scale(1.4) translateY(-3px) !important;
+}
+
+/* Enhanced message reaction pill row */
+.message-reactions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 0.8rem;
+  color: var(--text-primary, #ffffff);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  animation: reactionPillPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.reaction-pill:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.06);
+}
+
+.reaction-pill.my-reaction {
+  background: rgba(99, 102, 241, 0.22);
+  border-color: rgba(99, 102, 241, 0.65);
+  color: #a5b4fc;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.3);
+}
+
+@keyframes reactionPillPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+
 
 
 

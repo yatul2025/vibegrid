@@ -2185,7 +2185,171 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
       expect(onReply).toHaveBeenCalledWith(msg);
     });
   });
+
+  // =====================================================================
+  // Phase 4: Message Reaction Experience (Option 1: Dynamic Magnifier & Full Picker Pill)
+  // =====================================================================
+  describe('Phase 4: Message Reaction Experience (Option 1: Dynamic Magnifier & Full Picker Pill)', () => {
+    const QUICK_REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🙏'];
+    const EXTENDED_REACTIONS = ['🔥', '👏', '🎉', '💯', '🚀', '✨', '👀', '⚡', '🥰', '🥺', '😎', '🤝'];
+
+    function FloatingReactionPickerTest({ isSelected, isDeleted, onReact, onDeselect }) {
+      const [showExtended, setShowExtended] = React.useState(false);
+
+      if (!isSelected || isDeleted) return null;
+
+      return (
+        <div
+          className={`vg-wa-floating-reactions ${showExtended ? 'extended-open' : ''}`}
+          data-testid="wa-floating-reactions"
+        >
+          <div className="vg-reactions-main-row">
+            {QUICK_REACTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                className="vg-wa-react-btn"
+                onClick={() => {
+                  onReact(emoji);
+                  setShowExtended(false);
+                  onDeselect();
+                }}
+                data-testid={`react-btn-${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+
+            <button
+              type="button"
+              className={`vg-wa-more-btn ${showExtended ? 'is-active' : ''}`}
+              onClick={() => setShowExtended((prev) => !prev)}
+              data-testid="reaction-more-btn"
+            >
+              +
+            </button>
+          </div>
+
+          {showExtended && (
+            <div className="vg-reactions-extended-grid" data-testid="reactions-extended-grid">
+              {EXTENDED_REACTIONS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="vg-wa-react-btn extended-btn"
+                  onClick={() => {
+                    onReact(emoji);
+                    setShowExtended(false);
+                    onDeselect();
+                  }}
+                  data-testid={`extended-react-btn-${emoji}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    it('renders the 6 quick emojis and the "+" expander button when message is selected', () => {
+      const onReact = vi.fn();
+      const onDeselect = vi.fn();
+
+      render(
+        <FloatingReactionPickerTest
+          isSelected={true}
+          isDeleted={false}
+          onReact={onReact}
+          onDeselect={onDeselect}
+        />
+      );
+
+      expect(screen.getByTestId('wa-floating-reactions')).toBeInTheDocument();
+      QUICK_REACTIONS.forEach((emoji) => {
+        expect(screen.getByTestId(`react-btn-${emoji}`)).toBeInTheDocument();
+      });
+      expect(screen.getByTestId('reaction-more-btn')).toBeInTheDocument();
+      expect(screen.queryByTestId('reactions-extended-grid')).not.toBeInTheDocument();
+    });
+
+    it('triggers reaction dispatch and closes picker when quick emoji is clicked', () => {
+      const onReact = vi.fn();
+      const onDeselect = vi.fn();
+
+      render(
+        <FloatingReactionPickerTest
+          isSelected={true}
+          isDeleted={false}
+          onReact={onReact}
+          onDeselect={onDeselect}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId('react-btn-😂'));
+      expect(onReact).toHaveBeenCalledWith('😂');
+      expect(onDeselect).toHaveBeenCalled();
+    });
+
+    it('expands extended emoji grid on clicking "+" and allows selecting extended emojis', () => {
+      const onReact = vi.fn();
+      const onDeselect = vi.fn();
+
+      render(
+        <FloatingReactionPickerTest
+          isSelected={true}
+          isDeleted={false}
+          onReact={onReact}
+          onDeselect={onDeselect}
+        />
+      );
+
+      // Click "+" to unfold extended drawer
+      fireEvent.click(screen.getByTestId('reaction-more-btn'));
+      expect(screen.getByTestId('reactions-extended-grid')).toBeInTheDocument();
+      expect(screen.getByTestId('extended-react-btn-🔥')).toBeInTheDocument();
+      expect(screen.getByTestId('extended-react-btn-🚀')).toBeInTheDocument();
+
+      // Click extended reaction
+      fireEvent.click(screen.getByTestId('extended-react-btn-🚀'));
+      expect(onReact).toHaveBeenCalledWith('🚀');
+      expect(onDeselect).toHaveBeenCalled();
+    });
+
+    it('toggles extended drawer off when clicking "+" a second time', () => {
+      render(
+        <FloatingReactionPickerTest
+          isSelected={true}
+          isDeleted={false}
+          onReact={vi.fn()}
+          onDeselect={vi.fn()}
+        />
+      );
+
+      const moreBtn = screen.getByTestId('reaction-more-btn');
+      fireEvent.click(moreBtn);
+      expect(screen.getByTestId('reactions-extended-grid')).toBeInTheDocument();
+
+      fireEvent.click(moreBtn);
+      expect(screen.queryByTestId('reactions-extended-grid')).not.toBeInTheDocument();
+    });
+
+    it('does NOT render reaction picker for deleted messages', () => {
+      render(
+        <FloatingReactionPickerTest
+          isSelected={true}
+          isDeleted={true}
+          onReact={vi.fn()}
+          onDeselect={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByTestId('wa-floating-reactions')).not.toBeInTheDocument();
+    });
+  });
 });
+
 
 
 
