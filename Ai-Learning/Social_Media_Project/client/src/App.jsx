@@ -19,6 +19,7 @@ import DemoModeIndicator from './components/DemoModeIndicator';
 import { usePWA } from './services/pwaManager';
 import VibiMascotGreeting from './components/VibiMascotGreeting';
 import ReturningUserWelcomeDrop from './components/ReturningUserWelcomeDrop';
+import AuroraCelebrationOverlay, { triggerCelebration } from './components/AuroraCelebrationOverlay';
 import {
   Home,
   Compass,
@@ -629,6 +630,10 @@ function AppContent() {
   const handlePostCreated = () => {
     setFeedRefreshKey((prev) => prev + 1);
     navigateToTab('feed');
+    triggerCelebration({
+      title: 'Post Published! 🎉',
+      subtitle: 'Shared to your feed and followers'
+    });
   };
 
   // Show a clean loading splash if checking initial auth state without a cached user
@@ -1305,6 +1310,9 @@ function AppContent() {
 
       {/* Phase 2 Delight Feature: Returning User Welcome Drop (Option 5) */}
       <ReturningUserWelcomeDrop user={user} unreadCount={unreadCount + unreadMessagesCount} />
+
+      {/* Phase 5 Delight Feature: Aurora Radiance & Shimmer Celebration (Option 2) */}
+      <AuroraCelebrationOverlay />
     </div>
   );
 }

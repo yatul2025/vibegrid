@@ -19,6 +19,7 @@ import FollowListModal from '../components/FollowListModal';
 import HashtagFeedModal from '../components/HashtagFeedModal';
 import ConfirmModal from '../components/ConfirmModal';
 import PasswordToggleButton from '../components/PasswordToggleIcon';
+import { triggerCelebration } from '../components/AuroraCelebrationOverlay';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 import {
   Heart,
@@ -440,6 +441,12 @@ export default function ProfilePage({
       if (res.success && res.data) {
         setIsFollowing(res.data.isFollowing);
         setStats((prev) => ({ ...prev, followers: res.data.followersCount }));
+        if (res.data.isFollowing) {
+          triggerCelebration({
+            title: `Following @${profile.username}! ✨`,
+            subtitle: 'Their updates will appear in your feed'
+          });
+        }
       } else {
         throw new Error(res.error || 'Failed to toggle follow');
       }
@@ -547,6 +554,10 @@ export default function ProfilePage({
 
         setProfileMsg({ type: 'success', text: 'Profile updated successfully!' });
         setIsEditing(false);
+        triggerCelebration({
+          title: 'Profile Saved! ✨',
+          subtitle: 'Your changes are live across VibeGrid'
+        });
       } else {
         setProfileMsg({ type: 'error', text: res.error || 'Update failed.' });
       }

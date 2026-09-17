@@ -23,6 +23,7 @@ import HashtagFeedModal from '../components/HashtagFeedModal';
 import FeedSidebar from '../components/FeedSidebar';
 import ConfirmModal from '../components/ConfirmModal';
 import HidePostModal from '../components/HidePostModal';
+import { triggerCelebration } from '../components/AuroraCelebrationOverlay';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 import {
   Heart,
@@ -264,6 +265,10 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
 
   const handleStoryCreated = () => {
     fetchStories();
+    triggerCelebration({
+      title: 'Story is Live! 📸',
+      subtitle: 'Visible to followers for 24 hours'
+    });
   };
 
   const handleStoryDeleted = () => {
