@@ -1,6 +1,6 @@
 /**
  * VibeGrid Progressive Web App Service Worker
- * Version: vibegrid-pwa-v42
+ * Version: vibegrid-pwa-v43
  * 
  * Features:
  * 1. Safe static asset caching & Network-First navigation
@@ -9,7 +9,7 @@
  * 4. Automatic cache cleanup on deployment and immediate client claiming
  */
 
-const CACHE_NAME = 'vibegrid-pwa-v42';
+const CACHE_NAME = 'vibegrid-pwa-v43';
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_ASSETS = [

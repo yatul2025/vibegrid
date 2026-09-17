@@ -236,7 +236,8 @@ function getReplySnippet(replyMsg) {
 export default function MessagesPage({
   initialTargetUsername = null,
   onNavigateToProfile,
-  onUnreadCountChange
+  onUnreadCountChange,
+  onBack
 }) {
   const { user, guardDemoAction } = useAuth();
 
@@ -1151,7 +1152,7 @@ export default function MessagesPage({
       setActivePartner(null);
       setActiveConversationId(null);
       setMessages([]);
-      if (onBack) onBack();
+      if (typeof onBack === 'function') onBack();
     }
   }, [user?.id, onBack]);
 
