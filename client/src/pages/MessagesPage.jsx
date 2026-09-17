@@ -90,7 +90,10 @@ import {
   Sparkles,
   Heart,
   PinOff,
-  ChevronDown
+  ChevronDown,
+  SquarePen,
+  ChevronRight,
+  MoreHorizontal
 } from 'lucide-react';
 
 function playNotificationChime() {
@@ -282,6 +285,11 @@ export default function MessagesPage({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+
+  // Redesign: Sidebar Filter tabs, inline search, and quick action more menu
+  const [inboxFilter, setInboxFilter] = useState('all'); // 'all' | 'unread' | 'groups'
+  const [inboxSearchQuery, setInboxSearchQuery] = useState('');
+  const [isSidebarMoreOpen, setIsSidebarMoreOpen] = useState(false);
 
   // Phase 1: Core Message Actions & Status States
   const [replyingTo, setReplyingTo] = useState(null);
@@ -3253,81 +3261,221 @@ export default function MessagesPage({
     });
   }, [messages, searchMediaType, chatSearchQuery]);
 
+  // Redesigned filtered conversations list
+  const filteredConversations = useMemo(() => {
+    let list = conversations;
+
+    // 1. Filter by selected tab
+    if (inboxFilter === 'unread') {
+      list = list.filter((c) => (c.unread_count || 0) > 0);
+    } else if (inboxFilter === 'groups') {
+      list = list.filter((c) => Boolean(c.is_group || c.type === 'group' || String(c.partner_username || '').startsWith('group-')));
+    }
+
+    // 2. Filter by search query
+    if (inboxSearchQuery.trim()) {
+      const q = inboxSearchQuery.toLowerCase().trim();
+      list = list.filter((c) => {
+        const isGroup = Boolean(c.is_group || c.type === 'group' || String(c.partner_username || '').startsWith('group-'));
+        const displayName = isGroup ? (c.group_title || c.partner_full_name || 'Group Chat') : (c.partner_username || '');
+        const lastMsg = c.last_message || '';
+        return displayName.toLowerCase().includes(q) || lastMsg.toLowerCase().includes(q);
+      });
+    }
+
+    return list;
+  }, [conversations, inboxFilter, inboxSearchQuery]);
+
+  // Dynamic counts for filter badges
+  const totalConversationsCount = conversations.length;
+  const unreadConversationsCount = useMemo(() => conversations.filter((c) => (c.unread_count || 0) > 0).length, [conversations]);
+  const groupsConversationsCount = useMemo(
+    () => conversations.filter((c) => Boolean(c.is_group || c.type === 'group' || String(c.partner_username || '').startsWith('group-'))).length,
+    [conversations]
+  );
+
   return (
     <div className="messages-page-wrapper">
       <div className={`messages-layout-container ${activePartner ? 'has-active-chat' : 'no-active-chat'}`}>
         {/* ================================================================== */}
-        {/* 1. Left Pane: Conversations Inbox                                  */}
+        {/* 1. Left Pane: Conversations Inbox (Redesigned VibeGrid Direct)     */}
         {/* ================================================================== */}
         <aside className="messages-sidebar">
-          <div className="messages-sidebar-header">
-            <div className="messages-sidebar-user">
-              <h3>Direct</h3>
-              <span className="messages-header-sub">@{user?.username}</span>
+          {/* Header Area */}
+          <div className="messages-sidebar-header-redesign">
+            <div className="messages-sidebar-user-block">
+              <h3 className="messages-sidebar-title">Direct</h3>
+              <div className="messages-sidebar-user-tag">
+                <span className="user-status-dot-active" />
+                <span className="messages-header-sub">@{user?.username}</span>
+              </div>
             </div>
-            <div className="messages-sidebar-actions">
+            <button
+              type="button"
+              className="btn-new-message-gradient"
+              onClick={openNewChatModal}
+              title="New Message"
+              aria-label="New Message"
+            >
+              <SquarePen size={16} className="new-msg-icon" />
+              <span>New Message</span>
+            </button>
+          </div>
+
+          {/* Quick Action Icons Row */}
+          <div className="messages-quick-actions-row">
+            <button
+              type="button"
+              className="btn-quick-action"
+              onClick={openCallHistoryModal}
+              title="Call History & Logs"
+              aria-label="Call History"
+            >
+              <PhoneCall size={18} />
+            </button>
+            <button
+              type="button"
+              className="btn-quick-action"
+              onClick={openCreateGroupModal}
+              title="Create Encrypted Group"
+              aria-label="Create Group"
+            >
+              <UserPlus size={18} />
+            </button>
+            <button
+              type="button"
+              className="btn-quick-action"
+              onClick={handleOpenStarredMessages}
+              title="Starred Messages"
+              aria-label="Starred Messages"
+            >
+              <Star size={18} />
+            </button>
+            <button
+              type="button"
+              className="btn-quick-action"
+              onClick={openKeyBackupModal}
+              title="E2EE Keys Backup & Restore"
+              aria-label="Key Backup"
+            >
+              <KeyRound size={18} />
+            </button>
+            <button
+              type="button"
+              className={`btn-quick-action ${isArchivedView ? 'active-archived' : ''}`}
+              onClick={() => {
+                const next = !isArchivedView;
+                setIsArchivedView(next);
+                fetchConversations(next);
+              }}
+              title={isArchivedView ? "View Active Inbox" : "View Archived Chats"}
+              aria-label="Archived Chats"
+            >
+              {isArchivedView ? <ArchiveRestore size={18} /> : <Archive size={18} />}
+            </button>
+            <div className="quick-action-more-wrap">
               <button
                 type="button"
-                className="btn-sidebar-icon"
-                onClick={openCallHistoryModal}
-                title="Call History & Logs"
-                aria-label="Call History"
+                className={`btn-quick-action ${isSidebarMoreOpen ? 'active' : ''}`}
+                onClick={() => setIsSidebarMoreOpen(!isSidebarMoreOpen)}
+                title="More options"
+                aria-label="More options"
               >
-                <PhoneCall size={16} />
+                <MoreHorizontal size={18} />
               </button>
-              <button
-                type="button"
-                className="btn-sidebar-icon"
-                onClick={openCreateGroupModal}
-                title="Create Encrypted Group"
-                aria-label="Create Group"
-              >
-                <Users size={16} />
-              </button>
-              <button
-                type="button"
-                className="btn-sidebar-icon"
-                onClick={handleOpenStarredMessages}
-                title="Starred Messages"
-                aria-label="Starred Messages"
-              >
-                <Star size={16} />
-              </button>
-              <button
-                type="button"
-                className="btn-sidebar-icon"
-                onClick={openKeyBackupModal}
-                title="E2EE Keys Backup & Restore"
-                aria-label="Key Backup"
-              >
-                <KeyRound size={16} />
-              </button>
-              <button
-                type="button"
-                className={`btn-sidebar-icon ${isArchivedView ? 'active-archived' : ''}`}
-                onClick={() => {
-                  const next = !isArchivedView;
-                  setIsArchivedView(next);
-                  fetchConversations(next);
-                }}
-                title={isArchivedView ? "View Active Inbox" : "View Archived Chats"}
-                aria-label="Archived Chats"
-              >
-                {isArchivedView ? <ArchiveRestore size={16} /> : <Archive size={16} />}
-              </button>
-              <button
-                type="button"
-                className="btn-sidebar-icon btn-new-chat-action"
-                onClick={openNewChatModal}
-                title="Start a new chat"
-                aria-label="New Chat"
-              >
-                <Plus size={18} />
-              </button>
+              {isSidebarMoreOpen && (
+                <div className="sidebar-more-dropdown">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSidebarMoreOpen(false);
+                      const next = !isArchivedView;
+                      setIsArchivedView(next);
+                      fetchConversations(next);
+                    }}
+                  >
+                    <Archive size={15} />
+                    <span>{isArchivedView ? 'Active Inbox' : 'Archived Chats'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSidebarMoreOpen(false);
+                      openKeyBackupModal();
+                    }}
+                  >
+                    <KeyRound size={15} />
+                    <span>Security & Keys</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSidebarMoreOpen(false);
+                      fetchConversations(isArchivedView);
+                    }}
+                  >
+                    <RotateCw size={15} />
+                    <span>Refresh Inbox</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="messages-inbox-list">
+          {/* Search Bar */}
+          <div className="messages-inbox-search-wrap">
+            <div className="messages-inbox-search-bar">
+              <Search size={16} className="search-icon-dim" />
+              <input
+                type="text"
+                value={inboxSearchQuery}
+                onChange={(e) => setInboxSearchQuery(e.target.value)}
+                placeholder="Search chats, groups, people..."
+                className="messages-inbox-search-input"
+              />
+              {inboxSearchQuery && (
+                <button
+                  type="button"
+                  className="btn-clear-inbox-search"
+                  onClick={() => setInboxSearchQuery('')}
+                  title="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Filter Pills: All, Unread, Groups with dynamic counts */}
+          <div className="messages-filter-tabs-row">
+            <button
+              type="button"
+              className={`filter-pill-btn ${inboxFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setInboxFilter('all')}
+            >
+              <span>All</span>
+              <span className="filter-count-badge">{totalConversationsCount}</span>
+            </button>
+            <button
+              type="button"
+              className={`filter-pill-btn ${inboxFilter === 'unread' ? 'active' : ''}`}
+              onClick={() => setInboxFilter('unread')}
+            >
+              <span>Unread</span>
+              <span className="filter-count-badge">{unreadConversationsCount}</span>
+            </button>
+            <button
+              type="button"
+              className={`filter-pill-btn ${inboxFilter === 'groups' ? 'active' : ''}`}
+              onClick={() => setInboxFilter('groups')}
+            >
+              <span>Groups</span>
+              <span className="filter-count-badge">{groupsConversationsCount}</span>
+            </button>
+          </div>
+
+          {/* Scrollable Conversation Cards List */}
+          <div className="messages-inbox-list custom-scrollbar">
             {isArchivedView && (
               <div className="archived-view-banner">
                 <span>📁 Archived Conversations</span>
@@ -3348,19 +3496,35 @@ export default function MessagesPage({
                 <div className="spinner-sm"></div>
                 <span>Loading conversations...</span>
               </div>
-            ) : conversations.length === 0 ? (
+            ) : filteredConversations.length === 0 ? (
               <div className="conversations-empty">
                 <VibiEmptyState
                   pose="mail"
-                  title={isArchivedView ? 'No archived conversations' : 'No messages yet'}
-                  subtitle={isArchivedView ? 'Chats you archive will appear here safely.' : 'Connect with friends to start chatting!'}
-                  actionLabel={!isArchivedView ? 'Send a Message' : undefined}
-                  onAction={!isArchivedView ? openNewChatModal : undefined}
+                  title={
+                    inboxSearchQuery
+                      ? 'No matches found'
+                      : inboxFilter === 'unread'
+                      ? 'No unread messages'
+                      : inboxFilter === 'groups'
+                      ? 'No group channels'
+                      : isArchivedView
+                      ? 'No archived conversations'
+                      : 'No messages yet'
+                  }
+                  subtitle={
+                    inboxSearchQuery
+                      ? `No results found for "${inboxSearchQuery}"`
+                      : isArchivedView
+                      ? 'Chats you archive will appear here safely.'
+                      : 'Connect with friends or start a group to chat!'
+                  }
+                  actionLabel={!isArchivedView && !inboxSearchQuery ? 'Send a Message' : undefined}
+                  onAction={!isArchivedView && !inboxSearchQuery ? openNewChatModal : undefined}
                   className="vibi-empty-compact"
                 />
               </div>
             ) : (
-              conversations.map((c) => {
+              filteredConversations.map((c) => {
                 const isGroup = Boolean(c.is_group || c.type === 'group' || String(c.partner_username || '').startsWith('group-'));
                 const isActive = activePartner && (
                   isGroup
@@ -3371,17 +3535,20 @@ export default function MessagesPage({
                 const isOnline = !isGroup && onlineUserIds.has(Number(c.partner_id));
                 const displayName = isGroup ? (c.group_title || c.partner_full_name || 'Group Chat') : `@${c.partner_username}`;
                 const targetKey = c.partner_username || ('group-' + (c.conversation_id || c.id));
+                const memberCount = c.member_count || (c.members ? c.members.length : 3);
+                const isDeletedSnippet = c.last_message_deleted || (typeof c.last_message === 'string' && c.last_message.toLowerCase().includes('message was deleted'));
 
                 return (
                   <div
                     key={c.partner_id || c.conversation_id || c.id}
-                    className={`conversation-item ${isActive ? 'active' : ''} ${hasUnread ? 'has-unread' : ''} ${isGroup ? 'group-conv-item' : ''}`}
+                    className={`conversation-card ${isActive ? 'active' : ''} ${hasUnread ? 'has-unread' : ''} ${isGroup ? 'group-conv-card' : ''}`}
                     onClick={() => selectConversation(targetKey)}
                     onContextMenu={(e) => handleConversationContextMenu(e, c)}
                   >
+                    {/* Left: Avatar */}
                     <div className="conversation-avatar-wrap">
                       {isGroup ? (
-                        <div className="group-avatar-icon-wrap" title={displayName}>
+                        <div className="group-card-avatar" title={displayName}>
                           <Users size={20} className="group-avatar-icon" />
                         </div>
                       ) : (
@@ -3395,31 +3562,40 @@ export default function MessagesPage({
                       {hasUnread && <span className="conversation-unread-dot" />}
                     </div>
 
+                    {/* Middle: Content */}
                     <div className="conversation-meta">
                       <div className="conversation-name-row">
                         <span className="conversation-username">
                           {displayName}
                           {isGroup && (
                             <span className="group-members-pill">
-                              👥 {c.member_count || (c.members ? c.members.length : 2)}
+                              <Users size={11} className="pill-users-icon" /> {memberCount}
                             </span>
                           )}
                           {c.is_pinned && (
                             <Pin size={11} className="conversation-pin-icon" fill="#818cf8" color="#818cf8" title="Pinned to top" />
                           )}
                         </span>
-                        <span className="conversation-time">
+                        <div className="conversation-time-wrap">
                           {c.is_muted && (
                             <VolumeX size={12} className="conversation-mute-icon" title="Muted" />
                           )}
-                          {formatRelativeTime(c.last_message_at)}
-                        </span>
+                          <span className="conversation-time">
+                            {formatRelativeTime(c.last_message_at)}
+                          </span>
+                        </div>
                       </div>
+
                       <div className="conversation-preview-row">
                         {drafts[c.partner_username] ? (
                           <span className="conversation-snippet draft-snippet">
                             <span className="draft-tag">Draft: </span>
                             {drafts[c.partner_username]}
+                          </span>
+                        ) : isDeletedSnippet ? (
+                          <span className="conversation-snippet deleted-snippet">
+                            {c.last_sender_id === user?.id ? 'You: ' : ''}
+                            <em>This message was deleted</em>
                           </span>
                         ) : (
                           <span className="conversation-snippet">
@@ -3427,11 +3603,20 @@ export default function MessagesPage({
                             {c.last_message || (isGroup ? 'Group created' : 'Encrypted message')}
                           </span>
                         )}
-                        {hasUnread && (
-                          <span className="conversation-badge">{c.unread_count}</span>
-                        )}
+
+                        <div className="conversation-card-right-status">
+                          {c.last_sender_id === user?.id && !hasUnread && (
+                            <CheckCheck size={14} className="conversation-read-tick" />
+                          )}
+                          {hasUnread && (
+                            <span className="conversation-badge">{c.unread_count}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
+
+                    {/* Right: Chevron */}
+                    <ChevronRight size={18} className="conversation-chevron-icon" />
                   </div>
                 );
               })

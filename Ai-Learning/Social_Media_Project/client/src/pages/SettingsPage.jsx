@@ -3432,8 +3432,8 @@ export default function SettingsPage({
                 </span>
               </div>
               <div className="diagnostics-row">
-                <span className="diagnostics-label">PWA Version</span>
-                <span className="diagnostics-value">vibegrid-pwa-v43</span>
+                <span className="diagnostics-label">PWA Cache Version:</span>
+                <span className="diagnostics-value">vibegrid-pwa-v44</span>
               </div>
               <div className="diagnostics-row">
                 <span className="diagnostics-label">Platform Notes</span>
