@@ -37,7 +37,7 @@ export default function StoryTray({
   const otherCreators = creators.filter((c) => !user || c.userId !== user.id);
 
   return (
-    <div className="story-tray-wrapper">
+    <div className="story-tray-wrapper" data-no-swipe="true">
       <div className="story-tray-scroll">
         {/* 1. "Your Story" Circle */}
         {user && (

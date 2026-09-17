@@ -319,8 +319,16 @@ function AppContent() {
       const y = touch.clientY;
       const target = e.target;
 
-      // Ignore if starting near extreme viewport edges to avoid OS back/forward edge gestures
-      if (x < 24 || x > window.innerWidth - 24) {
+      // When on Feed / Home: full-screen swipe to Explore is completely disabled.
+      // Explore is accessed via Bottom Navigation -> Explore (or extreme right edge pull).
+      const isExtremeRightEdge = x >= window.innerWidth - 18;
+      if (currentTab === 'feed' && !isExtremeRightEdge) {
+        touchStartRef.current.isIgnored = true;
+        return;
+      }
+
+      // On non-feed tabs, ignore extreme OS back/forward bezel margins
+      if (currentTab !== 'feed' && (x < 16 || x > window.innerWidth - 16)) {
         touchStartRef.current.isIgnored = true;
         return;
       }
@@ -331,7 +339,7 @@ function AppContent() {
         return;
       }
 
-      // Ignore if inside text inputs, horizontal scrollbars, sliders, or media carousels
+      // Strict gesture ownership: ignore if touch starts inside stories, categories, tabs, post cards, or inputs
       const ignoredSelector = [
         'input',
         'textarea',
@@ -341,7 +349,21 @@ function AppContent() {
         '.stories-bar',
         '.stories-container',
         '.story-tray',
+        '.story-tray-wrapper',
+        '.story-tray-scroll',
+        '.story-item',
+        '.story-avatar-container',
         '.story-slider',
+        '.feed-category-chips-bar-wrapper',
+        '.feed-category-chips-bar',
+        '.category-chip',
+        '.feed-primary-tabs',
+        '.feed-primary-tab',
+        '.feed-header-container',
+        '.feed-post-card',
+        '.post-card',
+        '.post-item',
+        '.feed-page-container',
         '.image-slider',
         '.carousel',
         '[data-no-swipe]',
@@ -370,7 +392,8 @@ function AppContent() {
         x,
         y,
         time: Date.now(),
-        isIgnored: false
+        isIgnored: false,
+        isEdgeSwipe: isExtremeRightEdge
       };
     };
 
@@ -380,8 +403,8 @@ function AppContent() {
       const deltaX = touch.clientX - touchStartRef.current.x;
       const deltaY = touch.clientY - touchStartRef.current.y;
 
-      // Cancel if user is primarily scrolling vertically
-      if (Math.abs(deltaY) > 35 && Math.abs(deltaY) > Math.abs(deltaX) * 1.2) {
+      // Cancel if user is primarily scrolling vertically (Feed, comments, etc.)
+      if (Math.abs(deltaY) > 25 && Math.abs(deltaY) > Math.abs(deltaX) * 1.1) {
         touchStartRef.current.isIgnored = true;
       }
     };
@@ -400,6 +423,11 @@ function AppContent() {
 
       // Must be a distinct horizontal gesture (>= 50px) completed within 650ms and predominantly horizontal
       if (deltaTime > 650 || absX < 50 || absX < absY * 1.4) {
+        return;
+      }
+
+      // If on Feed tab, only allow navigation if touch started as an extreme screen edge pull
+      if (currentTab === 'feed' && !touchStartRef.current.isEdgeSwipe) {
         return;
       }
 

@@ -614,10 +614,10 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
           />
 
           {/* Feed Header Container (Clean 2-level Instagram/Threads style) */}
-          <div className="feed-header-container">
+          <div className="feed-header-container" data-no-swipe="true">
             <div className="feed-header-top">
               {/* Primary Feed Toggle: For You | Following | Close Friends */}
-              <div className="feed-primary-tabs" role="tablist" aria-label="Feed Mode">
+              <div className="feed-primary-tabs" role="tablist" aria-label="Feed Mode" data-no-swipe="true">
                 <button
                   type="button"
                   className={`feed-primary-tab ${feedMode === 'forYou' ? 'active' : ''}`}
@@ -683,8 +683,8 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
             </div>
 
             {/* Secondary Category Filter Pills with smooth horizontal scrolling */}
-            <div className="feed-category-chips-bar-wrapper">
-              <div className="feed-category-chips-bar" role="tablist" aria-label="Feed Categories">
+            <div className="feed-category-chips-bar-wrapper" data-no-swipe="true">
+              <div className="feed-category-chips-bar" role="tablist" aria-label="Feed Categories" data-no-swipe="true">
                 {FEED_CATEGORIES.map((cat) => (
                   <button
                     key={cat.id}
