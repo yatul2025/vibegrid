@@ -38,6 +38,7 @@ export default function OverviewView({
   pinnedCount = 0,
   joinRequestsCount = 0,
   ephemeralTimer = null,
+  initialAction = null,
   onNavigate,
   onUpdateTitle,
   onUpdateDescription,
@@ -46,13 +47,28 @@ export default function OverviewView({
   onDeleteGroup,
   actionLoading
 }) {
+  const dangerZoneRef = React.useRef(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(group?.title || group?.partner_full_name || 'Group Chat');
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [descValue, setDescValue] = useState(convDetails?.description || group?.description || '');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(initialAction === 'leave');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(initialAction === 'delete');
+
+  React.useEffect(() => {
+    if (initialAction === 'leave') {
+      setShowLeaveConfirm(true);
+      setTimeout(() => {
+        dangerZoneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    } else if (initialAction === 'delete') {
+      setShowDeleteConfirm(true);
+      setTimeout(() => {
+        dangerZoneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    }
+  }, [initialAction]);
 
   const title = group?.title || group?.partner_full_name || 'Group Chat';
   const description = convDetails?.description || group?.description || 'No group description set. Tap to add one.';
@@ -483,7 +499,7 @@ export default function OverviewView({
       )}
 
       {/* Danger Zone Actions */}
-      <div className="space-y-2 pt-3 border-t border-white/10 text-left">
+      <div ref={dangerZoneRef} className="space-y-2 pt-3 border-t border-white/10 text-left">
         <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-1">
           Group Actions
         </h3>

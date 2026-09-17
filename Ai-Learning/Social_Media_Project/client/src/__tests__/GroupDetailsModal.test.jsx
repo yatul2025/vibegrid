@@ -168,4 +168,47 @@ describe('GroupDetailsModal Component', () => {
       expect(onClose).toHaveBeenCalled();
     });
   });
+
+  it('auto-displays leave confirmation dialog when initialAction="leave"', async () => {
+    render(
+      <GroupDetailsModal
+        isOpen={true}
+        onClose={vi.fn()}
+        group={mockGroup}
+        initialAction="leave"
+      />
+    );
+
+    // Leave confirmation dialog is immediately visible without clicking "Leave Group" first
+    expect(screen.getByText('Leave this group?')).toBeInTheDocument();
+    expect(screen.getByText('Confirm Leave')).toBeInTheDocument();
+  });
+
+  it('handles conversationId fallback when group id is absent', async () => {
+    render(
+      <GroupDetailsModal
+        isOpen={true}
+        onClose={vi.fn()}
+        group={{ title: 'Fallback Group' }}
+        conversationId="conv-uuid-1234"
+      />
+    );
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith('/conversations/conv-uuid-1234/members');
+    });
+  });
+
+  it('renders members view when initialScreen="members"', async () => {
+    render(
+      <GroupDetailsModal
+        isOpen={true}
+        onClose={vi.fn()}
+        group={mockGroup}
+        initialScreen="members"
+      />
+    );
+
+    expect(screen.getByPlaceholderText('Search members...')).toBeInTheDocument();
+  });
 });

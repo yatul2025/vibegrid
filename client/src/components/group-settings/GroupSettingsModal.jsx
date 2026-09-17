@@ -33,6 +33,9 @@ export default function GroupSettingsModal({
   isOpen,
   onClose,
   group,
+  conversationId,
+  initialScreen = 'overview',
+  initialAction = null,
   onGroupUpdated,
   onGroupDeleted,
   onGroupLeft
@@ -40,7 +43,7 @@ export default function GroupSettingsModal({
   const { user } = useAuth();
 
   // Navigation Stack
-  const [screenStack, setScreenStack] = useState(['overview']);
+  const [screenStack, setScreenStack] = useState([initialScreen || 'overview']);
   const currentScreen = screenStack[screenStack.length - 1] || 'overview';
 
   // State
@@ -62,7 +65,8 @@ export default function GroupSettingsModal({
   const [searchingMembers, setSearchingMembers] = useState(false);
   const [addingMemberId, setAddingMemberId] = useState(null);
 
-  const groupId = String(group?.conversation_id || group?.id || '').replace(/^(group-)+/i, '').trim();
+  const rawId = group?.conversation_id || group?.id || group?.partner_id || conversationId || '';
+  const groupId = String(rawId).replace(/^(group-|grp-)+/i, '').trim();
 
   // Roles
   const currentUserMember = members.find((m) => Number(m.id) === Number(user?.id));
@@ -89,10 +93,10 @@ export default function GroupSettingsModal({
   // Reset navigation when modal opens
   useEffect(() => {
     if (isOpen) {
-      setScreenStack(['overview']);
+      setScreenStack([initialScreen || 'overview']);
       setShowAddDrawer(false);
     }
-  }, [isOpen, groupId]);
+  }, [isOpen, groupId, initialScreen]);
 
   // Load Group Data
   const fetchGroupDetails = useCallback(async () => {
@@ -517,6 +521,7 @@ export default function GroupSettingsModal({
               pinnedCount={pinnedMessages.length || 2}
               joinRequestsCount={joinRequests.length}
               ephemeralTimer={convDetails?.ephemeral_timer_seconds}
+              initialAction={initialAction}
               onNavigate={navigateTo}
               onUpdateTitle={handleUpdateTitle}
               onUpdateDescription={handleUpdateDescription}

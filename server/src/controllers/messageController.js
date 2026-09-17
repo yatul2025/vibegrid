@@ -393,6 +393,7 @@ const getMessages = async (req, res, next) => {
 
       const groupPartner = {
         id: groupId,
+        conversation_id: groupId,
         username: `group-${groupId}`,
         full_name: cmRow.title || 'Group Chat',
         title: cmRow.title || 'Group Chat',

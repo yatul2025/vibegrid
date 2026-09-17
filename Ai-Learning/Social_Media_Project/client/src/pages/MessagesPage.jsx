@@ -562,13 +562,21 @@ export default function MessagesPage({
     closeModalWithHistory('create_group', () => setIsCreateGroupOpen(false));
   };
 
-  const openGroupDetailsModal = () => {
+  const [groupDetailsInitialScreen, setGroupDetailsInitialScreen] = useState('overview');
+  const [groupDetailsInitialAction, setGroupDetailsInitialAction] = useState(null);
+
+  const openGroupDetailsModal = (screen = 'overview', action = null) => {
+    setGroupDetailsInitialScreen(screen);
+    setGroupDetailsInitialAction(action);
     pushModalHistory('group_details');
     setIsGroupDetailsOpen(true);
   };
 
   const closeGroupDetailsModal = () => {
-    closeModalWithHistory('group_details', () => setIsGroupDetailsOpen(false));
+    closeModalWithHistory('group_details', () => {
+      setIsGroupDetailsOpen(false);
+      setGroupDetailsInitialAction(null);
+    });
   };
 
   const openStarredModal = () => {
@@ -606,6 +614,7 @@ export default function MessagesPage({
       }
       if (isGroupDetailsOpenRef.current) {
         setIsGroupDetailsOpen(false);
+        setGroupDetailsInitialAction(null);
         return;
       }
       if (isStarredModalOpenRef.current) {
@@ -4216,15 +4225,21 @@ export default function MessagesPage({
                       <MoreVertical size={18} />
                     </button>
                     {isConvMenuOpen && (
-                      <div className="conv-dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                      <div
+                        className="conv-dropdown-menu"
+                        onClick={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                      >
                         {activePartner?.is_group ? (
                           <>
                             <button
                               type="button"
                               className="conv-dropdown-item"
-                              onClick={() => {
-                                openGroupDetailsModal();
-                                setTimeout(() => setIsConvMenuOpen(false), 50);
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setIsConvMenuOpen(false);
+                                openGroupDetailsModal('overview');
                               }}
                             >
                               <Users size={16} />
@@ -4234,14 +4249,16 @@ export default function MessagesPage({
                             <button
                               type="button"
                               className="conv-dropdown-item"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setIsConvMenuOpen(false);
                                 if (isMuted) {
                                   handleToggleMute(null, null);
                                 } else {
                                   setMuteTargetConv(null);
                                   setIsMuteModalOpen(true);
                                 }
-                                setTimeout(() => setIsConvMenuOpen(false), 50);
                               }}
                             >
                               {isMuted ? <Volume2 size={16} /> : <VolumeX size={16} />}
@@ -4251,9 +4268,11 @@ export default function MessagesPage({
                             <button
                               type="button"
                               className="conv-dropdown-item"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setIsConvMenuOpen(false);
                                 handleTogglePinConv();
-                                setTimeout(() => setIsConvMenuOpen(false), 50);
                               }}
                             >
                               {isPinned ? <PinOff size={16} /> : <Pin size={16} />}
@@ -4265,10 +4284,12 @@ export default function MessagesPage({
                             <button
                               type="button"
                               className="conv-dropdown-item text-danger"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setIsConvMenuOpen(false);
                                 setClearChatTargetConv(null);
                                 setIsClearChatModalOpen(true);
-                                setTimeout(() => setIsConvMenuOpen(false), 50);
                               }}
                             >
                               <Trash2 size={16} />
@@ -4278,9 +4299,11 @@ export default function MessagesPage({
                             <button
                               type="button"
                               className="conv-dropdown-item text-danger"
-                              onClick={() => {
-                                openGroupDetailsModal();
-                                setTimeout(() => setIsConvMenuOpen(false), 50);
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setIsConvMenuOpen(false);
+                                openGroupDetailsModal('overview', 'leave');
                               }}
                             >
                               <LogOut size={16} />
@@ -5453,6 +5476,9 @@ export default function MessagesPage({
         isOpen={isGroupDetailsOpen}
         onClose={closeGroupDetailsModal}
         group={activePartner}
+        conversationId={activeConversationId || (activePartner?.conversation_id || activePartner?.id)}
+        initialScreen={groupDetailsInitialScreen}
+        initialAction={groupDetailsInitialAction}
         onGroupUpdated={(updatedGroup) => {
           setActivePartner((prev) => (prev ? { ...prev, ...updatedGroup } : prev));
           fetchConversations();

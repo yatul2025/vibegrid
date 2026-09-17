@@ -818,10 +818,33 @@ const leaveGroup = async (req, res, next) => {
     }
 
     // Check membership
-    const memberRes = await query(
+    let memberRes = await query(
       'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
       [cleanId, userId]
     );
+
+    // If user created conversation but membership record was delayed, auto-register creator
+    if (memberRes.rows.length === 0) {
+      try {
+        const creatorCheck = await query(
+          `SELECT id, created_by FROM conversations WHERE id = $1 LIMIT 1`,
+          [cleanId]
+        );
+        if (creatorCheck?.rows?.length > 0 && Number(creatorCheck.rows[0].created_by) === Number(userId)) {
+          await query(
+            `INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, 'admin') ON CONFLICT DO NOTHING`,
+            [cleanId, userId]
+          );
+          const reCheck = await query(
+            'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+            [cleanId, userId]
+          );
+          if (reCheck?.rows?.length > 0) {
+            memberRes = reCheck;
+          }
+        }
+      } catch (_) {}
+    }
 
     if (memberRes.rows.length === 0) {
       return res.status(400).json({ success: false, error: 'You are not a member of this group.' });
@@ -1200,10 +1223,33 @@ const getGroupMembers = async (req, res, next) => {
       });
     }
 
-    const memberCheck = await query(
+    let memberCheck = await query(
       'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
       [cleanId, userId]
     );
+
+    // If user created conversation but membership record was delayed, auto-register creator
+    if (memberCheck.rows.length === 0) {
+      try {
+        const creatorCheck = await query(
+          `SELECT id, created_by FROM conversations WHERE id = $1 LIMIT 1`,
+          [cleanId]
+        );
+        if (creatorCheck?.rows?.length > 0 && Number(creatorCheck.rows[0].created_by) === Number(userId)) {
+          await query(
+            `INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, 'admin') ON CONFLICT DO NOTHING`,
+            [cleanId, userId]
+          );
+          const reCheck = await query(
+            'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+            [cleanId, userId]
+          );
+          if (reCheck?.rows?.length > 0) {
+            memberCheck = reCheck;
+          }
+        }
+      } catch (_) {}
+    }
 
     if (memberCheck.rows.length === 0) {
       return res.status(403).json({ success: false, error: 'You are not a member of this group.' });
