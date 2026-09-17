@@ -5,6 +5,7 @@
  */
 
 const { query } = require('../config/db');
+const crypto = require('crypto');
 
 /**
  * @desc    Get all conversations for the authenticated user
@@ -1218,7 +1219,7 @@ const getGroupMembers = async (req, res, next) => {
     );
 
     const convRes = await query(
-      'SELECT id, title, type, created_by, created_at FROM conversations WHERE id = $1 LIMIT 1',
+      'SELECT id, title, type, created_by, description, avatar_url, invite_code, permissions, ephemeral_timer_seconds, created_at, updated_at FROM conversations WHERE id = $1 LIMIT 1',
       [cleanId]
     );
 
@@ -1227,6 +1228,667 @@ const getGroupMembers = async (req, res, next) => {
       data: {
         conversation: convRes.rows[0] || null,
         members: membersRes.rows
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Update group title, description, and avatar
+ * @route   PUT /api/conversations/:id/info
+ * @access  Private (Admin or Member with info edit permission)
+ */
+const updateGroupInfo = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const { title, description, avatar_url } = req.body;
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
+    if (!isUuid) {
+      return res.status(400).json({ success: false, error: 'Invalid group conversation ID.' });
+    }
+
+    const memberRes = await query(
+      `SELECT cm.role, c.permissions, c.created_by
+       FROM conversation_members cm
+       JOIN conversations c ON c.id = cm.conversation_id
+       WHERE cm.conversation_id = $1 AND cm.user_id = $2 LIMIT 1`,
+      [cleanId, userId]
+    );
+
+    if (memberRes.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'You are not a member of this group.' });
+    }
+
+    const member = memberRes.rows[0];
+    const perms = member.permissions || {};
+    const isAdmin = member.role === 'admin' || Number(member.created_by) === Number(userId);
+    const canEdit = isAdmin || perms.allow_member_info_edit === true;
+
+    if (!canEdit) {
+      return res.status(403).json({ success: false, error: 'Only admins can edit group info.' });
+    }
+
+    const updateRes = await query(
+      `UPDATE conversations
+       SET title = COALESCE($1, title),
+           description = COALESCE($2, description),
+           avatar_url = COALESCE($3, avatar_url),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4
+       RETURNING id, type, title, description, avatar_url, created_by, permissions, ephemeral_timer_seconds, created_at, updated_at`,
+      [
+        title !== undefined && title.trim() ? title.trim() : null,
+        description !== undefined ? description.trim() : null,
+        avatar_url !== undefined ? avatar_url : null,
+        cleanId
+      ]
+    );
+
+    const updatedConv = updateRes.rows[0];
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conv:${cleanId}`).emit('group:updated', { conversation: updatedConv });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { conversation: updatedConv }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get group permissions
+ * @route   GET /api/conversations/:id/permissions
+ * @access  Private (Member)
+ */
+const getGroupPermissions = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
+
+    const convRes = await query(
+      `SELECT c.id, c.permissions, cm.role, c.created_by
+       FROM conversations c
+       JOIN conversation_members cm ON cm.conversation_id = c.id
+       WHERE c.id = $1 AND cm.user_id = $2 LIMIT 1`,
+      [cleanId, userId]
+    );
+
+    if (convRes.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not a group member.' });
+    }
+
+    const row = convRes.rows[0];
+    const defaultPerms = {
+      allow_member_messages: true,
+      allow_member_media: true,
+      allow_member_invites: true,
+      allow_member_info_edit: false,
+      require_admin_approval: false,
+      allow_anyone_to_join: true
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        permissions: { ...defaultPerms, ...(row.permissions || {}) },
+        isAdmin: row.role === 'admin' || Number(row.created_by) === Number(userId),
+        isOwner: Number(row.created_by) === Number(userId)
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Update group permissions
+ * @route   PUT /api/conversations/:id/permissions
+ * @access  Private (Admin only)
+ */
+const updateGroupPermissions = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const { permissions } = req.body;
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
+
+    const memberRes = await query(
+      `SELECT cm.role, c.created_by, c.permissions
+       FROM conversation_members cm
+       JOIN conversations c ON c.id = cm.conversation_id
+       WHERE cm.conversation_id = $1 AND cm.user_id = $2 LIMIT 1`,
+      [cleanId, userId]
+    );
+
+    if (memberRes.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not a member.' });
+    }
+
+    const isAdm = memberRes.rows[0].role === 'admin' || Number(memberRes.rows[0].created_by) === Number(userId);
+    if (!isAdm) {
+      return res.status(403).json({ success: false, error: 'Only admins can modify permissions.' });
+    }
+
+    const merged = {
+      ...(memberRes.rows[0].permissions || {}),
+      ...(permissions || {})
+    };
+
+    const updateRes = await query(
+      `UPDATE conversations
+       SET permissions = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING id, permissions`,
+      [JSON.stringify(merged), cleanId]
+    );
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conv:${cleanId}`).emit('group:permissions_updated', {
+        conversationId: cleanId,
+        permissions: updateRes.rows[0].permissions
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { permissions: updateRes.rows[0].permissions }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get or generate group invite code
+ * @route   GET /api/conversations/:id/invite
+ * @access  Private (Member / Admin)
+ */
+const getGroupInvite = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
+
+    const convRes = await query(
+      `SELECT c.id, c.invite_code, c.permissions, cm.role, c.created_by
+       FROM conversations c
+       JOIN conversation_members cm ON cm.conversation_id = c.id
+       WHERE c.id = $1 AND cm.user_id = $2 LIMIT 1`,
+      [cleanId, userId]
+    );
+
+    if (convRes.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not a group member.' });
+    }
+
+    const row = convRes.rows[0];
+    const isAdmin = row.role === 'admin' || Number(row.created_by) === Number(userId);
+    const perms = row.permissions || {};
+    if (!isAdmin && perms.allow_member_invites === false) {
+      return res.status(403).json({ success: false, error: 'Member invites are disabled for this group.' });
+    }
+
+    let code = row.invite_code;
+    if (!code) {
+      code = 'grp_' + crypto.randomBytes(6).toString('hex');
+      await query('UPDATE conversations SET invite_code = $1 WHERE id = $2', [code, cleanId]);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        invite_code: code,
+        invite_url: `/join/${code}`,
+        allow_anyone_to_join: perms.allow_anyone_to_join !== false,
+        require_admin_approval: !!perms.require_admin_approval
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Regenerate group invite code
+ * @route   POST /api/conversations/:id/invite/regenerate
+ * @access  Private (Admin only)
+ */
+const regenerateGroupInvite = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
+
+    const memberRes = await query(
+      `SELECT cm.role, c.created_by
+       FROM conversation_members cm
+       JOIN conversations c ON c.id = cm.conversation_id
+       WHERE cm.conversation_id = $1 AND cm.user_id = $2 LIMIT 1`,
+      [cleanId, userId]
+    );
+
+    if (memberRes.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not a group member.' });
+    }
+
+    const isAdmin = memberRes.rows[0].role === 'admin' || Number(memberRes.rows[0].created_by) === Number(userId);
+    if (!isAdmin) {
+      return res.status(403).json({ success: false, error: 'Only admins can regenerate invite codes.' });
+    }
+
+    const newCode = 'grp_' + crypto.randomBytes(6).toString('hex');
+    await query('UPDATE conversations SET invite_code = $1 WHERE id = $2', [newCode, cleanId]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        invite_code: newCode,
+        invite_url: `/join/${newCode}`
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Join group via invite code
+ * @route   POST /api/conversations/join/:inviteCode
+ * @access  Private (Authenticated)
+ */
+const joinGroupByInviteCode = async (req, res, next) => {
+  try {
+    const { inviteCode } = req.params;
+    const userId = req.user.id;
+
+    const convRes = await query(
+      `SELECT id, title, description, avatar_url, permissions, created_by
+       FROM conversations
+       WHERE invite_code = $1 LIMIT 1`,
+      [inviteCode]
+    );
+
+    if (convRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Group invite link is invalid or expired.' });
+    }
+
+    const conv = convRes.rows[0];
+    const perms = conv.permissions || {};
+
+    // Check if user is already a member
+    const existing = await query(
+      'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+      [conv.id, userId]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          conversation_id: conv.id,
+          already_member: true,
+          message: 'You are already a member of this group.'
+        }
+      });
+    }
+
+    // Check if admin approval is required
+    if (perms.require_admin_approval) {
+      await query(
+        `INSERT INTO group_join_requests (conversation_id, user_id, status)
+         VALUES ($1, $2, 'pending')
+         ON CONFLICT (conversation_id, user_id)
+         DO UPDATE SET status = 'pending', updated_at = CURRENT_TIMESTAMP`,
+        [conv.id, userId]
+      );
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`conv:${conv.id}`).emit('group:join_request_created', {
+          conversation_id: conv.id,
+          user_id: userId,
+          username: req.user.username,
+          full_name: req.user.full_name,
+          avatar_url: req.user.avatar_url
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          requested: true,
+          conversation_id: conv.id,
+          title: conv.title,
+          message: 'Join request submitted! Group admins will review your request.'
+        }
+      });
+    }
+
+    // Add directly
+    await query(
+      `INSERT INTO conversation_members (conversation_id, user_id, role)
+       VALUES ($1, $2, 'member')
+       ON CONFLICT (conversation_id, user_id) DO NOTHING`,
+      [conv.id, userId]
+    );
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conv:${conv.id}`).emit('group:members_added', {
+        conversationId: conv.id,
+        members: [{ id: userId, username: req.user.username, full_name: req.user.full_name, avatar_url: req.user.avatar_url, role: 'member' }]
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        joined: true,
+        conversation_id: conv.id,
+        title: conv.title,
+        message: 'Successfully joined the group!'
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get pending join requests for a group
+ * @route   GET /api/conversations/:id/join-requests
+ * @access  Private (Admin only)
+ */
+const getJoinRequests = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
+
+    const memberRes = await query(
+      `SELECT cm.role, c.created_by
+       FROM conversation_members cm
+       JOIN conversations c ON c.id = cm.conversation_id
+       WHERE cm.conversation_id = $1 AND cm.user_id = $2 LIMIT 1`,
+      [cleanId, userId]
+    );
+
+    if (memberRes.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not a member.' });
+    }
+
+    const isAdmin = memberRes.rows[0].role === 'admin' || Number(memberRes.rows[0].created_by) === Number(userId);
+    if (!isAdmin) {
+      return res.status(403).json({ success: false, error: 'Only admins can review join requests.' });
+    }
+
+    const requestsRes = await query(
+      `SELECT jr.id, jr.user_id, jr.status, jr.created_at,
+              u.username, u.full_name, u.avatar_url
+       FROM group_join_requests jr
+       JOIN users u ON u.id = jr.user_id
+       WHERE jr.conversation_id = $1 AND jr.status = 'pending'
+       ORDER BY jr.created_at DESC`,
+      [cleanId]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: { requests: requestsRes.rows }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Review (approve/reject) a join request
+ * @route   POST /api/conversations/:id/join-requests/:requestId/review
+ * @access  Private (Admin only)
+ */
+const reviewJoinRequest = async (req, res, next) => {
+  try {
+    const { id, requestId } = req.params;
+    const userId = req.user.id;
+    const { action } = req.body;
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
+
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ success: false, error: 'Invalid action. Must be approve or reject.' });
+    }
+
+    const memberRes = await query(
+      `SELECT cm.role, c.created_by
+       FROM conversation_members cm
+       JOIN conversations c ON c.id = cm.conversation_id
+       WHERE cm.conversation_id = $1 AND cm.user_id = $2 LIMIT 1`,
+      [cleanId, userId]
+    );
+
+    if (memberRes.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not a member.' });
+    }
+
+    const isAdmin = memberRes.rows[0].role === 'admin' || Number(memberRes.rows[0].created_by) === Number(userId);
+    if (!isAdmin) {
+      return res.status(403).json({ success: false, error: 'Only admins can review join requests.' });
+    }
+
+    const reqRes = await query(
+      `SELECT id, user_id, conversation_id, status
+       FROM group_join_requests
+       WHERE id = $1 AND conversation_id = $2 LIMIT 1`,
+      [requestId, cleanId]
+    );
+
+    if (reqRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Join request not found.' });
+    }
+
+    const targetUserId = reqRes.rows[0].user_id;
+
+    if (action === 'approve') {
+      await query('UPDATE group_join_requests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', ['approved', requestId]);
+      await query(
+        `INSERT INTO conversation_members (conversation_id, user_id, role)
+         VALUES ($1, $2, 'member')
+         ON CONFLICT (conversation_id, user_id) DO NOTHING`,
+        [cleanId, targetUserId]
+      );
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`conv:${cleanId}`).emit('group:members_added', {
+          conversationId: cleanId,
+          members: [{ id: targetUserId, role: 'member' }]
+        });
+      }
+    } else {
+      await query('UPDATE group_join_requests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', ['rejected', requestId]);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { requestId, action, status: action === 'approve' ? 'approved' : 'rejected' }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Promote or demote group member role
+ * @route   PUT /api/conversations/:id/members/:userId/role
+ * @access  Private (Admin / Owner)
+ */
+const updateMemberRole = async (req, res, next) => {
+  try {
+    const { id, userId: targetUserId } = req.params;
+    const actorId = req.user.id;
+    const { role } = req.body;
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
+
+    if (!['admin', 'member'].includes(role)) {
+      return res.status(400).json({ success: false, error: 'Role must be admin or member.' });
+    }
+
+    const convRes = await query(
+      'SELECT id, created_by FROM conversations WHERE id = $1 LIMIT 1',
+      [cleanId]
+    );
+    if (convRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Group not found.' });
+    }
+
+    const conv = convRes.rows[0];
+    const isOwner = Number(conv.created_by) === Number(actorId);
+
+    const actorMember = await query(
+      'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+      [cleanId, actorId]
+    );
+
+    if (actorMember.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not a member.' });
+    }
+
+    const isActorAdmin = isOwner || actorMember.rows[0].role === 'admin';
+    if (!isActorAdmin) {
+      return res.status(403).json({ success: false, error: 'Only admins can change member roles.' });
+    }
+
+    // Owner cannot be demoted
+    if (Number(targetUserId) === Number(conv.created_by) && role !== 'admin') {
+      return res.status(400).json({ success: false, error: 'The group creator/owner cannot be demoted.' });
+    }
+
+    // Only owner can demote an admin
+    if (role === 'member' && !isOwner) {
+      return res.status(403).json({ success: false, error: 'Only the group owner can demote an admin.' });
+    }
+
+    await query(
+      'UPDATE conversation_members SET role = $1 WHERE conversation_id = $2 AND user_id = $3',
+      [role, cleanId, targetUserId]
+    );
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conv:${cleanId}`).emit('group:role_updated', {
+        conversationId: cleanId,
+        userId: Number(targetUserId),
+        role
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { userId: Number(targetUserId), role }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get all media, files, and links for a group conversation
+ * @route   GET /api/conversations/:id/media
+ * @access  Private (Member)
+ */
+const getGroupMedia = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
+
+    const memberCheck = await query(
+      'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+      [cleanId, userId]
+    );
+
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Not a member.' });
+    }
+
+    const mediaRes = await query(
+      `SELECT m.id, m.sender_id, m.content, m.message_type, m.created_at,
+              u.username, u.full_name, u.avatar_url
+       FROM messages m
+       JOIN users u ON u.id = m.sender_id
+       WHERE m.conversation_id = $1 AND m.is_deleted = false
+       ORDER BY m.created_at DESC`,
+      [cleanId]
+    );
+
+    const photos = [];
+    const videos = [];
+    const files = [];
+    const links = [];
+
+    const urlRegex = /(https?:\/\/[^\s]+)/gi;
+
+    for (const msg of mediaRes.rows) {
+      const type = (msg.message_type || 'text').toLowerCase();
+      const content = msg.content || '';
+
+      if (type === 'image' || content.match(/\.(jpeg|jpg|gif|png|webp|svg)(\?.*)?$/i)) {
+        photos.push({
+          id: msg.id,
+          url: content,
+          sender: { id: msg.sender_id, username: msg.username, full_name: msg.full_name },
+          created_at: msg.created_at
+        });
+      } else if (type === 'video' || content.match(/\.(mp4|webm|mov|ogg)(\?.*)?$/i)) {
+        videos.push({
+          id: msg.id,
+          url: content,
+          sender: { id: msg.sender_id, username: msg.username, full_name: msg.full_name },
+          created_at: msg.created_at
+        });
+      } else if (type === 'file' || content.match(/\.(pdf|doc|docx|xls|xlsx|zip|tar|gz|txt)(\?.*)?$/i)) {
+        const nameMatch = content.split('/').pop() || 'document.file';
+        files.push({
+          id: msg.id,
+          url: content,
+          name: nameMatch,
+          size: '1.2 MB',
+          sender: { id: msg.sender_id, username: msg.username, full_name: msg.full_name },
+          created_at: msg.created_at
+        });
+      }
+
+      const foundLinks = content.match(urlRegex);
+      if (foundLinks) {
+        for (const link of foundLinks) {
+          links.push({
+            id: `${msg.id}-${links.length}`,
+            url: link,
+            sender: { id: msg.sender_id, username: msg.username, full_name: msg.full_name },
+            created_at: msg.created_at
+          });
+        }
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        photos,
+        videos,
+        files,
+        links
       }
     });
   } catch (error) {
@@ -1249,5 +1911,15 @@ module.exports = {
   deleteMessage,
   toggleReaction,
   uploadEncryptedAttachment,
-  updateEphemeralTimer
+  updateEphemeralTimer,
+  updateGroupInfo,
+  getGroupPermissions,
+  updateGroupPermissions,
+  getGroupInvite,
+  regenerateGroupInvite,
+  joinGroupByInviteCode,
+  getJoinRequests,
+  reviewJoinRequest,
+  updateMemberRole,
+  getGroupMedia
 };

@@ -219,6 +219,23 @@ const testConnection = async () => {
           UNIQUE(conversation_id, message_id)
         );
         CREATE INDEX IF NOT EXISTS idx_pinned_messages_conv ON conversation_pinned_messages(conversation_id);
+
+        -- Group Settings & Permissions
+        ALTER TABLE conversations ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+        ALTER TABLE conversations ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT NULL;
+        ALTER TABLE conversations ADD COLUMN IF NOT EXISTS invite_code VARCHAR(64) DEFAULT NULL;
+        ALTER TABLE conversations ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '{"allow_member_messages":true,"allow_member_media":true,"allow_member_invites":true,"allow_member_info_edit":false,"require_admin_approval":false,"allow_anyone_to_join":true}';
+
+        CREATE TABLE IF NOT EXISTS group_join_requests (
+          id SERIAL PRIMARY KEY,
+          conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          status VARCHAR(20) NOT NULL DEFAULT 'pending',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(conversation_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_group_join_requests_conv ON group_join_requests(conversation_id, status);
       `);
     } catch (tblErr) {
       console.warn('[DB] Table init check warning:', tblErr.message);
