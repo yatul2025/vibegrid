@@ -49,13 +49,15 @@ export default function GroupDetailsModal({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState({ text: '', type: '' });
+  const [convDetails, setConvDetails] = useState(null);
 
-  const groupId = group?.id || (group?.conversation_id ? String(group.conversation_id).replace(/^group-/, '') : null);
+  const groupId = String(group?.conversation_id || group?.id || '').replace(/^(group-)+/i, '').trim();
 
   // Determine current user role
   const currentUserMember = members.find((m) => Number(m.id) === Number(user?.id));
-  const isCreator = group?.created_by ? Number(group.created_by) === Number(user?.id) : false;
-  const isAdmin = isCreator || currentUserMember?.role === 'admin';
+  const creatorId = convDetails?.created_by || group?.created_by;
+  const isCreator = creatorId ? Number(creatorId) === Number(user?.id) : false;
+  const isAdmin = isCreator || currentUserMember?.role === 'admin' || group?.user_role === 'admin';
 
   // Load members whenever modal opens
   useEffect(() => {
@@ -74,6 +76,9 @@ export default function GroupDetailsModal({
         const res = await apiClient.get(`/conversations/${groupId}/members`);
         if (res.success && res.data?.members) {
           setMembers(res.data.members);
+          if (res.data.conversation) {
+            setConvDetails(res.data.conversation);
+          }
         } else if (Array.isArray(group?.members) && group.members.length > 0) {
           setMembers(group.members);
         }
@@ -224,9 +229,20 @@ export default function GroupDetailsModal({
   // Delete Group
   const handleDeleteGroup = async () => {
     if (!groupId || actionLoading) return;
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('Delete operation timed out. Please retry.')), 10000);
+    });
+
     try {
       setActionLoading(true);
-      const res = await apiClient.delete(`/conversations/${groupId}`);
+      setStatusMessage({ text: '', type: '' });
+      const res = await Promise.race([
+        apiClient.delete(`/conversations/${groupId}`),
+        timeoutPromise
+      ]);
+      clearTimeout(timeoutId);
+
       if (res.success) {
         // Remove from local cache
         try {
@@ -241,6 +257,7 @@ export default function GroupDetailsModal({
         throw new Error(res.error || 'Failed to delete group');
       }
     } catch (err) {
+      if (timeoutId) clearTimeout(timeoutId);
       setStatusMessage({ text: err.message || 'Failed to delete group', type: 'error' });
       setActionLoading(false);
     }
@@ -694,6 +711,11 @@ export default function GroupDetailsModal({
                   <div style={{ fontSize: '0.8rem', color: '#d1d5db', marginBottom: '12px' }}>
                     This action cannot be undone. All messages and media in this group will be deleted for everyone.
                   </div>
+                  {statusMessage.text && statusMessage.type === 'error' && (
+                    <div style={{ color: '#ef4444', fontSize: '0.8rem', marginBottom: '10px', fontWeight: 600 }}>
+                      ⚠️ {statusMessage.text}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                     <button
                       type="button"

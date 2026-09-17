@@ -228,7 +228,7 @@ const getOrCreateConversation = async (req, res, next) => {
 const getMessages = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const conversationId = req.params.id;
+    const conversationId = (req.params.id || '').replace(/^(group-)+/i, '').trim();
 
     // Verify membership
     const memberCheck = await query(
@@ -302,7 +302,7 @@ const getMessages = async (req, res, next) => {
 const sendMessage = async (req, res, next) => {
   try {
     const senderId = req.user.id;
-    const conversationId = req.params.id;
+    const conversationId = (req.params.id || '').replace(/^(group-)+/i, '').trim();
     const { ciphertext, ivNonce, senderDeviceId, content, messageType = 'text', replyToId = null } = req.body;
 
     // Verify membership
@@ -695,7 +695,7 @@ const deleteGroup = async (req, res, next) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const cleanId = id.replace(/^group-/, '').trim();
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
     if (!isUuid) {
@@ -729,7 +729,7 @@ const deleteGroup = async (req, res, next) => {
       [cleanId, userId]
     );
 
-    const isCreator = conv.created_by === userId;
+    const isCreator = conv.created_by && Number(conv.created_by) === Number(userId);
     const isAdmin = memberRes.rows.length > 0 && memberRes.rows[0].role === 'admin';
 
     if (!isCreator && !isAdmin) {
@@ -776,7 +776,7 @@ const leaveGroup = async (req, res, next) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const cleanId = id.replace(/^group-/, '').trim();
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
     if (!isUuid) {
@@ -874,7 +874,7 @@ const addMembers = async (req, res, next) => {
     const { id } = req.params;
     const userId = req.user.id;
     const { memberIds } = req.body;
-    const cleanId = id.replace(/^group-/, '').trim();
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     if (!Array.isArray(memberIds) || memberIds.length === 0) {
       return res.status(400).json({ success: false, error: 'memberIds array is required.' });
@@ -992,7 +992,7 @@ const removeMember = async (req, res, next) => {
     const { id, userId: targetUserIdStr } = req.params;
     const requesterId = req.user.id;
     const targetUserId = parseInt(targetUserIdStr, 10);
-    const cleanId = id.replace(/^group-/, '').trim();
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     if (isNaN(targetUserId)) {
       return res.status(400).json({ success: false, error: 'Invalid target user ID.' });
@@ -1063,7 +1063,7 @@ const updateGroup = async (req, res, next) => {
     const { id } = req.params;
     const userId = req.user.id;
     const { title } = req.body;
-    const cleanId = id.replace(/^group-/, '').trim();
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     if (!title || !title.trim()) {
       return res.status(400).json({ success: false, error: 'Group title is required.' });
@@ -1111,7 +1111,7 @@ const getGroupMembers = async (req, res, next) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const cleanId = id.replace(/^group-/, '').trim();
+    const cleanId = (id || '').replace(/^(group-)+/i, '').trim();
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
     if (!isUuid) {

@@ -114,6 +114,8 @@ const getConversations = async (req, res, next) => {
           CASE WHEN lm.is_deleted THEN NULL ELSE lm.ciphertext END AS last_ciphertext,
           CASE WHEN lm.is_deleted THEN NULL ELSE lm.iv_nonce END AS last_iv_nonce,
           c.id AS conversation_id,
+          c.created_by AS created_by,
+          cm.role AS user_role,
           COALESCE(lm.created_at, c.created_at) AS last_message_at,
           lm.sender_id AS last_sender_id,
           COALESCE(lm.is_deleted, FALSE) AS last_is_deleted,
@@ -224,10 +226,11 @@ const getMessages = async (req, res, next) => {
     const cleanUsername = username.trim().toLowerCase();
 
     // 0. Handle Group Conversation Messages
-    const isCleanUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanUsername);
+    const cleanGroupId = cleanUsername.replace(/^(group-)+/i, '');
+    const isCleanUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanGroupId);
     if (cleanUsername.startsWith('group-') || isCleanUuid) {
-      const groupId = cleanUsername.replace(/^group-/, '');
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(groupId);
+      const groupId = cleanGroupId;
+      const isUuid = isCleanUuid;
 
       if (!isUuid) {
         return res.status(200).json({
@@ -262,7 +265,7 @@ const getMessages = async (req, res, next) => {
       }
 
       let memberCheck = await query(
-        `SELECT cm.role, cm.is_pinned, cm.is_muted, cm.muted_until, cm.is_archived, c.title, c.ephemeral_timer_seconds, c.created_at
+        `SELECT cm.role, cm.is_pinned, cm.is_muted, cm.muted_until, cm.is_archived, c.title, c.ephemeral_timer_seconds, c.created_at, c.created_by
          FROM conversation_members cm
          JOIN conversations c ON cm.conversation_id = c.id
          WHERE cm.conversation_id = $1 AND cm.user_id = $2 LIMIT 1`,
@@ -275,13 +278,13 @@ const getMessages = async (req, res, next) => {
           `SELECT id, title, created_by, ephemeral_timer_seconds, created_at FROM conversations WHERE id = $1 LIMIT 1`,
           [groupId]
         );
-        if (creatorCheck.rows.length > 0 && creatorCheck.rows[0].created_by === userId) {
+        if (creatorCheck.rows.length > 0 && Number(creatorCheck.rows[0].created_by) === Number(userId)) {
           await query(
             `INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, 'admin') ON CONFLICT DO NOTHING`,
             [groupId, userId]
           );
           memberCheck = await query(
-            `SELECT cm.role, cm.is_pinned, cm.is_muted, cm.muted_until, cm.is_archived, c.title, c.ephemeral_timer_seconds, c.created_at
+            `SELECT cm.role, cm.is_pinned, cm.is_muted, cm.muted_until, cm.is_archived, c.title, c.ephemeral_timer_seconds, c.created_at, c.created_by
              FROM conversation_members cm
              JOIN conversations c ON cm.conversation_id = c.id
              WHERE cm.conversation_id = $1 AND cm.user_id = $2 LIMIT 1`,
@@ -379,6 +382,8 @@ const getMessages = async (req, res, next) => {
         title: cmRow.title || 'Group Chat',
         avatar_url: '/uploads/avatars/default-group.png',
         is_group: true,
+        created_by: cmRow.created_by,
+        user_role: cmRow.role,
         member_count: members.length,
         members: members,
         is_online: false,
@@ -719,10 +724,11 @@ const sendMessage = async (req, res, next) => {
     const cleanUsername = username.trim().toLowerCase();
 
     // 0. Handle Group Messages
-    const isCleanUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanUsername);
+    const cleanGroupId = cleanUsername.replace(/^(group-)+/i, '');
+    const isCleanUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanGroupId);
     if (cleanUsername.startsWith('group-') || isCleanUuid) {
-      const groupId = cleanUsername.replace(/^group-/, '');
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(groupId);
+      const groupId = cleanGroupId;
+      const isUuid = isCleanUuid;
 
       const cleanContent = ciphertext
         ? '[Encrypted Message]'

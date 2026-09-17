@@ -1213,7 +1213,17 @@ export default function MessagesPage({
 
       if (isCurrentChat) {
         setMessages((prev) => {
-          if (prev.some((m) => m.id === processedMsg.id)) return prev;
+          if (prev.some((m) => Number(m.id) === Number(processedMsg.id))) return prev;
+          if (processedMsg.is_mine) {
+            const hasTemp = prev.some((m) => String(m.id).startsWith('temp-') && m.content === processedMsg.content);
+            if (hasTemp) {
+              return prev.map((m) =>
+                String(m.id).startsWith('temp-') && m.content === processedMsg.content
+                  ? processedMsg
+                  : m
+              );
+            }
+          }
           return [...prev, processedMsg];
         });
 
@@ -1764,7 +1774,9 @@ export default function MessagesPage({
         }
       }
 
-      const targetParam = activePartner.username || (activePartner.id ? `group-${activePartner.id}` : '');
+      const targetParam = activePartner.is_group
+        ? `group-${String(activePartner.conversation_id || activePartner.id || activePartner.username).replace(/^(group-)+/i, '')}`
+        : (activePartner.username || activePartner.id);
       const res = await apiClient.post(`/messages/${targetParam}`, {
         content: encEnvelope.ciphertext ? '' : textToSend,
         ciphertext: encEnvelope.ciphertext || null,
@@ -1846,7 +1858,9 @@ export default function MessagesPage({
         }
       }
 
-      const targetParam = activePartner.username || (activePartner.id ? `group-${activePartner.id}` : '');
+      const targetParam = activePartner.is_group
+        ? `group-${String(activePartner.conversation_id || activePartner.id || activePartner.username).replace(/^(group-)+/i, '')}`
+        : (activePartner.username || activePartner.id);
       const res = await apiClient.post(`/messages/${targetParam}`, {
         content: textToSend,
         ciphertext: encEnvelope.ciphertext || null,
@@ -2046,7 +2060,9 @@ export default function MessagesPage({
         }
       }
 
-      const targetParam = activePartner.username || (activePartner.id ? `group-${activePartner.id}` : '');
+      const targetParam = activePartner.is_group
+        ? `group-${String(activePartner.conversation_id || activePartner.id || activePartner.username).replace(/^(group-)+/i, '')}`
+        : (activePartner.username || activePartner.id);
       const res = await apiClient.post(`/messages/${targetParam}`, {
         content: payloadString,
         ciphertext: encEnvelope.ciphertext || null,
@@ -2129,7 +2145,9 @@ export default function MessagesPage({
         }
       }
 
-      const targetParam = activePartner.username || (activePartner.id ? `group-${activePartner.id}` : '');
+      const targetParam = activePartner.is_group
+        ? `group-${String(activePartner.conversation_id || activePartner.id || activePartner.username).replace(/^(group-)+/i, '')}`
+        : (activePartner.username || activePartner.id);
       const res = await apiClient.post(`/messages/${targetParam}`, {
         content: payloadString,
         ciphertext: encEnvelope.ciphertext || null,
@@ -2451,10 +2469,13 @@ export default function MessagesPage({
       }
     }
 
-    // Cancel long press on vertical scroll
-    if (longPressTimerRef.current && (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8)) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
+    // Cancel long press and reset double-tap candidate on movement/scroll
+    if (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8) {
+      lastTapMsgRef.current = { id: null, time: 0 };
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
     }
 
     // Rubber-band horizontal swipe for swipe-to-reply

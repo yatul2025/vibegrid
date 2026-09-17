@@ -6803,6 +6803,7 @@ a.nav-tab-btn {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   background: var(--card-bg);
 }
 
@@ -7068,7 +7069,8 @@ a.nav-tab-btn {
 
 /* Scrollable Inbox List & Cards */
 .messages-inbox-list {
-  flex: 1;
+  flex: 1 1 0%;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -7950,7 +7952,9 @@ a.mobile-nav-item {
   }
 
   .messages-inbox-list {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 76px);
+    flex: 1 1 0%;
+    min-height: 0;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
   }
 
   .messages-layout-container {
