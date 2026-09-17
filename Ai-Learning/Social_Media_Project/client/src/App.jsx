@@ -20,6 +20,7 @@ import { usePWA } from './services/pwaManager';
 import VibiMascotGreeting from './components/VibiMascotGreeting';
 import ReturningUserWelcomeDrop from './components/ReturningUserWelcomeDrop';
 import AuroraCelebrationOverlay, { triggerCelebration } from './components/AuroraCelebrationOverlay';
+import NetworkStatusPill from './components/NetworkStatusPill';
 import {
   Home,
   Compass,
@@ -689,15 +690,8 @@ function AppContent() {
         {a11yStatus}
       </div>
 
-      {/* PWA Network & Update Notifications */}
-      {isOffline && (
-        <div className="pwa-network-status-banner offline" role="status" aria-live="polite">
-          <span className="pwa-status-icon">
-            <WifiOff size={16} />
-          </span>
-          <span className="pwa-status-text">You are currently offline. Cached feed and assets remain accessible.</span>
-        </div>
-      )}
+      {/* Phase 7 Delight Feature: Offline & Reconnection Experience (Option 1: Floating Dynamic Pill & Emerald Pulse) */}
+      <NetworkStatusPill isOffline={isOffline} />
       {hasUpdate && (
         <div className="pwa-update-banner" role="alert">
           <div className="pwa-update-info">
