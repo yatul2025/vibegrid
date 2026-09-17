@@ -1,13 +1,15 @@
 import React from 'react';
+import soundFx from '../services/soundFxService';
 
 /**
  * SpringToggle
  * ============
- * Phase 8 Option 1: Fluid Spring Switch with Haptic Pulse.
+ * Phase 8 Option 1: Fluid Spring Switch with Haptic Pulse & Web Audio Snap.
  * Features:
  * - Elastic squash & stretch physics on active press/release
  * - Bouncy overshoot easing: cubic-bezier(0.34, 1.56, 0.64, 1)
  * - Native haptic vibration on mobile devices
+ * - Tactile Web Audio toggle snap sound FX (Phase 9)
  * - Fully accessible with keyboard navigation and ARIA attributes
  * - Zero layout shift drop-in replacement for standard toggle switches
  */
@@ -18,7 +20,8 @@ export default function SpringToggle({
   id,
   name,
   'aria-label': ariaLabel,
-  title
+  title,
+  'data-testid': testId
 }) {
   const handleChange = (e) => {
     if (disabled) return;
@@ -32,6 +35,11 @@ export default function SpringToggle({
       }
     }
 
+    // Play tactile snap sound effect
+    try {
+      soundFx.play('toggle');
+    } catch {}
+
     if (onChange) {
       onChange(e);
     }
@@ -41,6 +49,7 @@ export default function SpringToggle({
     <label
       className={`switch-toggle spring-switch-toggle ${checked ? 'is-checked' : ''} ${disabled ? 'is-disabled' : ''}`}
       title={title}
+      data-testid={testId}
     >
       <input
         type="checkbox"

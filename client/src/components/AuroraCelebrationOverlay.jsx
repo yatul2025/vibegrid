@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X } from 'lucide-react';
+import soundFx from '../services/soundFxService';
 
 /**
  * Dispatches a global celebration event that AuroraCelebrationOverlay catches.
@@ -52,6 +53,11 @@ export default function AuroraCelebrationOverlay() {
           // Ignore vibrate errors if disallowed by browser policy
         }
       }
+
+      // Trigger Web Audio celebration sound FX
+      try {
+        soundFx.play('celebration');
+      } catch {}
     };
 
     window.addEventListener('vibegrid:celebrate', handleCelebrateEvent);

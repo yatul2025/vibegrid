@@ -25,6 +25,7 @@ import PasswordToggleButton from '../components/PasswordToggleIcon';
 import SpringToggle from '../components/SpringToggle';
 import pushNotificationService from '../services/pushNotificationService';
 import { THEMES, getThemeById } from '../constants/themes';
+import soundFx, { SOUND_PACKS } from '../services/soundFxService';
 import {
   User,
   Mail,
@@ -38,7 +39,10 @@ import {
   CheckCircle2,
   AlertCircle,
   Palette,
-  Check
+  Check,
+  Volume2,
+  VolumeX,
+  Music
 } from 'lucide-react';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
@@ -216,6 +220,20 @@ export default function SettingsPage({
   const [pushDiagnostics, setPushDiagnostics] = useState(null);
   const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
   const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
+
+  // Sound FX Preferences States (Phase 9 Option 6)
+  const [soundEnabled, setSoundEnabled] = useState(() => soundFx.isEnabled());
+  const [soundPack, setSoundPack] = useState(() => soundFx.getPack());
+  const [soundVolume, setSoundVolume] = useState(() => soundFx.getVolume());
+
+  useEffect(() => {
+    const unsub = soundFx.subscribe((state) => {
+      setSoundEnabled(state.enabled);
+      setSoundPack(state.pack);
+      setSoundVolume(state.volume);
+    });
+    return unsub;
+  }, []);
 
   // Account Deactivation Modal States
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
@@ -998,7 +1016,7 @@ export default function SettingsPage({
     { id: 'contact', label: 'Account & Contact', icon: <Mail size={18} strokeWidth={1.75} />, description: 'Email & phone verification' },
     { id: 'security', label: 'Password & Security', icon: <Lock size={18} strokeWidth={1.75} />, description: 'Password, sessions & devices' },
     { id: 'privacy', label: 'Privacy & Permissions', icon: <ShieldCheck size={18} strokeWidth={1.75} />, description: 'Account privacy, DMs & comments' },
-    { id: 'notifications', label: 'Notifications', icon: <Bell size={18} strokeWidth={1.75} />, description: 'Push & email preferences' },
+    { id: 'notifications', label: 'Notifications', icon: <Bell size={18} strokeWidth={1.75} />, description: 'Push, sound FX & email' },
     { id: 'danger', label: 'Account Status', icon: <AlertTriangle size={18} strokeWidth={1.75} />, description: 'Deactivate or delete account' }
   ];
 
@@ -2161,6 +2179,137 @@ export default function SettingsPage({
                       🔒 Notification preferences are locked on official demo accounts.
                     </div>
                   )}
+
+                  {/* In-App Sound Effects & Web Audio FX Card (Phase 9 Option 6) */}
+                  <div className="pwa-push-status-card sound-fx-settings-card" data-testid="sound-fx-settings-card" style={{ marginBottom: '16px' }}>
+                    <div className="pwa-push-status-header">
+                      <div className="pwa-push-status-title">
+                        <span className="pwa-push-icon" style={{ background: soundEnabled ? 'rgba(99, 102, 241, 0.15)' : 'rgba(148, 163, 184, 0.1)', border: soundEnabled ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid rgba(148, 163, 184, 0.2)' }}>
+                          {soundEnabled ? '🎵' : '🔇'}
+                        </span>
+                        <div>
+                          <strong>In-App Sound Effects & Web Audio FX</strong>
+                          <p>Dynamic procedural audio for likes, messages, reactions, toggles & celebrations (0 kB downloads, zero latency).</p>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span className={`pwa-status-pill ${soundEnabled ? 'pill-success' : 'pill-muted'}`}>
+                          {soundEnabled ? 'Audio Active' : 'Muted'}
+                        </span>
+                        <SpringToggle
+                          checked={soundEnabled}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            soundFx.setEnabled(val);
+                            if (val) soundFx.play('toggle');
+                          }}
+                          aria-label="Toggle In-App Sound Effects"
+                          data-testid="sound-fx-toggle"
+                        />
+                      </div>
+                    </div>
+
+                    {soundEnabled && (
+                      <div className="sound-fx-options-panel" style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
+                        {/* Sound Theme Selector */}
+                        <div style={{ marginBottom: '14px' }}>
+                          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                            Sound Theme Pack
+                          </label>
+                          <div className="sound-packs-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+                            {SOUND_PACKS.map((p) => {
+                              const isSelected = soundPack === p.id;
+                              return (
+                                <div
+                                  key={p.id}
+                                  onClick={() => {
+                                    soundFx.setPack(p.id);
+                                    soundFx.play('like', p.id);
+                                  }}
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      soundFx.setPack(p.id);
+                                      soundFx.play('like', p.id);
+                                    }
+                                  }}
+                                  className={`sound-pack-card ${isSelected ? 'is-selected' : ''}`}
+                                  data-testid={`sound-pack-${p.id}`}
+                                  style={{
+                                    background: isSelected ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-card, rgba(255,255,255,0.03))',
+                                    border: isSelected ? '2px solid var(--primary-color, #6366f1)' : '1px solid var(--border-color, rgba(255,255,255,0.08))',
+                                    borderRadius: '12px',
+                                    padding: '12px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    position: 'relative'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span style={{ fontSize: '18px' }}>{p.icon}</span>
+                                      <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{p.name}</strong>
+                                    </div>
+                                    {isSelected && (
+                                      <span style={{ fontSize: '11px', color: '#6366f1', fontWeight: 700, background: 'rgba(99,102,241,0.15)', padding: '2px 6px', borderRadius: '4px' }}>
+                                        Active
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 10px 0', lineHeight: 1.4 }}>
+                                    {p.description}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      soundFx.play('like', p.id);
+                                    }}
+                                    className="btn-secondary btn-xs"
+                                    style={{ width: '100%', fontSize: '11px', padding: '4px 8px' }}
+                                    title={`Sample ${p.name}`}
+                                  >
+                                    ▶ Preview Pack
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Volume Slider & Test Sound */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '14px', marginTop: '16px', background: 'var(--bg-card, rgba(255,255,255,0.02))', padding: '12px 14px', borderRadius: '10px', border: '1px solid var(--border-color, rgba(255,255,255,0.06))' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '220px' }}>
+                            <span style={{ fontSize: '16px' }}>🔊</span>
+                            <label htmlFor="masterSoundVolume" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                              Master Volume: {Math.round(soundVolume * 100)}%
+                            </label>
+                            <input
+                              id="masterSoundVolume"
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={Math.round(soundVolume * 100)}
+                              onChange={(e) => soundFx.setVolume(parseInt(e.target.value, 10) / 100)}
+                              style={{ flex: 1, accentColor: 'var(--primary-color, #6366f1)', cursor: 'pointer' }}
+                              aria-label="Master Sound Volume"
+                              data-testid="sound-volume-slider"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className="btn-secondary btn-sm"
+                            onClick={() => soundFx.play('celebration')}
+                            data-testid="sound-test-btn"
+                            title="Play celebration fanfare test"
+                          >
+                            🎉 Test Celebration Chime
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Real Web Push Status & Action Card */}
                   <div className="pwa-push-status-card">

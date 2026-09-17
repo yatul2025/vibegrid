@@ -39,6 +39,7 @@ import CallHistoryModal from '../components/CallHistoryModal';
 import KeyBackupModal from '../components/KeyBackupModal';
 import senderKeysService from '../services/crypto/senderKeys';
 import VibiEmptyState from '../components/VibiEmptyState';
+import soundFx from '../services/soundFxService';
 import {
   Phone,
   Video,
@@ -67,41 +68,20 @@ import {
   Ban,
   CornerUpLeft,
   CornerUpRight,
-  Share2,
-  Star,
-  Pin,
   Info,
-  Smile,
-  CheckSquare,
-  FileText,
-  Paperclip,
-  RotateCw,
-  MoreVertical,
-  VolumeX,
-  Volume2,
-  Archive,
-  ArchiveRestore,
-  Flag,
+  Key,
+  UserPlus,
+  LogOut,
+  Sparkles,
+  Heart,
+  Pin,
   PinOff,
   ChevronDown
 } from 'lucide-react';
 
 function playNotificationChime() {
   try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    const audioCtx = new AudioCtx();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-    osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.08); // A5
-    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.35);
+    soundFx.play('receive');
   } catch {}
 }
 
@@ -1534,6 +1514,9 @@ export default function MessagesPage({
 
     setMessages((prev) => [...prev, optimisticMessage]);
     setTimeout(() => scrollToBottom(true), 30);
+    try {
+      soundFx.play('send');
+    } catch {}
 
     try {
       setSending(true);
@@ -2359,6 +2342,14 @@ export default function MessagesPage({
         return { ...m, reactions: updated };
       })
     );
+
+    try {
+      if (reaction === '❤️') {
+        soundFx.play('like');
+      } else {
+        soundFx.play('reaction');
+      }
+    } catch {}
 
     try {
       const res = await apiClient.post(`/messages/msg/${messageId}/reaction`, { reaction });

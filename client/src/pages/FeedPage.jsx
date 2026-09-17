@@ -25,6 +25,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import HidePostModal from '../components/HidePostModal';
 import { triggerCelebration } from '../components/AuroraCelebrationOverlay';
 import VibiEmptyState from '../components/VibiEmptyState';
+import soundFx from '../services/soundFxService';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 import {
   Heart,
@@ -293,6 +294,13 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
 
     const newLiked = !previousLiked;
     const newCount = newLiked ? previousCount + 1 : Math.max(0, previousCount - 1);
+
+    // Play tactile like pop sound FX
+    if (newLiked) {
+      try {
+        soundFx.play('like');
+      } catch {}
+    }
 
     // 2. Optimistic state update (Zero UI latency!)
     setPosts((prev) =>
