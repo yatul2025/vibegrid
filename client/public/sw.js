@@ -1,6 +1,6 @@
 /**
  * VibeGrid Progressive Web App Service Worker
- * Version: vibegrid-pwa-v50
+ * Version: vibegrid-pwa-v51
  * Updated: Auto-generated with enhanced offline caching, sync fallbacks, and instant update activation.
  * 
  * Features:
@@ -10,7 +10,7 @@
  * 4. Automatic cache cleanup on deployment and immediate client claiming
  */
 
-const CACHE_NAME = 'vibegrid-pwa-v50';
+const CACHE_NAME = 'vibegrid-pwa-v51';
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_ASSETS = [

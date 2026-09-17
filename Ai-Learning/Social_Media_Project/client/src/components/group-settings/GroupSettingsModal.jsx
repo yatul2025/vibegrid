@@ -28,6 +28,7 @@ import MediaFilesView from './views/MediaFilesView';
 import JoinRequestsView from './views/JoinRequestsView';
 import AdminManagementView from './views/AdminManagementView';
 import DisappearingMessagesView from './views/DisappearingMessagesView';
+import './GroupSettingsModal.css';
 
 export default function GroupSettingsModal({
   isOpen,
@@ -451,11 +452,11 @@ export default function GroupSettingsModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 backdrop-blur-md z-[2500] flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200"
+      className="group-settings-modal-overlay fixed inset-0 bg-black/80 backdrop-blur-md z-[2500] flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-md max-h-[92vh] flex flex-col bg-[#0a0c10] border border-white/10 rounded-2xl shadow-2xl shadow-black overflow-hidden"
+        className="group-settings-card relative w-full max-w-md max-h-[92vh] flex flex-col bg-[#0a0c10] border border-white/10 rounded-2xl shadow-2xl shadow-black overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Navigation Header */}
