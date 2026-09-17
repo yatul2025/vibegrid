@@ -2348,8 +2348,206 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
       expect(screen.queryByTestId('wa-floating-reactions')).not.toBeInTheDocument();
     });
   });
+
+  describe('Group Conversations & Message Starring Features', () => {
+    // 1. Group conversation item rendering
+    function ConversationItemTest({ conv, onSelect }) {
+      return (
+        <div
+          data-testid={`conv-item-${conv.partner_username}`}
+          className={`conversation-item ${conv.is_group ? 'is-group' : ''}`}
+          onClick={() => onSelect(conv)}
+        >
+          {conv.is_group ? (
+            <div className="group-avatar-icon-wrap" data-testid="group-avatar">
+              <span role="img" aria-label="group">👥</span>
+            </div>
+          ) : (
+            <img src={conv.partner_avatar_url} alt={conv.partner_username} data-testid="user-avatar" />
+          )}
+          <div className="conversation-info">
+            <span className="partner-name">{conv.partner_full_name || conv.partner_username}</span>
+            {conv.is_group && (
+              <span className="group-members-pill" data-testid="group-member-count">
+                👥 {conv.member_count || 1}
+              </span>
+            )}
+            <p className="conversation-snippet">{conv.last_message}</p>
+          </div>
+        </div>
+      );
+    }
+
+    it('renders group conversation item with group avatar icon and member count pill', () => {
+      const mockSelect = vi.fn();
+      const groupConv = {
+        partner_id: 'group-101',
+        partner_username: 'group-101',
+        partner_full_name: 'Alpha Project Team',
+        is_group: true,
+        member_count: 5,
+        last_message: 'Welcome everyone!'
+      };
+
+      render(<ConversationItemTest conv={groupConv} onSelect={mockSelect} />);
+
+      expect(screen.getByTestId('group-avatar')).toBeInTheDocument();
+      expect(screen.getByText('Alpha Project Team')).toBeInTheDocument();
+      expect(screen.getByTestId('group-member-count')).toHaveTextContent('👥 5');
+      expect(screen.getByText('Welcome everyone!')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId('conv-item-group-101'));
+      expect(mockSelect).toHaveBeenCalledWith(groupConv);
+    });
+
+    // 2. Message bubble quick action bar (Hover Toolbar)
+    function MessageBubbleWithQuickBarTest({ msg, onToggleStar, onReply, onReact }) {
+      return (
+        <div className="message-bubble-row" data-testid={`msg-row-${msg.id}`}>
+          {msg.is_group && !msg.is_mine && (
+            <span className="group-sender-tag" data-testid="group-sender-tag">
+              @{msg.sender_username}
+            </span>
+          )}
+          <div className="message-content">{msg.content}</div>
+
+          {!msg.is_deleted && (
+            <div className="msg-quick-action-bar" data-testid="msg-quick-action-bar">
+              <button
+                type="button"
+                className={`msg-quick-action-btn msg-star-btn ${msg.is_starred ? 'is-starred' : ''}`}
+                data-testid="quick-star-btn"
+                onClick={() => onToggleStar(msg)}
+                title={msg.is_starred ? 'Unstar message' : 'Star message'}
+              >
+                ★
+              </button>
+              <button
+                type="button"
+                className="msg-quick-action-btn msg-react-btn"
+                data-testid="quick-react-btn"
+                onClick={() => onReact(msg)}
+                title="React"
+              >
+                😊
+              </button>
+              <button
+                type="button"
+                className="msg-quick-action-btn msg-reply-btn"
+                data-testid="quick-reply-btn"
+                onClick={() => onReply(msg)}
+                title="Reply"
+              >
+                ↩
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    it('renders quick action bar on message bubble and handles star toggle and reply', () => {
+      const onToggleStar = vi.fn();
+      const onReply = vi.fn();
+      const onReact = vi.fn();
+      const testMsg = {
+        id: 42,
+        sender_username: 'elena_designer',
+        is_mine: false,
+        is_group: true,
+        content: 'Design review at 3pm',
+        is_starred: false,
+        is_deleted: false
+      };
+
+      render(
+        <MessageBubbleWithQuickBarTest
+          msg={testMsg}
+          onToggleStar={onToggleStar}
+          onReply={onReply}
+          onReact={onReact}
+        />
+      );
+
+      expect(screen.getByTestId('group-sender-tag')).toHaveTextContent('@elena_designer');
+      expect(screen.getByTestId('msg-quick-action-bar')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId('quick-star-btn'));
+      expect(onToggleStar).toHaveBeenCalledWith(testMsg);
+
+      fireEvent.click(screen.getByTestId('quick-reply-btn'));
+      expect(onReply).toHaveBeenCalledWith(testMsg);
+
+      fireEvent.click(screen.getByTestId('quick-react-btn'));
+      expect(onReact).toHaveBeenCalledWith(testMsg);
+    });
+
+    // 3. Starred Messages modal item rendering & unstar action
+    function StarredMessagesModalItemTest({ starredMsg, onUnstar, onJump }) {
+      const isGroup = String(starredMsg.partner_username || '').startsWith('group-');
+      return (
+        <div
+          className="starred-message-item"
+          data-testid={`starred-item-${starredMsg.id}`}
+          onClick={() => onJump(starredMsg)}
+        >
+          <div className="starred-item-header">
+            <span className="starred-sender">@{starredMsg.sender_username}</span>
+            <button
+              type="button"
+              className="starred-item-unstar-btn"
+              data-testid="modal-unstar-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onUnstar(starredMsg);
+              }}
+              title="Unstar message"
+            >
+              ★
+            </button>
+          </div>
+          <p className="starred-content">{starredMsg.content}</p>
+          <span className="starred-conversation-tag" data-testid="starred-conv-tag">
+            {isGroup
+              ? `Chat in ${starredMsg.conversation_title || 'Group'} →`
+              : `Chat with @${starredMsg.partner_username} →`}
+          </span>
+        </div>
+      );
+    }
+
+    it('renders starred message modal item with direct unstar button and group chat tag', () => {
+      const onUnstar = vi.fn();
+      const onJump = vi.fn();
+      const groupStarredMsg = {
+        id: 88,
+        sender_username: 'marcus_code',
+        partner_username: 'group-202',
+        conversation_title: 'Engineering Core',
+        content: 'Production deployment scheduled for midnight',
+        created_at: new Date().toISOString()
+      };
+
+      render(
+        <StarredMessagesModalItemTest
+          starredMsg={groupStarredMsg}
+          onUnstar={onUnstar}
+          onJump={onJump}
+        />
+      );
+
+      expect(screen.getByText('@marcus_code')).toBeInTheDocument();
+      expect(screen.getByText('Production deployment scheduled for midnight')).toBeInTheDocument();
+      expect(screen.getByTestId('starred-conv-tag')).toHaveTextContent('Chat in Engineering Core →');
+
+      // Click unstar button (stop propagation: does not trigger onJump)
+      fireEvent.click(screen.getByTestId('modal-unstar-btn'));
+      expect(onUnstar).toHaveBeenCalledWith(groupStarredMsg);
+      expect(onJump).not.toHaveBeenCalled();
+
+      // Click item container triggers onJump
+      fireEvent.click(screen.getByTestId('starred-item-88'));
+      expect(onJump).toHaveBeenCalledWith(groupStarredMsg);
+    });
+  });
 });
-
-
-
-
