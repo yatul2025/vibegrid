@@ -2060,6 +2060,44 @@ export default function SettingsPage({
                         );
                       })}
                     </div>
+
+                    {/* Phase 11: Vibi Mascot Easter Egg Card */}
+                    <div
+                      className="theme-smart-sync-card"
+                      style={{ marginTop: '24px' }}
+                      data-testid="vibi-easter-egg-card"
+                    >
+                      <div className="theme-smart-sync-header">
+                        <div>
+                          <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>🦊</span>
+                            <span>Vibi Mascot Easter Egg</span>
+                          </h4>
+                          <p style={{ margin: '4px 0 0', fontSize: '0.82rem', opacity: 0.75 }}>
+                            Tip: You can also type <strong>v-i-b-i</strong> anywhere on your keyboard!
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="theme-filter-chip active"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            cursor: 'pointer',
+                            padding: '8px 16px'
+                          }}
+                          onClick={() => {
+                            window.dispatchEvent(new CustomEvent('vibegrid:trigger-vibi'));
+                          }}
+                          data-testid="summon-vibi-easter-egg-btn"
+                          aria-label="Summon Vibi mascot easter egg"
+                        >
+                          <span>✨</span>
+                          <span>Summon Vibi</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 );
               })()}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import apiClient from './api/client';
 import StatusDashboard from './components/StatusDashboard';
@@ -68,8 +68,43 @@ function AppContent() {
   }, [currentTab]);
   const touchStartRef = useRef({ x: 0, y: 0, time: 0, isIgnored: false });
   const [a11yStatus, setA11yStatus] = useState('');
+  const [vibiEasterEgg, setVibiEasterEgg] = useState({ active: false, key: 0 });
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
+
+  // Phase 11: Vibi Secret Easter Egg Trigger
+  const triggerVibiEasterEgg = useCallback(() => {
+    triggerCelebration('confetti');
+    soundFx.playCelebration();
+    setVibiEasterEgg((prev) => ({ active: true, key: prev.key + 1 }));
+    setA11yStatus('Secret Vibe Sparkle unlocked! Vibi mascot easter egg activated!');
+  }, []);
+
+  // Global key sequence listener ('v-i-b-i') and custom event
+  useEffect(() => {
+    let buffer = '';
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target?.tagName) || e.target?.isContentEditable) {
+        return;
+      }
+      buffer = (buffer + e.key.toLowerCase()).slice(-4);
+      if (buffer === 'vibi') {
+        triggerVibiEasterEgg();
+        buffer = '';
+      }
+    };
+
+    const handleCustomEasterEgg = () => {
+      triggerVibiEasterEgg();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('vibegrid:trigger-vibi', handleCustomEasterEgg);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('vibegrid:trigger-vibi', handleCustomEasterEgg);
+    };
+  }, [triggerVibiEasterEgg]);
 
   // Close profile dropdown when clicking outside
   useEffect(() => {
@@ -1325,8 +1360,18 @@ function AppContent() {
         onNavigateToLogin={handleNavigateToLogin}
       />
 
-      {/* Phase 1 Delight Feature: Vibi Mascot & App Open Animation */}
-      <VibiMascotGreeting user={user} />
+      {/* Phase 1 Delight Feature & Phase 11 Easter Egg: Vibi Mascot */}
+      <VibiMascotGreeting
+        key={`vibi-${vibiEasterEgg.key}`}
+        user={user}
+        forceShow={vibiEasterEgg.active}
+        customMessage={
+          vibiEasterEgg.active
+            ? "🌟 You unlocked the Secret Vibe Sparkle! You're an official Vibe Legend! 🦊✨"
+            : null
+        }
+        onDismiss={() => setVibiEasterEgg((prev) => ({ ...prev, active: false }))}
+      />
 
       {/* Phase 2 Delight Feature: Returning User Welcome Drop (Option 5) */}
       <ReturningUserWelcomeDrop user={user} unreadCount={unreadCount + unreadMessagesCount} />

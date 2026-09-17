@@ -378,6 +378,22 @@ class SoundFxService {
     }
   }
 
+  playCelebration() {
+    return this.play('celebration');
+  }
+
+  playPluck() {
+    return this.play('like');
+  }
+
+  playNotificationChime() {
+    return this.play('receive');
+  }
+
+  playToggleSnap() {
+    return this.play('toggle');
+  }
+
   // ==========================================
   // Pack 1: Modern Neo-Digital
   // ==========================================

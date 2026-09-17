@@ -16,7 +16,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 
-export default function VibiMascotGreeting({ user, forceShow = false, onDismiss }) {
+export default function VibiMascotGreeting({ user, forceShow = false, onDismiss, customMessage = null }) {
   const [isVisible, setIsVisible] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
@@ -36,14 +36,16 @@ export default function VibiMascotGreeting({ user, forceShow = false, onDismiss 
         // Small delay to allow home feed layout to stabilize
         const openTimer = setTimeout(() => {
           setIsVisible(true);
+          setIsExiting(false);
           sessionStorage.setItem('vibegrid_vibi_mascot_seen', 'true');
-        }, 350);
+        }, 150);
 
         return () => clearTimeout(openTimer);
       }
     } catch {
       // Fallback if sessionStorage is disabled/blocked
       setIsVisible(true);
+      setIsExiting(false);
     }
   }, [forceShow]);
 
@@ -73,9 +75,9 @@ export default function VibiMascotGreeting({ user, forceShow = false, onDismiss 
   if (!isVisible) return null;
 
   const displayName = user?.username ? `@${user.username}` : (user?.full_name || 'Viber');
-  const greetingMessage = user
+  const greetingMessage = customMessage || (user
     ? `Welcome back, ${displayName}! 🦊👋`
-    : 'Welcome to VibeGrid! 🦊👋';
+    : 'Welcome to VibeGrid! 🦊👋');
 
   return (
     <aside

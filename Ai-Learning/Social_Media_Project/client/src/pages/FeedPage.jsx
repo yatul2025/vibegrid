@@ -12,7 +12,7 @@
  * 6. Author post deletion with instant removal.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import CommentsModal from '../components/CommentsModal';
@@ -386,15 +386,29 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
   };
 
   // Double-tap on image to like
+  const lastTouchTimeRef = useRef({});
   const handleImageDoubleClick = (post) => {
     if (guardDemoAction('like')) return;
-    // Show heart pop animation
+    // Show heart pop animation with tactile sound
     setAnimatingPostId(post.id);
-    setTimeout(() => setAnimatingPostId(null), 800);
+    soundFx.playPluck();
+    setTimeout(() => setAnimatingPostId(null), 850);
 
     // If not liked yet, like it
     if (!post.is_liked) {
       handleToggleLike(post.id);
+    }
+  };
+
+  // Mobile touch double-tap support
+  const handleImageTouchEnd = (e, post) => {
+    const now = Date.now();
+    const lastTime = lastTouchTimeRef.current[post.id] || 0;
+    if (now - lastTime < 380) {
+      handleImageDoubleClick(post);
+      lastTouchTimeRef.current[post.id] = 0;
+    } else {
+      lastTouchTimeRef.current[post.id] = now;
     }
   };
 
@@ -898,7 +912,8 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
               <div
                 className="post-card-media"
                 onDoubleClick={() => handleImageDoubleClick(post)}
-                title="Double click to like!"
+                onTouchEnd={(e) => handleImageTouchEnd(e, post)}
+                title="Double click or double tap to like!"
               >
                 <img
                   src={post.image_url}
@@ -909,8 +924,12 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
                 />
                 {/* Animated Heart Overlay on Double-Tap */}
                 {animatingPostId === post.id && (
-                  <div className="double-tap-heart-overlay">
+                  <div className="double-tap-heart-overlay" data-testid="double-tap-heart-burst">
                     <Heart size={76} fill="#ef4444" color="#ffffff" strokeWidth={1.5} />
+                    <span className="heart-burst-particle p1" aria-hidden="true">❤️</span>
+                    <span className="heart-burst-particle p2" aria-hidden="true">💖</span>
+                    <span className="heart-burst-particle p3" aria-hidden="true">✨</span>
+                    <span className="heart-burst-particle p4" aria-hidden="true">🔥</span>
                   </div>
                 )}
               </div>
