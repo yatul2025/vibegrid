@@ -373,6 +373,15 @@ export default function MessagesPage({
   const [isArchived, setIsArchived] = useState(false);
   const [convContextMenu, setConvContextMenu] = useState(null);
 
+  // Phase 3: Message Micro-Interactions (Option 1: Haptic Pop & Heart Burst Suite)
+  const [burstingHeartMsgId, setBurstingHeartMsgId] = useState(null);
+  const [swipingMessage, setSwipingMessage] = useState(null);
+  const lastTapMsgRef = useRef({ id: null, time: 0 });
+  const newlySentMsgIdsRef = useRef(new Set());
+  const swipeStateRef = useRef(null);
+  const justDoubleTappedRef = useRef(0);
+  const justSwipedRef = useRef(0);
+
   const messagesEndRef = useRef(null);
   const chatStreamRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -1493,6 +1502,11 @@ export default function MessagesPage({
     setReplyingTo(null);
 
     const tempId = `temp-${Date.now()}`;
+    newlySentMsgIdsRef.current.add(tempId);
+    setTimeout(() => {
+      newlySentMsgIdsRef.current.delete(tempId);
+    }, 2500);
+
     const optimisticMessage = {
       id: tempId,
       sender_id: user.id,
@@ -1533,8 +1547,13 @@ export default function MessagesPage({
       });
 
       if (res.success && res.data?.message) {
+        const realId = Number(res.data.message.id);
+        newlySentMsgIdsRef.current.add(realId);
+        setTimeout(() => {
+          newlySentMsgIdsRef.current.delete(realId);
+        }, 2500);
+
         setMessages((prev) => {
-          const realId = Number(res.data.message.id);
           const alreadyHasRealMsg = prev.some((m) => Number(m.id) === realId);
           if (alreadyHasRealMsg) {
             return prev.filter((m) => m.id !== tempId);
@@ -2090,6 +2109,19 @@ export default function MessagesPage({
     }
   };
 
+  const handleStartReply = (msg) => {
+    setContextMenu(null);
+    setEditingMessage(null);
+    setReplyingTo({
+      id: msg.id,
+      sender_id: msg.sender_id,
+      sender_username: msg.is_mine ? user?.username : activePartner?.username,
+      content: msg.content,
+      is_deleted: msg.is_deleted,
+      is_mine: msg.is_mine
+    });
+  };
+
   const handleTouchStart = (e, msg) => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
@@ -2113,6 +2145,14 @@ export default function MessagesPage({
     }
 
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+    swipeStateRef.current = {
+      id: msg.id,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      isHorizontal: null,
+      thresholdMet: false,
+      msg
+    };
 
     longPressTimerRef.current = setTimeout(() => {
       longPressTimerRef.current = null;
@@ -2126,36 +2166,90 @@ export default function MessagesPage({
   };
 
   const handleTouchMove = (e) => {
-    if (!longPressTimerRef.current) return;
     const touch = e.touches?.[0];
     if (!touch) return;
-    const deltaX = Math.abs(touch.clientX - touchStartPosRef.current.x);
-    const deltaY = Math.abs(touch.clientY - touchStartPosRef.current.y);
-    // If finger moves more than 8px, it is a scroll gesture — cancel long press immediately
-    if (deltaX > 8 || deltaY > 8) {
+    const deltaX = touch.clientX - touchStartPosRef.current.x;
+    const deltaY = touch.clientY - touchStartPosRef.current.y;
+
+    // Determine gesture direction
+    if (swipeStateRef.current && swipeStateRef.current.isHorizontal === null) {
+      if (Math.abs(deltaY) > 8 && Math.abs(deltaY) >= Math.abs(deltaX)) {
+        swipeStateRef.current.isHorizontal = false;
+      } else if (Math.abs(deltaX) > 8 && Math.abs(deltaX) > Math.abs(deltaY)) {
+        swipeStateRef.current.isHorizontal = true;
+        // Cancel long press immediately on horizontal swipe
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+      }
+    }
+
+    // Cancel long press on vertical scroll
+    if (longPressTimerRef.current && (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8)) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+
+    // Rubber-band horizontal swipe for swipe-to-reply
+    if (swipeStateRef.current?.isHorizontal && !isSelectionMode) {
+      const isIncoming = !swipeStateRef.current.msg.is_mine;
+      const directedDelta = isIncoming ? deltaX : -deltaX;
+      if (directedDelta > 0) {
+        const dampedOffset = Math.min(directedDelta * 0.55, 68);
+        const isThresholdMet = dampedOffset >= 40;
+        if (isThresholdMet && !swipeStateRef.current.thresholdMet) {
+          swipeStateRef.current.thresholdMet = true;
+          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            try { navigator.vibrate(20); } catch (_) {}
+          }
+        } else if (!isThresholdMet && swipeStateRef.current.thresholdMet) {
+          swipeStateRef.current.thresholdMet = false;
+        }
+        setSwipingMessage({
+          id: swipeStateRef.current.id,
+          offset: isIncoming ? dampedOffset : -dampedOffset,
+          rawOffset: dampedOffset,
+          isThresholdMet
+        });
+      }
+    }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e, msg) => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-  };
 
-  const handleStartReply = (msg) => {
-    setContextMenu(null);
-    setEditingMessage(null);
-    setReplyingTo({
-      id: msg.id,
-      sender_id: msg.sender_id,
-      sender_username: msg.is_mine ? user?.username : activePartner?.username,
-      content: msg.content,
-      is_deleted: msg.is_deleted,
-      is_mine: msg.is_mine
-    });
+    // Handle swipe-to-reply release
+    if (swipingMessage && swipingMessage.id === msg?.id) {
+      if (swipingMessage.isThresholdMet && swipeStateRef.current?.msg && !msg.is_deleted) {
+        handleStartReply(swipeStateRef.current.msg);
+        justSwipedRef.current = Date.now();
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          try { navigator.vibrate(30); } catch (_) {}
+        }
+      }
+      setSwipingMessage(null);
+      swipeStateRef.current = null;
+      return;
+    }
+    swipeStateRef.current = null;
+
+    // Handle double-tap detection if tap wasn't a long-press or scroll
+    if (!longPressFiredRef.current && msg && !msg.is_deleted && !isSelectionMode) {
+      const now = Date.now();
+      const last = lastTapMsgRef.current;
+      if (last.id === msg.id && (now - last.time) < 320) {
+        // Double tap confirmed!
+        lastTapMsgRef.current = { id: null, time: 0 };
+        justDoubleTappedRef.current = Date.now();
+        triggerHeartBurst(msg);
+      } else {
+        lastTapMsgRef.current = { id: msg.id, time: now };
+      }
+    }
   };
 
   const handleStartEdit = (msg) => {
@@ -2275,6 +2369,24 @@ export default function MessagesPage({
       console.warn('Reaction update error:', err);
     }
   };
+
+  // Phase 3: Double-tap / Double-click Heart Burst Delight
+  const triggerHeartBurst = useCallback(
+    (msg) => {
+      if (!msg || msg.is_deleted) return;
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try {
+          navigator.vibrate([15, 30, 15]);
+        } catch (_) {}
+      }
+      setBurstingHeartMsgId({ id: msg.id, key: Date.now() });
+      setTimeout(() => {
+        setBurstingHeartMsgId((curr) => (curr?.id === msg.id ? null : curr));
+      }, 950);
+      handleToggleReaction(msg.id, '❤️');
+    },
+    [handleToggleReaction]
+  );
 
   // Open Forward Modal
   const handleStartForward = (msg) => {
@@ -3719,6 +3831,8 @@ export default function MessagesPage({
 
                     const mediaPayload = m.is_deleted ? null : parseMediaPayload(m.content);
 
+                    const isNewlySent = m.pending || newlySentMsgIdsRef.current.has(m.id) || newlySentMsgIdsRef.current.has(Number(m.id));
+
                     return (
                       <React.Fragment key={m.id}>
                         {showDateSep && (
@@ -3735,7 +3849,7 @@ export default function MessagesPage({
                         )}
                         <div
                           id={`msg-${m.id}`}
-                          className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'} ${isSelectionMode ? 'selection-mode' : ''} ${selectedMessageIds.has(Number(m.id)) ? 'is-selected' : ''} ${selectedActionMsgIds.has(Number(m.id)) ? 'is-action-selected' : ''}`}
+                          className={`message-bubble-row ${m.is_mine ? 'outgoing' : 'incoming'} ${isSelectionMode ? 'selection-mode' : ''} ${selectedMessageIds.has(Number(m.id)) ? 'is-selected' : ''} ${selectedActionMsgIds.has(Number(m.id)) ? 'is-action-selected' : ''} ${isNewlySent ? 'vibe-msg-send-spring' : ''}`}
                           onClick={(e) => {
                             if (isSelectionMode) {
                               if (!m.is_deleted) handleToggleMessageSelection(m.id);
@@ -3749,12 +3863,18 @@ export default function MessagesPage({
                               longPressFiredRef.current = false;
                               e.stopPropagation();
                               return;
-                            } else if (Date.now() - justSelectedActionRef.current < 450) {
+                            } else if (Date.now() - justSelectedActionRef.current < 450 || Date.now() - justDoubleTappedRef.current < 450 || Date.now() - justSwipedRef.current < 450) {
                               e.stopPropagation();
                               return;
                             } else if (selectedMessagesForAction.length > 0) {
                               e.stopPropagation();
                               handleToggleSelectMessageForAction(m);
+                            }
+                          }}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            if (!m.is_deleted && !isSelectionMode) {
+                              triggerHeartBurst(m);
                             }
                           }}
                           onContextMenu={(e) => {
@@ -3775,9 +3895,24 @@ export default function MessagesPage({
                             if (!isSelectionMode) handleTouchStart(e, m);
                           }}
                           onTouchMove={handleTouchMove}
-                          onTouchEnd={handleTouchEnd}
-                          onTouchCancel={handleTouchEnd}
+                          onTouchEnd={(e) => handleTouchEnd(e, m)}
+                          onTouchCancel={(e) => handleTouchEnd(e, m)}
                         >
+                          {/* Swipe to Reply Cue */}
+                          {swipingMessage?.id === m.id && swipingMessage.rawOffset > 8 && (
+                            <div
+                              className={`vibe-swipe-reply-cue ${m.is_mine ? 'outgoing-cue' : 'incoming-cue'} ${swipingMessage.isThresholdMet ? 'threshold-met' : ''}`}
+                              style={{
+                                opacity: Math.min(swipingMessage.rawOffset / 25, 1),
+                                transform: `translateY(-50%) scale(${Math.min(0.6 + swipingMessage.rawOffset / 60, 1.15)})`
+                              }}
+                              aria-hidden="true"
+                              data-testid="swipe-reply-cue"
+                            >
+                              <CornerUpLeft size={16} />
+                            </div>
+                          )}
+
                           {/* Selection Checkbox in Multi-Select Mode */}
                           {isSelectionMode && (
                             <div className={`message-select-checkbox ${selectedMessageIds.has(Number(m.id)) ? 'checked' : ''}`}>
@@ -3787,7 +3922,24 @@ export default function MessagesPage({
 
                           <div
                             className={`message-bubble ${mediaPayload ? 'has-media' : ''} ${m.is_deleted ? 'deleted-bubble' : ''} ${selectedActionMsgIds.has(Number(m.id)) ? 'is-highlighted-bubble' : ''}`}
+                            style={
+                              swipingMessage?.id === m.id
+                                ? { transform: `translateX(${swipingMessage.offset}px)`, transition: 'none' }
+                                : undefined
+                            }
                           >
+                            {/* Floating 3D Heart Burst Overlay */}
+                            {burstingHeartMsgId?.id === m.id && (
+                              <div className="vibe-heart-burst-overlay" aria-hidden="true" data-testid="heart-burst-overlay">
+                                <span className="vibe-heart-burst-main">❤️</span>
+                                <span className="vibe-heart-particle p1" />
+                                <span className="vibe-heart-particle p2" />
+                                <span className="vibe-heart-particle p3" />
+                                <span className="vibe-heart-particle p4" />
+                                <span className="vibe-heart-particle p5" />
+                                <span className="vibe-heart-particle p6" />
+                              </div>
+                            )}
                             {/* Style 1: WhatsApp Classic Floating Quick Reaction Pill directly over selected bubble */}
                             {selectedMessagesForAction.length === 1 && selectedMessagesForAction[0].id === m.id && !m.is_deleted && (
                               <div
@@ -3893,7 +4045,7 @@ export default function MessagesPage({
                               )}
                               {m.is_mine && !m.failed && (
                                 <span
-                                  className="message-receipt-tick"
+                                  className={`message-receipt-tick ${m.is_read ? 'receipt-read-flip' : ''}`}
                                   title={m.is_read ? 'Read' : m.delivered_at ? 'Delivered' : 'Sent'}
                                   aria-label={m.is_read ? 'Read receipt: Read' : m.delivered_at ? 'Read receipt: Delivered' : 'Read receipt: Sent'}
                                 >
@@ -5586,8 +5738,164 @@ export default function MessagesPage({
         }
 
         .message-bubble-row {
+          position: relative;
           display: flex;
           margin-bottom: 8px;
+        }
+
+        .message-bubble-row.vibe-msg-send-spring {
+          animation: vibeSendSpring 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+
+        @keyframes vibeSendSpring {
+          0% {
+            opacity: 0;
+            transform: translateY(18px) scale(0.92);
+          }
+          65% {
+            opacity: 1;
+            transform: translateY(-3px) scale(1.02);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .vibe-heart-burst-overlay {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          pointer-events: none;
+          z-index: 50;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 60px;
+          height: 60px;
+        }
+
+        .vibe-heart-burst-main {
+          font-size: 2.3rem;
+          line-height: 1;
+          display: inline-block;
+          animation: vibeHeartBurstAnim 0.75s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+          filter: drop-shadow(0 4px 12px rgba(255, 45, 85, 0.5));
+          user-select: none;
+        }
+
+        @keyframes vibeHeartBurstAnim {
+          0% {
+            transform: scale(0) rotate(-15deg);
+            opacity: 0;
+          }
+          25% {
+            transform: scale(1.4) rotate(4deg);
+            opacity: 1;
+          }
+          50% {
+            transform: scale(1.1) rotate(0deg);
+            opacity: 1;
+          }
+          75% {
+            transform: scale(1.2) translateY(-14px);
+            opacity: 0.85;
+          }
+          100% {
+            transform: scale(0.7) translateY(-32px);
+            opacity: 0;
+          }
+        }
+
+        .vibe-heart-particle {
+          position: absolute;
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          pointer-events: none;
+          animation: vibeParticlePop 0.65s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+
+        .vibe-heart-particle.p1 { background: #ff2d55; --tx: -24px; --ty: -20px; }
+        .vibe-heart-particle.p2 { background: #ff6b81; --tx: 24px; --ty: -22px; }
+        .vibe-heart-particle.p3 { background: #ffd32a; --tx: -28px; --ty: 8px; }
+        .vibe-heart-particle.p4 { background: #ff3838; --tx: 28px; --ty: 6px; }
+        .vibe-heart-particle.p5 { background: #ff9ff3; --tx: -12px; --ty: 24px; }
+        .vibe-heart-particle.p6 { background: #54a0ff; --tx: 14px; --ty: 22px; }
+
+        @keyframes vibeParticlePop {
+          0% {
+            transform: translate(0, 0) scale(1);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(var(--tx), var(--ty)) scale(0);
+            opacity: 0;
+          }
+        }
+
+        /* Swipe-to-reply cue behind or beside the bubble */
+        .vibe-swipe-reply-cue {
+          position: absolute;
+          top: 50%;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: var(--primary, #6366f1);
+          color: #ffffff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+          z-index: 10;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+          transition: background-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .vibe-swipe-reply-cue.incoming-cue {
+          left: 6px;
+        }
+
+        .vibe-swipe-reply-cue.outgoing-cue {
+          right: 6px;
+        }
+
+        .vibe-swipe-reply-cue.threshold-met {
+          background: #10b981;
+          box-shadow: 0 0 14px rgba(16, 185, 129, 0.65);
+        }
+
+        /* 3D Read Receipt Axis Flip */
+        .receipt-read-flip .receipt-check-read {
+          display: inline-block;
+          animation: receiptFlip3D 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+          transform-origin: center center;
+        }
+
+        @keyframes receiptFlip3D {
+          0% {
+            transform: scale(0.6) rotateY(90deg);
+            opacity: 0.3;
+          }
+          60% {
+            transform: scale(1.3) rotateY(-15deg);
+            opacity: 1;
+          }
+          100% {
+            transform: scale(1) rotateY(0deg);
+            opacity: 1;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .message-bubble-row.vibe-msg-send-spring,
+          .vibe-heart-burst-main,
+          .vibe-heart-particle,
+          .receipt-read-flip .receipt-check-read {
+            animation: none !important;
+            transform: none !important;
+          }
         }
 
         .message-bubble-row.outgoing {

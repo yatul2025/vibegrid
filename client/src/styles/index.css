@@ -11658,6 +11658,169 @@ select.form-input option,
   background: var(--bg-hover);
 }
 
+/* ==========================================================================
+   Phase 3: Message Micro-Interactions (Option 1: Haptic Pop & Heart Burst Suite)
+   ========================================================================== */
+.message-bubble-row {
+  position: relative;
+}
+
+.message-bubble-row.vibe-msg-send-spring {
+  animation: vibeSendSpring 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes vibeSendSpring {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.92);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.vibe-heart-burst-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+}
+
+.vibe-heart-burst-main {
+  font-size: 2.3rem;
+  line-height: 1;
+  display: inline-block;
+  animation: vibeHeartBurstAnim 0.75s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  filter: drop-shadow(0 4px 12px rgba(255, 45, 85, 0.5));
+  user-select: none;
+}
+
+@keyframes vibeHeartBurstAnim {
+  0% {
+    transform: scale(0) rotate(-15deg);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1.4) rotate(4deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1) rotate(0deg);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.2) translateY(-14px);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(0.7) translateY(-32px);
+    opacity: 0;
+  }
+}
+
+.vibe-heart-particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: vibeParticlePop 0.65s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.vibe-heart-particle.p1 { background: #ff2d55; --tx: -24px; --ty: -20px; }
+.vibe-heart-particle.p2 { background: #ff6b81; --tx: 24px; --ty: -22px; }
+.vibe-heart-particle.p3 { background: #ffd32a; --tx: -28px; --ty: 8px; }
+.vibe-heart-particle.p4 { background: #ff3838; --tx: 28px; --ty: 6px; }
+.vibe-heart-particle.p5 { background: #ff9ff3; --tx: -12px; --ty: 24px; }
+.vibe-heart-particle.p6 { background: #54a0ff; --tx: 14px; --ty: 22px; }
+
+@keyframes vibeParticlePop {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) scale(0);
+    opacity: 0;
+  }
+}
+
+/* Swipe-to-reply cue behind or beside the bubble */
+.vibe-swipe-reply-cue {
+  position: absolute;
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--primary, #6366f1);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.vibe-swipe-reply-cue.incoming-cue {
+  left: 6px;
+}
+
+.vibe-swipe-reply-cue.outgoing-cue {
+  right: 6px;
+}
+
+.vibe-swipe-reply-cue.threshold-met {
+  background: #10b981;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.65);
+}
+
+/* 3D Read Receipt Axis Flip */
+.receipt-read-flip .receipt-check-read {
+  display: inline-block;
+  animation: receiptFlip3D 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform-origin: center center;
+}
+
+@keyframes receiptFlip3D {
+  0% {
+    transform: scale(0.6) rotateY(90deg);
+    opacity: 0.3;
+  }
+  60% {
+    transform: scale(1.3) rotateY(-15deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotateY(0deg);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-bubble-row.vibe-msg-send-spring,
+  .vibe-heart-burst-main,
+  .vibe-heart-particle,
+  .receipt-read-flip .receipt-check-read {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+
 
 
 

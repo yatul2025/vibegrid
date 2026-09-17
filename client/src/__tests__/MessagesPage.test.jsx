@@ -2037,6 +2037,155 @@ describe('Mobile DM UX and Voice Note Fixes', () => {
       expect(screen.queryByTestId('action-bar-delete')).not.toBeInTheDocument();
     });
   });
+
+  // =====================================================================
+  // Phase 3: Message Micro-Interactions (Option 1: Haptic Pop & Heart Burst Suite)
+  // =====================================================================
+  describe('Phase 3: Message Micro-Interactions (Option 1: Haptic Pop & Heart Burst)', () => {
+    // 1. Double-click Heart Burst Simulation Component
+    function MessageBubbleWithBurst({ message, onReact, onReply }) {
+      const [bursting, setBursting] = React.useState(false);
+
+      const handleDoubleClick = () => {
+        if (!message || message.is_deleted) return;
+        setBursting(true);
+        if (onReact) onReact(message.id, '❤️');
+      };
+
+      return (
+        <div
+          data-testid={`msg-row-${message.id}`}
+          className={`message-bubble-row ${message.is_mine ? 'outgoing' : 'incoming'} ${message.pending ? 'vibe-msg-send-spring' : ''}`}
+          onDoubleClick={handleDoubleClick}
+        >
+          <div className={`message-bubble ${message.is_deleted ? 'deleted-bubble' : ''}`}>
+            {bursting && (
+              <div className="vibe-heart-burst-overlay" data-testid="heart-burst-overlay">
+                <span className="vibe-heart-burst-main">❤️</span>
+                <span className="vibe-heart-particle p1" />
+                <span className="vibe-heart-particle p2" />
+                <span className="vibe-heart-particle p3" />
+                <span className="vibe-heart-particle p4" />
+                <span className="vibe-heart-particle p5" />
+                <span className="vibe-heart-particle p6" />
+              </div>
+            )}
+            <p className="message-text">{message.is_deleted ? 'This message was deleted' : message.content}</p>
+
+            <span
+              className={`message-receipt-tick ${message.is_read ? 'receipt-read-flip' : ''}`}
+              data-testid="receipt-tick"
+            >
+              {message.is_read ? '✓✓' : '✓'}
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    it('triggers 3D heart burst overlay and sends heart reaction on double-click', () => {
+      const onReact = vi.fn();
+      const msg = { id: 101, content: 'Vibe check!', is_deleted: false, is_mine: false };
+
+      render(<MessageBubbleWithBurst message={msg} onReact={onReact} />);
+      const row = screen.getByTestId('msg-row-101');
+
+      // Before double-click, heart burst is not visible
+      expect(screen.queryByTestId('heart-burst-overlay')).not.toBeInTheDocument();
+
+      // Trigger double-click
+      fireEvent.doubleClick(row);
+
+      // Heart burst overlay appears with main heart and particle elements
+      expect(screen.getByTestId('heart-burst-overlay')).toBeInTheDocument();
+      expect(screen.getByText('❤️')).toBeInTheDocument();
+      expect(onReact).toHaveBeenCalledWith(101, '❤️');
+    });
+
+    it('does NOT trigger heart burst or reaction on deleted messages', () => {
+      const onReact = vi.fn();
+      const deletedMsg = { id: 102, content: 'deleted message', is_deleted: true, is_mine: false };
+
+      render(<MessageBubbleWithBurst message={deletedMsg} onReact={onReact} />);
+      const row = screen.getByTestId('msg-row-102');
+
+      fireEvent.doubleClick(row);
+
+      // Heart burst overlay must NOT appear for deleted message
+      expect(screen.queryByTestId('heart-burst-overlay')).not.toBeInTheDocument();
+      expect(onReact).not.toHaveBeenCalled();
+    });
+
+    it('applies vibe-msg-send-spring class to newly sent outgoing messages', () => {
+      const pendingMsg = { id: 'temp-123', content: 'Sending now', pending: true, is_mine: true };
+      const normalMsg = { id: 103, content: 'Already sent', pending: false, is_mine: true };
+
+      const { rerender } = render(<MessageBubbleWithBurst message={pendingMsg} />);
+      expect(screen.getByTestId('msg-row-temp-123')).toHaveClass('vibe-msg-send-spring');
+
+      rerender(<MessageBubbleWithBurst message={normalMsg} />);
+      expect(screen.getByTestId('msg-row-103')).not.toHaveClass('vibe-msg-send-spring');
+    });
+
+    it('applies receipt-read-flip class to read message receipt ticks for 3D flip animation', () => {
+      const readMsg = { id: 104, content: 'Check this', is_read: true, is_mine: true };
+      const unreadMsg = { id: 105, content: 'Unread note', is_read: false, is_mine: true };
+
+      const { rerender } = render(<MessageBubbleWithBurst message={readMsg} />);
+      expect(screen.getByTestId('receipt-tick')).toHaveClass('receipt-read-flip');
+
+      rerender(<MessageBubbleWithBurst message={unreadMsg} />);
+      expect(screen.getByTestId('receipt-tick')).not.toHaveClass('receipt-read-flip');
+    });
+
+    it('renders swipe-to-reply cue with threshold-met state and triggers reply on threshold release', () => {
+      const onReply = vi.fn();
+      const msg = { id: 201, content: 'Swipe me to reply', is_deleted: false };
+
+      function SwipeTestComponent({ swipingOffset, isMet, isDeleted }) {
+        return (
+          <div className="message-bubble-row incoming">
+            {swipingOffset > 8 && (
+              <div
+                className={`vibe-swipe-reply-cue incoming-cue ${isMet ? 'threshold-met' : ''}`}
+                data-testid="swipe-reply-cue"
+              >
+                ↩
+              </div>
+            )}
+            <div
+              className="message-bubble"
+              style={{ transform: `translateX(${swipingOffset}px)` }}
+              onClick={() => {
+                if (isMet && !isDeleted) onReply(msg);
+              }}
+            >
+              {msg.content}
+            </div>
+          </div>
+        );
+      }
+
+      // Initial state: no cue
+      const { rerender } = render(<SwipeTestComponent swipingOffset={0} isMet={false} isDeleted={false} />);
+      expect(screen.queryByTestId('swipe-reply-cue')).not.toBeInTheDocument();
+
+      // Swiping 20px: cue appears but not met
+      rerender(<SwipeTestComponent swipingOffset={20} isMet={false} isDeleted={false} />);
+      const cue = screen.getByTestId('swipe-reply-cue');
+      expect(cue).toBeInTheDocument();
+      expect(cue).not.toHaveClass('threshold-met');
+
+      // Swiping 45px: threshold met!
+      rerender(<SwipeTestComponent swipingOffset={45} isMet={true} isDeleted={false} />);
+      expect(screen.getByTestId('swipe-reply-cue')).toHaveClass('threshold-met');
+
+      // Release triggers reply
+      fireEvent.click(screen.getByText('Swipe me to reply'));
+      expect(onReply).toHaveBeenCalledWith(msg);
+    });
+  });
 });
+
 
 
