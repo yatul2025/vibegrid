@@ -16,6 +16,7 @@ import apiClient from '../api/client';
 import CommentsModal from '../components/CommentsModal';
 import HashtagFeedModal from '../components/HashtagFeedModal';
 import HidePostModal from '../components/HidePostModal';
+import VibiEmptyState from '../components/VibiEmptyState';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 import { Heart, MessageCircle, Bookmark } from 'lucide-react';
 
@@ -379,11 +380,11 @@ export default function ExplorePage({ onNavigateToProfile }) {
           <p>Discovering photos...</p>
         </div>
       ) : posts.length === 0 ? (
-        <div className="explore-empty-state">
-          <div className="empty-explore-icon">🌐</div>
-          <h3>No Explore Posts Yet</h3>
-          <p>When creators share photos, they will appear here in the community explore grid.</p>
-        </div>
+        <VibiEmptyState
+          pose="magnifier"
+          title="No Explore Posts Yet"
+          subtitle="When creators share photos, they will appear here in the community explore grid."
+        />
       ) : (
         <div className="explore-mosaic-grid">
           {posts.map((post) => (

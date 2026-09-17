@@ -24,6 +24,7 @@ import FeedSidebar from '../components/FeedSidebar';
 import ConfirmModal from '../components/ConfirmModal';
 import HidePostModal from '../components/HidePostModal';
 import { triggerCelebration } from '../components/AuroraCelebrationOverlay';
+import VibiEmptyState from '../components/VibiEmptyState';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 import {
   Heart,
@@ -731,38 +732,32 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
           ))}
         </div>
       ) : displayedPosts.length === 0 ? (
-        /* Empty Feed State */
+        /* Empty Feed State — Phase 6 Delight: Vibi's Mascot Moments */
         feedMode === 'closeFriends' ? (
-          <div className="feed-empty-card">
-            <div className="empty-feed-icon">⭐</div>
-            <h3>No Close Friends posts yet</h3>
-            <p>Tap the green star ★ button on any creator's post to add them to your Close Friends!</p>
-            <button type="button" className="btn-secondary" onClick={() => setFeedMode('forYou')}>
-              Show All Posts
-            </button>
-          </div>
+          <VibiEmptyState
+            pose="treasure"
+            title="No Close Friends posts yet"
+            subtitle="Tap the green star ★ button on any creator's post to add them to your Close Friends!"
+            actionLabel="Show All Posts"
+            onAction={() => setFeedMode('forYou')}
+          />
         ) : feedMode === 'following' ? (
-          <div className="feed-empty-card">
-            <div className="empty-feed-icon">👥</div>
-            <h3>No posts from accounts you follow</h3>
-            <p>Follow interesting creators from the For You feed or Explore tab to see their latest updates here.</p>
-            <button type="button" className="btn-secondary" onClick={() => setFeedMode('forYou')}>
-              Explore For You Feed
-            </button>
-          </div>
+          <VibiEmptyState
+            pose="wave"
+            title="No posts from accounts you follow"
+            subtitle="Follow interesting creators from the For You feed or Explore tab to see their latest updates here."
+            actionLabel="Explore For You Feed"
+            onAction={() => setFeedMode('forYou')}
+          />
         ) : (
-          <div className="feed-empty-card">
-            <div className="empty-feed-icon">📸</div>
-            <h3>Your feed is waiting!</h3>
-            <p>Be the first one to share a photo moment with the VibeGrid community.</p>
-            {user ? (
-              <button type="button" className="btn-primary" onClick={onOpenCreatePost}>
-                Create Your First Post
-              </button>
-            ) : (
-              <p className="feed-empty-hint">Sign in to start posting and liking photos.</p>
-            )}
-          </div>
+          <VibiEmptyState
+            pose="camera"
+            title="Your feed is waiting!"
+            subtitle="Be the first one to share a photo moment with the VibeGrid community."
+            actionLabel={user ? "Create Your First Post" : undefined}
+            onAction={user ? onOpenCreatePost : undefined}
+            secondaryLabel={!user ? "Sign in to start posting" : undefined}
+          />
         )
       ) : (
         /* Posts Timeline */

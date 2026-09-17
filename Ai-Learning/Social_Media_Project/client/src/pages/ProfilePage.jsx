@@ -20,6 +20,7 @@ import HashtagFeedModal from '../components/HashtagFeedModal';
 import ConfirmModal from '../components/ConfirmModal';
 import PasswordToggleButton from '../components/PasswordToggleIcon';
 import { triggerCelebration } from '../components/AuroraCelebrationOverlay';
+import VibiEmptyState from '../components/VibiEmptyState';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 import {
   Heart,
@@ -1747,21 +1748,13 @@ export default function ProfilePage({
               </div>
             ) : (
               <div className="profile-posts-empty">
-                <div className="empty-camera-icon">
-                  <Camera size={32} strokeWidth={1.5} />
-                </div>
-                <h3>No Posts Yet</h3>
-                <p>When {isOwnProfile ? 'you share photos' : `@${profile.username} shares photos`}, they will appear here.</p>
-                {isOwnProfile && onOpenCreatePost && (
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={onOpenCreatePost}
-                    style={{ marginTop: '14px' }}
-                  >
-                    Share Your First Photo
-                  </button>
-                )}
+                <VibiEmptyState
+                  pose="camera"
+                  title="No Posts Yet"
+                  subtitle={`When ${isOwnProfile ? 'you share photos' : `@${profile.username} shares photos`}, they will appear here.`}
+                  actionLabel={isOwnProfile && onOpenCreatePost ? "Share Your First Photo" : undefined}
+                  onAction={isOwnProfile && onOpenCreatePost ? onOpenCreatePost : undefined}
+                />
               </div>
             )
           )}
@@ -1801,11 +1794,11 @@ export default function ProfilePage({
               </div>
             ) : (
               <div className="profile-posts-empty">
-                <div className="empty-camera-icon">
-                  <Bookmark size={32} strokeWidth={1.5} />
-                </div>
-                <h3>Save Photos</h3>
-                <p>Save photos you want to see again. No one is notified, and only you can see what you've saved.</p>
+                <VibiEmptyState
+                  pose="treasure"
+                  title="Save Photos"
+                  subtitle="Save photos you want to see again. No one is notified, and only you can see what you've saved."
+                />
               </div>
             )
           )}

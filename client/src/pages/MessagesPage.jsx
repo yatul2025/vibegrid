@@ -38,6 +38,7 @@ import CreateGroupModal from '../components/CreateGroupModal';
 import CallHistoryModal from '../components/CallHistoryModal';
 import KeyBackupModal from '../components/KeyBackupModal';
 import senderKeysService from '../services/crypto/senderKeys';
+import VibiEmptyState from '../components/VibiEmptyState';
 import {
   Phone,
   Video,
@@ -2989,16 +2990,14 @@ export default function MessagesPage({
               </div>
             ) : conversations.length === 0 ? (
               <div className="conversations-empty">
-                <p>{isArchivedView ? 'No archived conversations.' : 'No messages yet.'}</p>
-                {!isArchivedView && (
-                  <button
-                    type="button"
-                    className="btn-primary btn-sm"
-                    onClick={openNewChatModal}
-                  >
-                    Send a Message
-                  </button>
-                )}
+                <VibiEmptyState
+                  pose="mail"
+                  title={isArchivedView ? 'No archived conversations' : 'No messages yet'}
+                  subtitle={isArchivedView ? 'Chats you archive will appear here safely.' : 'Connect with friends to start chatting!'}
+                  actionLabel={!isArchivedView ? 'Send a Message' : undefined}
+                  onAction={!isArchivedView ? openNewChatModal : undefined}
+                  className="vibi-empty-compact"
+                />
               </div>
             ) : (
               conversations.map((c) => {
@@ -3794,8 +3793,24 @@ export default function MessagesPage({
                   </div>
                 ) : filteredMessages.length === 0 ? (
                   <div className="chat-thread-empty">
-                    <h4>No messages found</h4>
-                    <p>Try clearing your search query or media filter.</p>
+                    {messages.length === 0 ? (
+                      <VibiEmptyState
+                        pose="wave"
+                        title={activePartner ? `Say hi to @${activePartner.username}! 👋` : 'Say hi! 👋'}
+                        subtitle="End-to-end encrypted session established. Break the ice with a friendly wave!"
+                        actionLabel="Wave Hello 👋"
+                        onAction={() => {
+                          setMessageInput('👋 Hey there!');
+                          if (chatInputRef.current) chatInputRef.current.focus();
+                        }}
+                      />
+                    ) : (
+                      <VibiEmptyState
+                        pose="magnifier"
+                        title="No messages found"
+                        subtitle="Try clearing your search query or media filter."
+                      />
+                    )}
                   </div>
                 ) : (
                   filteredMessages.map((m, idx, arr) => {
@@ -4432,16 +4447,13 @@ export default function MessagesPage({
             </>
           ) : (
             <div className="chat-no-selection">
-              <div className="chat-no-selection-icon">💬</div>
-              <h3>Your Direct Messages</h3>
-              <p>End-to-end encrypted messaging, voice notes, photos, and video calling on VibeGrid.</p>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={openNewChatModal}
-              >
-                Start a New Chat
-              </button>
+              <VibiEmptyState
+                pose="mail"
+                title="Your Direct Messages"
+                subtitle="End-to-end encrypted messaging, voice notes, photos, and video calling on VibeGrid."
+                actionLabel="Start a New Chat"
+                onAction={openNewChatModal}
+              />
             </div>
           )}
         </section>
