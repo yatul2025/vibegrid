@@ -1,7 +1,7 @@
 /**
  * client/src/components/group-settings/views/InviteShareView.jsx
  * ===============================================================
- * Screen 4: Invite & Share (QR Code, Invite Link & Settings)
+ * Screen 4: Invite & Share (QR Code, Invite Link & Settings) — Unified VibeGrid Design
  */
 
 import React, { useState } from 'react';
@@ -17,6 +17,7 @@ import {
   Globe,
   Lock
 } from 'lucide-react';
+import SpringToggle from '../../SpringToggle';
 
 export default function InviteShareView({
   group,
@@ -29,7 +30,6 @@ export default function InviteShareView({
   onShowToast
 }) {
   const [copied, setCopied] = useState(false);
-  const [copiedQr, setCopiedQr] = useState(false);
   const [expireTime, setExpireTime] = useState('never');
 
   const fullUrl = `${window.location.origin}/join/${inviteCode || group?.invite_code || 'grp_' + (group?.id || 'demo')}`;
@@ -66,232 +66,186 @@ export default function InviteShareView({
   };
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-200 text-left">
-      {/* QR Code Presentation Card */}
-      <div className="flex flex-col items-center text-center p-5 rounded-2xl bg-white/[0.03] border border-white/10 shadow-xl space-y-3">
-        <div className="relative p-4 rounded-xl bg-white flex items-center justify-center shadow-lg shadow-black/40">
-          {/* Stylized QR Code SVG Representation */}
+    <div className="space-y-4 text-left">
+      {/* 1. Branded QR Code Presentation Card */}
+      <div className="vg-card-subtle p-5 flex flex-col items-center text-center">
+        <div className="p-4 bg-white rounded-2xl shadow-xl inline-block mb-3 border border-[var(--border-color)]">
           <svg
-            className="w-44 h-44"
+            className="w-40 h-40"
             viewBox="0 0 160 160"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
           >
             {/* Corner Markers */}
-            <rect x="10" y="10" width="40" height="40" rx="6" fill="#0a0c10" />
+            <rect x="10" y="10" width="40" height="40" rx="6" fill="#090d16" />
             <rect x="16" y="16" width="28" height="28" rx="4" fill="#ffffff" />
-            <rect x="22" y="22" width="16" height="16" rx="2" fill="#0a0c10" />
+            <rect x="22" y="22" width="16" height="16" rx="2" fill="#6366f1" />
 
-            <rect x="110" y="10" width="40" height="40" rx="6" fill="#0a0c10" />
+            <rect x="110" y="10" width="40" height="40" rx="6" fill="#090d16" />
             <rect x="116" y="16" width="28" height="28" rx="4" fill="#ffffff" />
-            <rect x="122" y="22" width="16" height="16" rx="2" fill="#0a0c10" />
+            <rect x="122" y="22" width="16" height="16" rx="2" fill="#6366f1" />
 
-            <rect x="10" y="110" width="40" height="40" rx="6" fill="#0a0c10" />
+            <rect x="10" y="110" width="40" height="40" rx="6" fill="#090d16" />
             <rect x="16" y="116" width="28" height="28" rx="4" fill="#ffffff" />
-            <rect x="22" y="122" width="16" height="16" rx="2" fill="#0a0c10" />
+            <rect x="22" y="122" width="16" height="16" rx="2" fill="#6366f1" />
 
             {/* Pattern Dots */}
-            <rect x="60" y="14" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="74" y="14" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="88" y="14" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="60" y="28" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="88" y="28" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="60" y="42" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="74" y="42" width="8" height="8" rx="2" fill="#0a0c10" />
+            <rect x="60" y="14" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="74" y="14" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="88" y="14" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="60" y="28" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="88" y="28" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="60" y="42" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="74" y="42" width="8" height="8" rx="2" fill="#090d16" />
 
-            <rect x="14" y="60" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="28" y="60" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="42" y="60" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="14" y="74" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="42" y="74" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="14" y="88" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="28" y="88" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="42" y="88" width="8" height="8" rx="2" fill="#0a0c10" />
+            <rect x="14" y="60" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="28" y="60" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="42" y="60" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="14" y="74" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="42" y="74" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="14" y="88" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="28" y="88" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="42" y="88" width="8" height="8" rx="2" fill="#090d16" />
 
-            <rect x="110" y="60" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="124" y="60" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="138" y="60" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="124" y="74" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="110" y="88" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="138" y="88" width="8" height="8" rx="2" fill="#0a0c10" />
+            <rect x="110" y="60" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="124" y="60" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="138" y="60" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="124" y="74" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="110" y="88" width="8" height="8" rx="2" fill="#090d16" />
+            <rect x="124" y="88" width="8" height="8" rx="2" fill="#090d16" />
 
-            <rect x="60" y="110" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="74" y="110" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="88" y="110" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="74" y="124" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="60" y="138" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="88" y="138" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="110" y="124" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="124" y="138" width="8" height="8" rx="2" fill="#0a0c10" />
-            <rect x="138" y="138" width="8" height="8" rx="2" fill="#0a0c10" />
-
-            {/* Center VibeGrid Logo Badge */}
-            <circle cx="80" cy="80" r="16" fill="#0a0c10" />
-            <rect x="68" y="68" width="24" height="24" rx="6" fill="url(#vg-grad)" />
-            <path
-              d="M74 74 L80 85 L86 74"
-              stroke="#ffffff"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            {/* VibeGrid Center Brand Badge */}
+            <circle cx="80" cy="80" r="14" fill="#090d16" />
+            <circle cx="80" cy="80" r="11" fill="url(#qr-brand-gradient)" />
             <defs>
-              <linearGradient id="vg-grad" x1="68" y1="68" x2="92" y2="92" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#ec4899" />
-                <stop offset="0.5" stopColor="#8b5cf6" />
-                <stop offset="1" stopColor="#06b6d4" />
+              <linearGradient id="qr-brand-gradient" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#6366f1" />
+                <stop offset="50%" stopColor="#ec4899" />
+                <stop offset="100%" stopColor="#f43f5e" />
               </linearGradient>
             </defs>
           </svg>
         </div>
 
-        <div>
-          <h3 className="text-sm font-bold text-white">Scan to join this group</h3>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            Anyone with this QR code can join this group.
-          </p>
-        </div>
+        <h4 className="text-sm font-bold text-[var(--text-primary)] m-0">
+          Scan to join this group
+        </h4>
+        <p className="text-xs text-[var(--text-muted)] mt-1 mb-3">
+          Anyone with this QR code or invite link can join the conversation.
+        </p>
 
         <button
           type="button"
           onClick={handleShareLink}
-          className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-500/20 via-cyan-500/20 to-emerald-500/20 border border-white/20 hover:border-white/40 text-xs font-semibold text-white flex items-center gap-2 transition-all hover:scale-[1.02]"
+          className="btn-secondary btn-sm"
         >
-          <Share2 size={14} className="text-cyan-400" />
+          <Share2 size={14} />
           <span>Share QR Code</span>
         </button>
       </div>
 
-      {/* Invite Link Section */}
-      <div className="space-y-2.5">
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider px-1">
+      {/* 2. Direct Invite URL Box */}
+      <div className="space-y-2">
+        <p className="vg-section-label">
           Invite Link
-        </h3>
-
-        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-white/[0.04] border border-white/10 focus-within:border-emerald-500/50 transition-colors">
+        </p>
+        <div className="flex items-center gap-2 p-2 rounded-xl bg-[var(--bg-page)] border border-[var(--border-color)]">
           <input
             type="text"
             readOnly
             value={fullUrl}
-            className="flex-1 bg-transparent text-xs text-zinc-300 select-all focus:outline-none truncate"
+            className="flex-1 bg-transparent text-xs text-[var(--text-primary)] select-all focus:outline-none truncate font-mono px-2"
           />
           <button
             type="button"
             onClick={handleCopyLink}
             title="Copy URL"
-            className="p-1.5 text-zinc-400 hover:text-emerald-400 rounded-lg hover:bg-white/10 transition-colors shrink-0"
+            className="btn-primary btn-sm shrink-0"
           >
-            {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+            <span>{copied ? 'Copied' : 'Copy Link'}</span>
           </button>
         </div>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-2.5 pt-1">
-          <button
-            type="button"
-            onClick={handleCopyLink}
-            className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-semibold text-xs transition-all shadow-md hover:scale-[1.02]"
-          >
-            {copied ? <Check size={15} /> : <Copy size={15} />}
-            <span>{copied ? 'Copied' : 'Copy Link'}</span>
-          </button>
-
+        <div className="grid grid-cols-2 gap-2 pt-1">
           <button
             type="button"
             onClick={handleShareLink}
-            className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-white/[0.05] border border-white/15 hover:bg-white/10 text-white font-semibold text-xs transition-all hover:scale-[1.02]"
+            className="btn-secondary w-full"
           >
-            <Share2 size={15} />
+            <Share2 size={14} />
             <span>Share Link</span>
           </button>
-        </div>
-      </div>
 
-      {/* Link Settings Card */}
-      <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-4">
-        <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
-          Link Settings
-        </h3>
-
-        {/* Allow Anyone to Join */}
-        <div className="flex items-center justify-between gap-3 text-left">
-          <div>
-            <p className="text-xs font-semibold text-white">Allow anyone to join</p>
-            <p className="text-[11px] text-zinc-400">Directly enter the group without waiting.</p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            disabled={!isAdmin || actionLoading}
-            onClick={() => handleTogglePerm('allow_anyone_to_join')}
-            className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full transition-colors ${
-              permissions.allow_anyone_to_join !== false ? 'bg-emerald-500' : 'bg-zinc-800'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
-                permissions.allow_anyone_to_join !== false ? 'translate-x-5' : 'translate-x-0.5'
-              } my-0.5`}
-            />
-          </button>
-        </div>
-
-        {/* Require Admin Approval */}
-        <div className="flex items-center justify-between gap-3 text-left border-t border-white/5 pt-3">
-          <div>
-            <p className="text-xs font-semibold text-white">Require admin approval</p>
-            <p className="text-[11px] text-zinc-400">Joiners go to pending requests queue.</p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            disabled={!isAdmin || actionLoading}
-            onClick={() => handleTogglePerm('require_admin_approval')}
-            className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full transition-colors ${
-              permissions.require_admin_approval ? 'bg-emerald-500' : 'bg-zinc-800'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
-                permissions.require_admin_approval ? 'translate-x-5' : 'translate-x-0.5'
-              } my-0.5`}
-            />
-          </button>
-        </div>
-
-        {/* Expire Link Selector */}
-        <div className="flex items-center justify-between gap-3 text-left border-t border-white/5 pt-3">
-          <div>
-            <p className="text-xs font-semibold text-white">Expire link</p>
-            <p className="text-[11px] text-zinc-400">Auto-revoke code after period.</p>
-          </div>
-          <select
-            value={expireTime}
-            onChange={(e) => setExpireTime(e.target.value)}
-            disabled={!isAdmin}
-            className="bg-zinc-900 border border-white/15 text-xs text-white rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-          >
-            <option value="never">Never &gt;</option>
-            <option value="1h">1 hour</option>
-            <option value="24h">24 hours</option>
-            <option value="7d">7 days</option>
-          </select>
-        </div>
-
-        {/* Regenerate Link */}
-        {isAdmin && (
-          <div className="border-t border-white/5 pt-3">
+          {isAdmin && (
             <button
               type="button"
               onClick={onRegenerateInvite}
               disabled={actionLoading}
-              className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:border-cyan-500/40 text-xs text-cyan-400 font-medium transition-all"
+              className="btn-secondary w-full text-[var(--danger)]"
             >
               <RefreshCw size={14} className={actionLoading ? 'animate-spin' : ''} />
               <span>Regenerate Link</span>
             </button>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Link Permissions & Settings */}
+      <div className="space-y-1">
+        <p className="vg-section-label">
+          Link Security Settings
+        </p>
+        <div className="vg-card-subtle divide-y divide-[var(--border-color)]">
+          {/* Allow Anyone to Join */}
+          <div className="flex items-center justify-between p-3.5 gap-3">
+            <div>
+              <p className="text-xs font-semibold text-[var(--text-primary)] m-0">Direct Join via Link</p>
+              <p className="text-[11px] text-[var(--text-muted)] m-0">Members join instantly without waiting</p>
+            </div>
+            <SpringToggle
+              checked={permissions.allow_anyone_to_join !== false}
+              onChange={() => handleTogglePerm('allow_anyone_to_join')}
+              disabled={!isAdmin || actionLoading}
+              id="perm-allow-anyone-join"
+              title="Allow direct join"
+            />
           </div>
-        )}
+
+          {/* Require Admin Approval */}
+          <div className="flex items-center justify-between p-3.5 gap-3">
+            <div>
+              <p className="text-xs font-semibold text-[var(--text-primary)] m-0">Require Admin Approval</p>
+              <p className="text-[11px] text-[var(--text-muted)] m-0">New visitors must be approved before entering</p>
+            </div>
+            <SpringToggle
+              checked={!!permissions.require_admin_approval}
+              onChange={() => handleTogglePerm('require_admin_approval')}
+              disabled={!isAdmin || actionLoading}
+              id="perm-require-admin-approval"
+              title="Require admin approval"
+            />
+          </div>
+
+          {/* Expire Link Selector */}
+          <div className="flex items-center justify-between p-3.5 gap-3">
+            <div>
+              <p className="text-xs font-semibold text-[var(--text-primary)] m-0">Link Expiration</p>
+              <p className="text-[11px] text-[var(--text-muted)] m-0">Automatically rotate link after time</p>
+            </div>
+            <select
+              value={expireTime}
+              onChange={(e) => setExpireTime(e.target.value)}
+              disabled={!isAdmin}
+              className="bg-[var(--bg-page)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] rounded-lg px-2.5 py-1 focus:outline-none focus:border-[var(--primary)]"
+            >
+              <option value="never">Never</option>
+              <option value="1h">1 hour</option>
+              <option value="24h">24 hours</option>
+              <option value="7d">7 days</option>
+            </select>
+          </div>
+        </div>
       </div>
     </div>
   );

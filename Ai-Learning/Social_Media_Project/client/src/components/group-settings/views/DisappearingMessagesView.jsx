@@ -1,7 +1,7 @@
 /**
  * client/src/components/group-settings/views/DisappearingMessagesView.jsx
  * ======================================================================
- * Screen 10: Disappearing Messages (Self-Destruct Timers)
+ * Screen 10: Disappearing Messages — Unified VibeGrid Design
  */
 
 import React, { useState, useEffect } from 'react';
@@ -55,105 +55,93 @@ export default function DisappearingMessagesView({
         );
       }
     } catch {
-      if (onShowToast) onShowToast('Failed to update ephemeral timer', 'error');
+      if (onShowToast) onShowToast('Failed to update disappearing messages', 'error');
     }
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200 text-left">
-      {/* Circular Timer Visual Graphic */}
-      <div className="flex flex-col items-center text-center pt-2 space-y-3">
-        <div className="relative w-36 h-36 flex items-center justify-center">
-          {/* Animated Glowing Ring Graphic */}
+    <div className="space-y-5 text-left">
+      {/* 1. Circular Timer Graphic with VibeGrid Theme Colors */}
+      <div className="flex flex-col items-center text-center pt-2 space-y-2">
+        <div className="relative w-32 h-32 flex items-center justify-center">
           <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-            {/* Background Circle */}
             <circle
               cx="50"
               cy="50"
-              r="42"
+              r="40"
               fill="transparent"
-              stroke="rgba(255, 255, 255, 0.08)"
-              strokeWidth="6"
+              stroke="var(--border-color)"
+              strokeWidth="5"
             />
-            {/* Active Accent Arc */}
             <circle
               cx="50"
               cy="50"
-              r="42"
+              r="40"
               fill="transparent"
-              stroke="url(#timer-grad)"
-              strokeWidth="6"
+              stroke="var(--primary)"
+              strokeWidth="5"
               strokeLinecap="round"
-              strokeDasharray="264"
-              strokeDashoffset={selectedTimer ? '80' : '264'}
-              className="transition-all duration-700 ease-out"
+              strokeDasharray="251"
+              strokeDashoffset={selectedTimer ? '75' : '251'}
+              className="transition-all duration-500 ease-out"
             />
-            <defs>
-              <linearGradient id="timer-grad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#06b6d4" />
-                <stop offset="100%" stopColor="#10b981" />
-              </linearGradient>
-            </defs>
           </svg>
 
-          {/* Center Hourglass Icon */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${selectedTimer ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-zinc-500'} transition-colors`}>
-              <Hourglass size={24} className={selectedTimer ? 'animate-pulse' : ''} />
+            <div className={`w-11 h-11 rounded-full flex items-center justify-center ${selectedTimer ? 'bg-[var(--primary-light)] text-[var(--primary)]' : 'bg-[var(--bg-page)] text-[var(--text-muted)]'} transition-colors border border-[var(--border-color)]`}>
+              <Hourglass size={20} className={selectedTimer ? 'animate-pulse' : ''} />
             </div>
           </div>
         </div>
 
         <div>
-          <h3 className="text-sm font-bold text-white tracking-tight">
+          <h3 className="text-sm font-bold text-[var(--text-primary)] m-0">
             {currentOption.title}
           </h3>
-          <p className="text-xs text-zinc-400 mt-1 max-w-xs">
-            New messages will disappear from this chat after the selected duration.
+          <p className="text-xs text-[var(--text-muted)] mt-1 mb-0 max-w-xs">
+            When enabled, newly sent messages vanish from this group after the duration expires.
           </p>
         </div>
       </div>
 
-      {/* Radio Options List */}
-      <div className="space-y-2">
+      {/* 2. Radio Options List */}
+      <div className="vg-card-subtle divide-y divide-[var(--border-color)]">
         {timerOptions.map((opt) => {
           const isSelected = selectedTimer === opt.seconds;
           return (
             <div
               key={opt.id}
               onClick={() => handleSelect(opt.seconds)}
-              className={`flex items-center justify-between p-3.5 rounded-xl border transition-all cursor-pointer ${
-                isSelected
-                  ? 'bg-emerald-500/10 border-emerald-500/40 text-white'
-                  : 'bg-white/[0.03] border-white/10 hover:border-white/20 text-zinc-300'
-              } ${!isAdmin ? 'opacity-70' : ''}`}
+              className={`flex items-center justify-between p-3.5 transition-all cursor-pointer hover:bg-[var(--bg-card)] ${
+                !isAdmin ? 'opacity-60 cursor-not-allowed' : ''
+              }`}
             >
               <div className="flex items-center gap-3">
                 <div
-                  className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                  className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors ${
                     isSelected
-                      ? 'border-emerald-400 bg-emerald-500 text-black'
-                      : 'border-white/30 bg-transparent'
+                      ? 'border-[var(--primary)] bg-[var(--primary)]'
+                      : 'border-[var(--border-color)] bg-transparent'
                   }`}
                 >
-                  {isSelected && <div className="w-2 h-2 rounded-full bg-black" />}
+                  {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                 </div>
-                <span className="text-xs font-semibold">{opt.label}</span>
+                <span className={`text-xs font-semibold ${isSelected ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
+                  {opt.label}
+                </span>
               </div>
 
               {isSelected && (
-                <Check size={16} className="text-emerald-400 shrink-0" />
+                <Check size={16} className="text-[var(--primary)] shrink-0" />
               )}
             </div>
           );
         })}
       </div>
 
-      {/* Footer Subtext */}
-      <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/10 text-zinc-400 text-[11px] leading-relaxed">
-        <p>
-          <span className="text-zinc-200 font-semibold">Note:</span> Anyone in the chat can still export or screenshot messages while they are visible. This setting applies to all members of the group.
-        </p>
+      {/* 3. Footer Subtext */}
+      <div className="p-3 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-muted)] text-[11px] leading-relaxed">
+        <span className="text-[var(--text-primary)] font-semibold">Note:</span> Participants can still forward or save messages before they expire. This setting applies to all members in this group.
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 /**
  * client/src/components/group-settings/views/PermissionsView.jsx
  * ===============================================================
- * Screen 3: Group Permissions
+ * Screen 3: Group Permissions — Unified VibeGrid Design + SpringToggle
  */
 
 import React, { useState, useEffect } from 'react';
@@ -17,6 +17,7 @@ import {
   Lock,
   Check
 } from 'lucide-react';
+import SpringToggle from '../../SpringToggle';
 
 export default function PermissionsView({
   permissions = {},
@@ -56,130 +57,134 @@ export default function PermissionsView({
     const updated = { ...localPerms, [key]: nextState };
     setLocalPerms(updated);
 
-    // Sync to backend
     if (onUpdatePermissions) {
       await onUpdatePermissions(updated);
     }
   };
 
-  const renderToggle = (key, label, description, icon) => {
+  const renderToggleRow = (key, label, description, icon) => {
     const isChecked = !!localPerms[key];
 
     return (
       <div
         key={key}
-        className="flex items-start justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all text-left gap-3"
+        className="flex items-center justify-between p-3.5 transition-all text-left gap-3 hover:bg-[var(--bg-card)]"
       >
-        <div className="flex items-start gap-3">
-          <div className="p-2 rounded-lg bg-white/5 text-zinc-300 shrink-0 mt-0.5 border border-white/10">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-[var(--primary-light)] text-[var(--primary)] flex items-center justify-center shrink-0">
             {icon}
           </div>
-          <div className="space-y-0.5">
-            <p className="text-xs font-semibold text-white">{label}</p>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-[var(--text-primary)] m-0">{label}</p>
             {description && (
-              <p className="text-[11px] text-zinc-400 leading-relaxed">{description}</p>
+              <p className="text-[11px] text-[var(--text-muted)] m-0 leading-tight">{description}</p>
             )}
           </div>
         </div>
 
-        {/* Toggle Switch */}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={isChecked}
-          disabled={!isAdmin || actionLoading}
-          onClick={() => handleToggle(key)}
-          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${
-            !isAdmin ? 'opacity-50 cursor-not-allowed' : ''
-          } ${isChecked ? 'bg-emerald-500 shadow-lg shadow-emerald-500/25' : 'bg-zinc-800'}`}
-        >
-          <span
-            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out my-0.5 ${
-              isChecked ? 'translate-x-5' : 'translate-x-0.5'
-            }`}
+        {/* VibeGrid Fluid SpringToggle with haptics & audio snap */}
+        <div className="shrink-0">
+          <SpringToggle
+            checked={isChecked}
+            onChange={() => handleToggle(key)}
+            disabled={!isAdmin || actionLoading}
+            id={`perm-toggle-${key}`}
+            title={label}
+            data-testid={`perm-toggle-${key}`}
           />
-        </button>
+        </div>
       </div>
     );
   };
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-200">
-      {!isAdmin && (
-        <div className="flex items-center gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs text-left">
-          <Lock size={15} className="shrink-0" />
-          <span>Only group administrators can modify group permissions.</span>
-        </div>
-      )}
+    <div className="space-y-4 text-left">
+      {/* Banner Notice */}
+      <div className="p-3 rounded-xl bg-[var(--primary-light)] border border-[var(--primary)] text-xs text-[var(--primary)] flex items-center gap-2.5">
+        <Shield size={16} className="shrink-0" />
+        <span className="leading-snug">
+          {isAdmin
+            ? 'Toggle group permissions in real-time. Changes apply to all members immediately.'
+            : 'Only group administrators can modify group permissions.'}
+        </span>
+      </div>
 
-      {/* Members Can Section */}
-      <div className="space-y-2.5 text-left">
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider px-1">
+      {/* 1. Member Participation Section */}
+      <div className="space-y-1">
+        <p className="vg-section-label">
           Members can:
-        </h3>
-        <div className="space-y-2">
-          {renderToggle(
+        </p>
+        <div className="vg-card-subtle divide-y divide-[var(--border-color)]">
+          {renderToggleRow(
             'allow_member_info_edit',
-            'Edit group settings',
-            'Name, icon, description, disappearing messages, pin, and more.',
-            <Settings size={16} className="text-emerald-400" />
+            'Edit Group Info',
+            'Allow members to edit the name, icon, and description',
+            <Settings size={16} />
           )}
 
-          {renderToggle(
+          {renderToggleRow(
             'allow_member_messages',
-            'Send new messages',
-            'Allow regular members to post messages in this conversation.',
-            <MessageSquare size={16} className="text-cyan-400" />
+            'Send Messages',
+            'Allow group members to send text and media',
+            <MessageSquare size={16} />
           )}
 
-          {renderToggle(
+          {renderToggleRow(
             'allow_member_adds',
-            'Add other members',
-            'Allow all members to add new people directly into this group.',
-            <UserPlus size={16} className="text-indigo-400" />
+            'Add Other Members',
+            'Allow members to add friends to this group',
+            <UserPlus size={16} />
           )}
 
-          {renderToggle(
+          {renderToggleRow(
             'allow_member_invites',
-            'Invite via link or QR code',
-            'Allow members to share the group invite code and QR badge.',
-            <Share2 size={16} className="text-pink-400" />
+            'Share Group Link',
+            'Allow members to copy and share the invite link',
+            <Share2 size={16} />
           )}
         </div>
       </div>
 
-      {/* Admins Can Section */}
-      <div className="space-y-2.5 text-left">
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider px-1">
-          Admins can:
-        </h3>
-        <div className="space-y-2">
-          {renderToggle(
+      {/* 2. Membership Approval Section */}
+      <div className="space-y-1">
+        <p className="vg-section-label">
+          Membership Controls
+        </p>
+        <div className="vg-card-subtle divide-y divide-[var(--border-color)]">
+          {renderToggleRow(
             'require_admin_approval',
-            'Approve new members',
-            'Must approve join requests before newcomers can enter.',
-            <UserCheck size={16} className="text-amber-400" />
+            'Approve New Members',
+            'Require an admin to approve join requests from invite links',
+            <UserCheck size={16} />
           )}
+        </div>
+      </div>
 
-          {renderToggle(
+      {/* 3. Administrative Powers Section */}
+      <div className="space-y-1">
+        <p className="vg-section-label">
+          Admins can:
+        </p>
+        <div className="vg-card-subtle divide-y divide-[var(--border-color)]">
+          {renderToggleRow(
             'admins_manage_members',
-            'Manage members',
-            'Add or remove members from the conversation.',
-            <Users size={16} className="text-emerald-400" />
+            'Admins Can Remove Members',
+            'Admins can remove members and revoke invites',
+            <Users size={16} />
           )}
 
-          {renderToggle(
+          {renderToggleRow(
             'admins_manage_settings',
-            'Manage group settings',
-            'Edit group permissions, security parameters, and metadata.',
-            <Shield size={16} className="text-cyan-400" />
+            'Admins Can Edit Permissions',
+            'Allow any admin to modify these group permissions',
+            <Shield size={16} />
           )}
 
-          {renderToggle(
+          {renderToggleRow(
             'admins_manage_admins',
-            'Manage admins',
-            'Add or remove other administrators.',
-            <Crown size={16} className="text-purple-400" />
+            'Admins Can Appoint Admins',
+            'Allow non-owner admins to promote other members',
+            <Crown size={16} />
           )}
         </div>
       </div>

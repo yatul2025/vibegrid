@@ -1,22 +1,23 @@
 /**
  * client/src/components/group-settings/GroupSettingsModal.css
  * =============================================================
- * Complete Production Styling for VibeGrid 10-Screen Group Settings & Governance Modal
+ * VibeGrid Unified Design System — Group Settings & Governance Modal
+ * 
+ * Uses VibeGrid theme tokens:
+ * --bg-page, --bg-card, --bg-card-hover, --bg-hover, --border-color,
+ * --text-primary, --text-secondary, --text-muted, --primary, --accent-gradient,
+ * --danger, --success, --warning, --radius-md, --radius-lg, --shadow-lg
  */
 
 /* ==========================================================================
-   1. Base Modal Overlay & Container
+   1. Modal Overlay & Dialog Container
    ========================================================================== */
-.group-settings-modal-overlay,
-.fixed.inset-0 {
+.group-settings-modal-overlay {
   position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  background: rgba(0, 0, 0, 0.82);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   z-index: 2500;
   display: flex;
   align-items: center;
@@ -25,22 +26,21 @@
   animation: gsFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.group-settings-card,
-.relative.w-full.max-w-md {
+.group-settings-card {
   position: relative;
   width: 100%;
-  max-width: 460px;
-  max-height: 92vh;
+  max-width: 480px;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
-  background: #0a0c10;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg, 20px);
+  box-shadow: var(--shadow-lg, 0 20px 40px rgba(0, 0, 0, 0.5));
   overflow: hidden;
-  color: #f1f5f9;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  animation: gsScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  color: var(--text-primary);
+  font-family: inherit;
+  animation: gsScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes gsFadeIn {
@@ -53,33 +53,127 @@
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* Base button reset inside group settings */
-.group-settings-card button,
-.relative.w-full.max-w-md button {
-  font-family: inherit;
-  cursor: pointer;
-  border: none;
+/* ==========================================================================
+   2. Header Navigation & Brand Logo Mark
+   ========================================================================== */
+.group-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.group-settings-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.group-settings-nav-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 10px);
+  border: 1px solid transparent;
   background: transparent;
-  outline: none;
-  transition: all 0.15s ease;
-  user-select: none;
-  font-size: inherit;
-  color: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition, all 0.2s ease);
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.group-settings-nav-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.group-settings-logo-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent-gradient);
+  padding: 1.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.group-settings-logo-inner {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-card);
+  border-radius: 6.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.group-settings-title-group {
+  min-width: 0;
+}
+
+.group-settings-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-settings-subtitle {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.2;
 }
 
 /* ==========================================================================
-   2. Navigation Header & Toast
+   3. Status Toast Notification
    ========================================================================== */
-.border-b.border-white\/10,
-.group-settings-header {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(10, 12, 16, 0.85);
-  backdrop-filter: blur(10px);
+.group-settings-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+  animation: gsSlideDown 0.2s ease-out;
+  flex-shrink: 0;
 }
 
-/* Status toast banner */
-.slide-in-from-top {
-  animation: gsSlideDown 0.2s ease-out;
+.group-settings-toast.toast-success {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--success, #10b981);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.group-settings-toast.toast-error {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger, #ef4444);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.group-settings-toast.toast-info {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 @keyframes gsSlideDown {
@@ -88,559 +182,457 @@
 }
 
 /* ==========================================================================
-   3. Layout & Flexbox Utilities
+   4. Modal Scrollable Body & Content Area
    ========================================================================== */
-.flex { display: flex; }
-.inline-flex { display: inline-flex; }
-.flex-col { flex-direction: column; }
-.flex-row { flex-direction: row; }
-.flex-1 { flex: 1 1 0%; }
-.flex-wrap { flex-wrap: wrap; }
-.items-center { align-items: center; }
-.items-start { align-items: flex-start; }
-.items-end { align-items: flex-end; }
-.justify-between { justify-content: space-between; }
-.justify-center { justify-content: center; }
-.justify-end { justify-content: flex-end; }
-.justify-start { justify-content: flex-start; }
-.shrink-0 { flex-shrink: 0; }
-.min-w-0 { min-width: 0; }
-
-.gap-1 { gap: 4px; }
-.gap-1\.5 { gap: 6px; }
-.gap-2 { gap: 8px; }
-.gap-2\.5 { gap: 10px; }
-.gap-3 { gap: 12px; }
-.gap-3\.5 { gap: 14px; }
-.gap-4 { gap: 16px; }
-
-.grid { display: grid; }
-.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-
-.space-y-0\.5 > * + * { margin-top: 2px; }
-.space-y-1 > * + * { margin-top: 4px; }
-.space-y-1\.5 > * + * { margin-top: 6px; }
-.space-y-2 > * + * { margin-top: 8px; }
-.space-y-2\.5 > * + * { margin-top: 10px; }
-.space-y-3 > * + * { margin-top: 12px; }
-.space-y-4 > * + * { margin-top: 16px; }
-.space-y-5 > * + * { margin-top: 20px; }
-.space-y-6 > * + * { margin-top: 24px; }
-
-/* ==========================================================================
-   4. Sizing & Dimensions
-   ========================================================================== */
-.w-full { width: 100%; }
-.w-3 { width: 12px; }
-.w-4 { width: 16px; }
-.w-5 { width: 20px; }
-.w-6 { width: 24px; }
-.w-7 { width: 28px; }
-.w-8 { width: 32px; }
-.w-9 { width: 36px; }
-.w-10 { width: 40px; }
-.w-11 { width: 44px; }
-.w-12 { width: 48px; }
-.w-14 { width: 56px; }
-.w-16 { width: 64px; }
-.w-20 { width: 80px; }
-.w-24 { width: 96px; }
-.w-44 { width: 176px; }
-.w-48 { width: 192px; }
-
-.h-3 { height: 12px; }
-.h-4 { height: 16px; }
-.h-5 { height: 20px; }
-.h-6 { height: 24px; }
-.h-7 { height: 28px; }
-.h-8 { height: 32px; }
-.h-9 { height: 36px; }
-.h-10 { height: 40px; }
-.h-11 { height: 44px; }
-.h-12 { height: 48px; }
-.h-14 { height: 56px; }
-.h-16 { height: 64px; }
-.h-20 { height: 80px; }
-.h-24 { height: 96px; }
-.h-44 { height: 176px; }
-
-.max-w-xs { max-width: 320px; }
-.max-w-sm { max-width: 384px; }
-.max-w-md { max-width: 480px; }
-.max-w-full { max-width: 100%; }
-.max-w-\[140px\] { max-width: 140px; }
-.max-w-\[200px\] { max-width: 200px; }
-.max-w-\[240px\] { max-width: 240px; }
-.max-h-\[92vh\] { max-height: 92vh; }
-
-/* ==========================================================================
-   5. Padding & Margins
-   ========================================================================== */
-.p-1 { padding: 4px; }
-.p-1\.5 { padding: 6px; }
-.p-2 { padding: 8px; }
-.p-2\.5 { padding: 10px; }
-.p-3 { padding: 12px; }
-.p-3\.5 { padding: 14px; }
-.p-4 { padding: 16px; }
-.p-5 { padding: 20px; }
-.p-6 { padding: 24px; }
-.p-\[1px\] { padding: 1px; }
-.p-\[2px\] { padding: 2px; }
-
-.px-1 { padding-left: 4px; padding-right: 4px; }
-.px-1\.5 { padding-left: 6px; padding-right: 6px; }
-.px-2 { padding-left: 8px; padding-right: 8px; }
-.px-2\.5 { padding-left: 10px; padding-right: 10px; }
-.px-3 { padding-left: 12px; padding-right: 12px; }
-.px-3\.5 { padding-left: 14px; padding-right: 14px; }
-.px-4 { padding-left: 16px; padding-right: 16px; }
-.px-5 { padding-left: 20px; padding-right: 20px; }
-
-.py-0\.5 { padding-top: 2px; padding-bottom: 2px; }
-.py-1 { padding-top: 4px; padding-bottom: 4px; }
-.py-1\.5 { padding-top: 6px; padding-bottom: 6px; }
-.py-2 { padding-top: 8px; padding-bottom: 8px; }
-.py-2\.5 { padding-top: 10px; padding-bottom: 10px; }
-.py-3 { padding-top: 12px; padding-bottom: 12px; }
-.py-3\.5 { padding-top: 14px; padding-bottom: 14px; }
-.py-4 { padding-top: 16px; padding-bottom: 16px; }
-.py-6 { padding-top: 24px; padding-bottom: 24px; }
-
-.pt-1 { padding-top: 4px; }
-.pt-2 { padding-top: 8px; }
-.pt-3 { padding-top: 12px; }
-.pt-4 { padding-top: 16px; }
-.pb-1 { padding-bottom: 4px; }
-.pl-9 { padding-left: 36px; }
-.pl-10 { padding-left: 40px; }
-.pr-4 { padding-right: 16px; }
-
-.mt-0\.5 { margin-top: 2px; }
-.mt-1 { margin-top: 4px; }
-.mt-2 { margin-top: 8px; }
-.mt-3 { margin-top: 12px; }
-.mt-4 { margin-top: 16px; }
-.mb-1\.5 { margin-bottom: 6px; }
-.mb-2 { margin-bottom: 8px; }
-.mb-3 { margin-bottom: 12px; }
-.-ml-1\.5 { margin-left: -6px; }
-
-/* ==========================================================================
-   6. Background Colors & Gradients
-   ========================================================================== */
-.bg-black\/40 { background-color: rgba(0, 0, 0, 0.4); }
-.bg-black\/60 { background-color: rgba(0, 0, 0, 0.6); }
-.bg-black\/80 { background-color: rgba(0, 0, 0, 0.8); }
-.bg-zinc-950\/60 { background-color: rgba(9, 9, 11, 0.6); }
-.bg-zinc-900 { background-color: #18181b; }
-.bg-zinc-800 { background-color: #27272a; }
-.bg-white { background-color: #ffffff; }
-
-.bg-white\/5,
-.bg-white\/\[0\.05\] { background-color: rgba(255, 255, 255, 0.05); }
-.bg-white\/10,
-.bg-white\/\[0\.10\] { background-color: rgba(255, 255, 255, 0.1); }
-.bg-white\/15 { background-color: rgba(255, 255, 255, 0.15); }
-.bg-white\/20 { background-color: rgba(255, 255, 255, 0.2); }
-.bg-white\/\[0\.02\] { background-color: rgba(255, 255, 255, 0.02); }
-.bg-white\/\[0\.03\] { background-color: rgba(255, 255, 255, 0.03); }
-.bg-white\/\[0\.04\] { background-color: rgba(255, 255, 255, 0.04); }
-.bg-white\/\[0\.06\] { background-color: rgba(255, 255, 255, 0.06); }
-.bg-white\/\[0\.08\] { background-color: rgba(255, 255, 255, 0.08); }
-
-/* Emerald / Green (Primary Action) */
-.bg-emerald-500 { background-color: #10b981; }
-.bg-emerald-500\/10 { background-color: rgba(16, 185, 129, 0.1); }
-.bg-emerald-500\/15 { background-color: rgba(16, 185, 129, 0.15); }
-.bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.2); }
-.bg-emerald-500\/30 { background-color: rgba(16, 185, 129, 0.3); }
-
-/* Cyan */
-.bg-cyan-500\/10 { background-color: rgba(6, 182, 212, 0.1); }
-.bg-cyan-500\/15 { background-color: rgba(6, 182, 212, 0.15); }
-.bg-cyan-500\/20 { background-color: rgba(6, 182, 212, 0.2); }
-.bg-cyan-500\/30 { background-color: rgba(6, 182, 212, 0.3); }
-
-/* Indigo / Purple */
-.bg-indigo-500\/10 { background-color: rgba(99, 102, 241, 0.1); }
-.bg-indigo-500\/15 { background-color: rgba(99, 102, 241, 0.15); }
-.bg-indigo-500\/20 { background-color: rgba(99, 102, 241, 0.2); }
-.bg-indigo-500\/30 { background-color: rgba(99, 102, 241, 0.3); }
-
-/* Rose / Red (Danger Zone & Leave) */
-.bg-rose-500\/10 { background-color: rgba(244, 63, 94, 0.1); }
-.bg-rose-500\/15 { background-color: rgba(244, 63, 94, 0.15); }
-.bg-rose-500\/20 { background-color: rgba(244, 63, 94, 0.2); }
-.bg-rose-500\/25 { background-color: rgba(244, 63, 94, 0.25); }
-.bg-rose-600 { background-color: #e11d48; }
-
-/* Amber / Warning */
-.bg-amber-500\/10 { background-color: rgba(245, 158, 11, 0.1); }
-.bg-amber-500\/15 { background-color: rgba(245, 158, 11, 0.15); }
-.bg-amber-500\/20 { background-color: rgba(245, 158, 11, 0.2); }
-
-/* Gradients */
-.bg-gradient-to-tr {
-  background-image: linear-gradient(to top right, #10b981, #06b6d4, #6366f1);
-}
-.from-emerald-500 { --tw-gradient-from: #10b981; }
-.via-cyan-500 { --tw-gradient-via: #06b6d4; }
-.to-indigo-500 { --tw-gradient-to: #6366f1; }
-
-.from-pink-500 { --tw-gradient-from: #ec4899; }
-.via-purple-500 { --tw-gradient-via: #a855f7; }
-.to-cyan-500 { --tw-gradient-to: #06b6d4; }
-
-/* ==========================================================================
-   7. Typography & Colors
-   ========================================================================== */
-.text-white { color: #ffffff; }
-.text-black { color: #000000; }
-.text-zinc-200 { color: #e4e4e7; }
-.text-zinc-300 { color: #d4d4d8; }
-.text-zinc-400 { color: #a1a1aa; }
-.text-zinc-500 { color: #71717a; }
-
-.text-emerald-300 { color: #6ee7b7; }
-.text-emerald-400 { color: #34d399; }
-.text-cyan-300 { color: #67e8f9; }
-.text-cyan-400 { color: #22d3ee; }
-.text-indigo-400 { color: #818cf8; }
-.text-rose-300 { color: #fda4af; }
-.text-rose-400 { color: #fb7185; }
-.text-rose-500 { color: #f43f5e; }
-.text-amber-300 { color: #fcd34d; }
-.text-amber-400 { color: #fbbf24; }
-
-.text-\[10px\] { font-size: 10px; line-height: 14px; }
-.text-\[11px\] { font-size: 11px; line-height: 15px; }
-.text-xs { font-size: 12px; line-height: 16px; }
-.text-sm { font-size: 14px; line-height: 20px; }
-.text-base { font-size: 16px; line-height: 24px; }
-.text-lg { font-size: 18px; line-height: 28px; }
-.text-xl { font-size: 20px; line-height: 28px; }
-
-.font-medium { font-weight: 500; }
-.font-semibold { font-weight: 600; }
-.font-bold { font-weight: 700; }
-
-.text-center { text-align: center; }
-.text-left { text-align: left; }
-.text-right { text-align: right; }
-
-.uppercase { text-transform: uppercase; }
-.tracking-tight { letter-spacing: -0.025em; }
-.tracking-wider { letter-spacing: 0.05em; }
-.truncate {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.italic { font-style: italic; }
-
-/* ==========================================================================
-   8. Borders & Radii
-   ========================================================================== */
-.border { border-width: 1px; border-style: solid; border-color: rgba(255, 255, 255, 0.1); }
-.border-t { border-top-width: 1px; border-top-style: solid; border-top-color: rgba(255, 255, 255, 0.1); }
-.border-b { border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: rgba(255, 255, 255, 0.1); }
-
-.border-white\/5 { border-color: rgba(255, 255, 255, 0.05); }
-.border-white\/10 { border-color: rgba(255, 255, 255, 0.1); }
-.border-white\/15 { border-color: rgba(255, 255, 255, 0.15); }
-.border-white\/20 { border-color: rgba(255, 255, 255, 0.2); }
-.border-white\/25 { border-color: rgba(255, 255, 255, 0.25); }
-.border-white\/30 { border-color: rgba(255, 255, 255, 0.3); }
-
-.border-emerald-500\/20 { border-color: rgba(16, 185, 129, 0.2); }
-.border-emerald-500\/30 { border-color: rgba(16, 185, 129, 0.3); }
-.border-emerald-500\/50 { border-color: rgba(16, 185, 129, 0.5); }
-
-.border-cyan-500\/20 { border-color: rgba(6, 182, 212, 0.2); }
-.border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
-
-.border-indigo-500\/20 { border-color: rgba(99, 102, 241, 0.2); }
-.border-indigo-500\/30 { border-color: rgba(99, 102, 241, 0.3); }
-
-.border-rose-500\/25 { border-color: rgba(244, 63, 94, 0.25); }
-.border-rose-500\/30 { border-color: rgba(244, 63, 94, 0.3); }
-
-.border-amber-500\/25 { border-color: rgba(245, 158, 11, 0.25); }
-.border-amber-500\/30 { border-color: rgba(245, 158, 11, 0.3); }
-
-.rounded { border-radius: 4px; }
-.rounded-md { border-radius: 6px; }
-.rounded-lg { border-radius: 8px; }
-.rounded-xl { border-radius: 12px; }
-.rounded-2xl { border-radius: 16px; }
-.rounded-full { border-radius: 9999px; }
-.rounded-\[7px\] { border-radius: 7px; }
-
-/* ==========================================================================
-   9. Positioning & Shadows
-   ========================================================================== */
-.relative { position: relative; }
-.absolute { position: absolute; }
-.inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
-.top-0 { top: 0; }
-.top-1\/2 { top: 50%; }
-.top-full { top: 100%; }
-.bottom-0 { bottom: 0; }
-.right-0 { right: 0; }
-.left-0 { left: 0; }
-.left-3 { left: 12px; }
-.left-3\.5 { left: 14px; }
-.-translate-y-1\/2 { transform: translateY(-50%); }
-
-.shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }
-.shadow-lg { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.2); }
-.shadow-xl { box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3); }
-.shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); }
-.shadow-emerald-500\/20 { box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.2); }
-.shadow-emerald-500\/25 { box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.25); }
-
-.overflow-hidden { overflow: hidden; }
-.overflow-y-auto { overflow-y: auto; }
-.z-50 { z-index: 50; }
-
-/* ==========================================================================
-   10. Interactive Hovers & Transitions
-   ========================================================================== */
-.cursor-pointer { cursor: pointer; }
-.transition-all { transition-property: all; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
-.transition-colors { transition-property: color, background-color, border-color; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
-.transition-transform { transition-property: transform; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
-
-.hover\:scale-105:hover { transform: scale(1.05); }
-.hover\:bg-white\/10:hover { background-color: rgba(255, 255, 255, 0.1); }
-.hover\:bg-white\/20:hover { background-color: rgba(255, 255, 255, 0.2); }
-.hover\:bg-white\/\[0\.06\]:hover { background-color: rgba(255, 255, 255, 0.06); }
-.hover\:bg-white\/\[0\.08\]:hover { background-color: rgba(255, 255, 255, 0.08); }
-.hover\:border-white\/10:hover { border-color: rgba(255, 255, 255, 0.1); }
-.hover\:border-white\/20:hover { border-color: rgba(255, 255, 255, 0.2); }
-.hover\:border-white\/30:hover { border-color: rgba(255, 255, 255, 0.3); }
-
-.hover\:text-white:hover { color: #ffffff; }
-.hover\:text-emerald-400:hover { color: #34d399; }
-.hover\:bg-emerald-400:hover { background-color: #34d399; }
-.hover\:border-emerald-500\/30:hover { border-color: rgba(16, 185, 129, 0.3); }
-.hover\:border-emerald-500\/40:hover { border-color: rgba(16, 185, 129, 0.4); }
-.hover\:border-cyan-500\/30:hover { border-color: rgba(6, 182, 212, 0.3); }
-.hover\:border-cyan-500\/40:hover { border-color: rgba(6, 182, 212, 0.4); }
-.hover\:border-indigo-500\/30:hover { border-color: rgba(99, 102, 241, 0.3); }
-.hover\:border-indigo-500\/40:hover { border-color: rgba(99, 102, 241, 0.4); }
-
-.hover\:bg-rose-500\/10:hover { background-color: rgba(244, 63, 94, 0.1); }
-.hover\:bg-rose-500\/15:hover { background-color: rgba(244, 63, 94, 0.15); }
-.hover\:bg-rose-500\/20:hover { background-color: rgba(244, 63, 94, 0.2); }
-.hover\:bg-rose-500\/25:hover { background-color: rgba(244, 63, 94, 0.25); }
-.hover\:bg-rose-500:hover { background-color: #f43f5e; }
-
-/* Group hover states */
-.group:hover .group-hover\:scale-105 { transform: scale(1.05); }
-.group:hover .group-hover\:translate-x-0\.5 { transform: translateX(3px); }
-.group:hover .group-hover\:text-emerald-400 { color: #34d399; }
-.group:hover .group-hover\:text-cyan-400 { color: #22d3ee; }
-
-/* ==========================================================================
-   11. Form Inputs & Textareas
-   ========================================================================== */
-.group-settings-card input[type="text"],
-.relative.w-full.max-w-md input[type="text"],
-.group-settings-card textarea,
-.relative.w-full.max-w-md textarea {
-  outline: none;
-  font-family: inherit;
-  box-sizing: border-box;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+.group-settings-body {
+  flex: 1 1 0%;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.group-settings-card input[type="text"]:focus,
-.relative.w-full.max-w-md input[type="text"]:focus,
-.group-settings-card textarea:focus,
-.relative.w-full.max-w-md textarea:focus {
-  border-color: rgba(16, 185, 129, 0.6) !important;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+/* ==========================================================================
+   5. VibeGrid Signature Avatar Ring & Profile Header
+   ========================================================================== */
+.vg-group-avatar-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-top: 4px;
 }
 
-.focus\:outline-none:focus { outline: 2px solid transparent; outline-offset: 2px; }
-.focus\:ring-1:focus { box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.4); }
-.focus\:ring-emerald-400:focus { box-shadow: 0 0 0 1px #34d399; }
-.resize-none { resize: none; }
-
-/* ==========================================================================
-   12. Toggle Switches (PermissionsView)
-   ========================================================================== */
-[role="switch"] {
+.vg-avatar-ring-large {
+  width: 88px;
+  height: 88px;
+  padding: 3px;
+  border-radius: 9999px;
+  background: var(--accent-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.28);
   position: relative;
-  display: inline-flex;
-  height: 24px;
-  width: 44px;
-  flex-shrink: 0;
   cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.vg-avatar-ring-large:hover {
+  transform: scale(1.03);
+}
+
+.vg-avatar-img-large {
+  width: 100%;
+  height: 100%;
   border-radius: 9999px;
-  border: 2px solid transparent;
-  transition: background-color 0.2s ease-in-out;
-  background-color: #27272a;
+  object-fit: cover;
+  background: var(--bg-page);
 }
 
-[role="switch"][aria-checked="true"] {
-  background-color: #10b981;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
-}
-
-[role="switch"] > span {
-  pointer-events: none;
-  display: inline-block;
-  height: 20px;
-  width: 20px;
+.vg-avatar-fallback-large {
+  width: 100%;
+  height: 100%;
   border-radius: 9999px;
-  background-color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  transition: transform 0.2s ease-in-out;
-  margin-top: 0px;
+  background: var(--bg-page);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 1.5rem;
 }
 
-.translate-x-5 { transform: translateX(20px); }
-.translate-x-0\.5 { transform: translateX(2px); }
-.opacity-50 { opacity: 0.5; }
-.cursor-not-allowed { cursor: not-allowed; }
+.vg-avatar-edit-badge {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
 
 /* ==========================================================================
-   14. Component Specific Polishing (Quick Actions, Settings Cards, Danger Zone)
+   6. VibeGrid Cards & Section Containers
    ========================================================================== */
-/* Quick Action 4-column buttons */
-.grid-cols-4 > button {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 12px 6px !important;
-  border-radius: 14px !important;
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+.vg-card-subtle {
+  background: var(--bg-card-hover, var(--bg-hover));
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 14px);
+  overflow: hidden;
+  transition: var(--transition);
 }
 
-.grid-cols-4 > button:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border-color: rgba(255, 255, 255, 0.25) !important;
-  transform: translateY(-2px);
+.vg-section-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  padding-left: 2px;
 }
 
-.grid-cols-4 > button:active {
-  transform: translateY(0);
+/* Quick Action Toolbar (Members, Invite, Media, Info) */
+.vg-quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
 }
 
-/* Settings navigation rows */
-.group-settings-card .space-y-2 > button,
-.group-settings-card .space-y-2\.5 > button {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  width: 100% !important;
-  padding: 12px 14px !important;
-  border-radius: 14px !important;
-  background: rgba(255, 255, 255, 0.03) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  transition: all 0.15s ease !important;
-  text-align: left !important;
+.vg-quick-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 4px;
+  background: var(--bg-card-hover, var(--bg-hover));
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 14px);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: var(--transition);
 }
 
-.group-settings-card .space-y-2 > button:hover,
-.group-settings-card .space-y-2\.5 > button:hover {
-  background: rgba(255, 255, 255, 0.07) !important;
-  border-color: rgba(255, 255, 255, 0.18) !important;
-  transform: translateX(2px);
-}
-
-/* Danger Zone Leave / Delete Buttons */
-.grid-cols-2 > button {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 8px !important;
-  padding: 10px 14px !important;
-  border-radius: 12px !important;
-  font-size: 13px !important;
-  font-weight: 600 !important;
-  transition: all 0.15s ease !important;
-}
-
-.grid-cols-2 > button:hover {
+.vg-quick-action-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
   transform: translateY(-1px);
 }
 
-.grid-cols-2 > button:active {
-  transform: translateY(0);
+.vg-quick-action-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--primary-light);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
 }
 
-/* Confirmation Dialogs */
-.group-settings-card .p-4.rounded-xl.bg-rose-500\/10 {
-  background: rgba(244, 63, 94, 0.12) !important;
-  border: 1px solid rgba(244, 63, 94, 0.35) !important;
-  border-radius: 14px !important;
-  padding: 16px !important;
-  box-shadow: 0 8px 24px -4px rgba(244, 63, 94, 0.15);
+.vg-quick-action-btn:hover .vg-quick-action-icon {
+  background: var(--primary);
+  color: white;
 }
 
-.group-settings-card .p-4.rounded-xl.bg-rose-500\/10 button {
-  padding: 8px 16px !important;
-  border-radius: 8px !important;
-  font-size: 12px !important;
-  font-weight: 600 !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  transition: all 0.15s ease !important;
+.vg-quick-action-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
-.group-settings-card .p-4.rounded-xl.bg-rose-500\/10 button:hover {
-  transform: translateY(-1px);
+/* Interactive Navigation List Items */
+.vg-nav-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  cursor: pointer;
+  transition: var(--transition);
+  text-decoration: none;
+  color: inherit;
+  width: 100%;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  text-align: left;
 }
 
-.group-settings-card .p-4.rounded-xl.bg-rose-500\/10 button.bg-rose-600 {
-  background: #e11d48 !important;
-  color: #ffffff !important;
-  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.35) !important;
+.vg-nav-item-row:last-child {
+  border-bottom: none;
 }
 
-.group-settings-card .p-4.rounded-xl.bg-rose-500\/10 button.bg-rose-600:hover {
-  background: #f43f5e !important;
-  box-shadow: 0 6px 16px rgba(225, 29, 72, 0.45) !important;
+.vg-nav-item-row:hover {
+  background: var(--bg-card);
 }
 
-/* Animations */
-.animate-in {
-  animation-duration: 0.2s;
-  animation-fill-mode: both;
-}
-.fade-in {
-  animation-name: gsFadeIn;
-}
-.zoom-in-95 {
-  animation-name: gsZoomIn;
+.vg-nav-item-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
-@keyframes gsZoomIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+.vg-nav-item-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--primary-light);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-/* Custom Scrollbar */
-.custom-scroll::-webkit-scrollbar {
-  width: 5px;
+.vg-nav-item-title {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.25;
 }
-.custom-scroll::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
+
+.vg-nav-item-desc {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin: 2px 0 0 0;
+  line-height: 1.2;
 }
-.custom-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+
+.vg-nav-item-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
-.custom-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+
+/* ==========================================================================
+   7. VibeGrid Status Badges & Chips
+   ========================================================================== */
+.vg-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.vg-badge-owner {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.vg-badge-admin {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.vg-badge-count {
+  background: var(--primary);
+  color: white;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  padding: 0 5px;
+}
+
+/* ==========================================================================
+   8. Segmented Control Tab Bar (Media, Files, Links)
+   ========================================================================== */
+.vg-tab-bar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 3px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 14px);
+  gap: 2px;
+}
+
+.vg-tab-btn {
+  padding: 7px 4px;
+  border-radius: calc(var(--radius-md, 14px) - 3px);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: center;
+}
+
+.vg-tab-btn.is-active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+  font-weight: 700;
+}
+
+.vg-tab-btn:hover:not(.is-active) {
+  color: var(--text-primary);
+}
+
+/* ==========================================================================
+   9. Media Grid & File Rows
+   ========================================================================== */
+.vg-media-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.vg-media-item-thumb {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-md, 14px);
+  overflow: hidden;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.vg-media-item-thumb:hover {
+  border-color: var(--primary);
+  transform: scale(1.02);
+}
+
+.vg-media-item-thumb img,
+.vg-media-item-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vg-file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+  gap: 10px;
+}
+
+.vg-file-row:last-child {
+  border-bottom: none;
+}
+
+.vg-file-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--primary-light);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   10. Search Input Bars
+   ========================================================================== */
+.vg-search-input-wrap {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.vg-search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.vg-search-input {
+  width: 100%;
+  padding: 9px 12px 9px 36px;
+  font-size: 0.84rem;
+  background: var(--bg-page);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 14px);
+  color: var(--text-primary);
+  transition: var(--transition);
+}
+
+.vg-search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+
+/* ==========================================================================
+   11. Danger Zone & Confirmation Cards
+   ========================================================================== */
+.vg-danger-card {
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: var(--radius-md, 14px);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vg-danger-card-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--danger);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vg-danger-card-text {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   12. Slide-Over Add Member Drawer
+   ========================================================================== */
+.vg-slide-drawer {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-card);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  animation: gsSlideLeft 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes gsSlideLeft {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+/* ==========================================================================
+   13. Responsive Mobile Viewport (< 640px)
+   ========================================================================== */
+@media (max-width: 640px) {
+  .group-settings-modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .group-settings-card {
+    max-width: 100%;
+    max-height: 94vh;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+    border-bottom: none;
+    border-left: none;
+    border-right: none;
+  }
 }

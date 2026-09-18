@@ -1,7 +1,7 @@
 /**
  * client/src/components/group-settings/views/MediaFilesView.jsx
  * =============================================================
- * Screen 7: Media & Files (Photos, Videos, Files, Links)
+ * Screen 7: Media & Files (Photos, Videos, Files, Links) — Unified VibeGrid Design
  */
 
 import React, { useState } from 'react';
@@ -30,45 +30,40 @@ export default function MediaFilesView({ mediaData = {} }) {
     if (['xlsx', 'xls', 'csv'].includes(ext)) {
       return {
         icon: <FileSpreadsheet size={18} />,
-        color: 'text-emerald-400',
-        bgColor: 'bg-emerald-500/15',
-        borderColor: 'border-emerald-500/30'
+        color: 'text-[var(--success)]',
+        bgColor: 'bg-[rgba(16,185,129,0.12)]'
       };
     }
     if (['zip', 'rar', 'tar', 'gz', '7z'].includes(ext)) {
       return {
         icon: <FileArchive size={18} />,
-        color: 'text-amber-400',
-        bgColor: 'bg-amber-500/15',
-        borderColor: 'border-amber-500/30'
+        color: 'text-[var(--warning)]',
+        bgColor: 'bg-[rgba(245,158,11,0.12)]'
       };
     }
     return {
       icon: <FileText size={18} />,
-      color: 'text-rose-400',
-      bgColor: 'bg-rose-500/15',
-      borderColor: 'border-rose-500/30'
+      color: 'text-[var(--primary)]',
+      bgColor: 'var(--primary-light)'
     };
   };
 
   const renderEmptyState = (label, icon) => (
-    <div className="py-12 px-4 text-center space-y-3">
-      <div className="w-12 h-12 mx-auto rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center text-zinc-500">
+    <div className="py-12 px-4 text-center space-y-2 vg-card-subtle">
+      <div className="w-10 h-10 mx-auto rounded-xl bg-[var(--bg-page)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-muted)]">
         {icon}
       </div>
-      <div>
-        <p className="text-sm font-semibold text-white">No {label} shared yet</p>
-        <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">
-          Shared {label.toLowerCase()} in this group will appear here.
-        </p>
-      </div>
+      <p className="text-xs font-semibold text-[var(--text-primary)] m-0">No {label} shared yet</p>
+      <p className="text-[11px] text-[var(--text-muted)] m-0">
+        Shared {label.toLowerCase()} in this conversation will appear here.
+      </p>
     </div>
   );
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-200 text-left">
-      {/* Category Pill Tabs */}
-      <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/[0.04] border border-white/10">
+    <div className="space-y-4 text-left">
+      {/* 1. Category Segmented Tab Bar */}
+      <div className="vg-tab-bar">
         {[
           { id: 'photos', label: `Photos (${photos.length})` },
           { id: 'videos', label: `Videos (${videos.length})` },
@@ -81,11 +76,7 @@ export default function MediaFilesView({ mediaData = {} }) {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                isActive
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
-                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
-              }`}
+              className={`vg-tab-btn ${isActive ? 'is-active' : ''}`}
             >
               {tab.label}
             </button>
@@ -93,24 +84,24 @@ export default function MediaFilesView({ mediaData = {} }) {
         })}
       </div>
 
-      {/* Main Tab Content */}
+      {/* 2. Photos Tab */}
       {activeTab === 'photos' && (
         photos.length === 0 ? (
-          renderEmptyState('Photos', <ImageIcon size={22} />)
+          renderEmptyState('Photos', <ImageIcon size={20} />)
         ) : (
-          <div className="grid grid-cols-4 gap-2">
+          <div className="vg-media-grid">
             {photos.map((item) => (
               <a
                 key={item.id}
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="aspect-square rounded-xl overflow-hidden border border-white/10 hover:border-emerald-500/40 transition-all group relative block"
+                className="vg-media-item-thumb block"
               >
                 <img
                   src={item.url}
                   alt="Shared media"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  className="w-full h-full object-cover"
                 />
               </a>
             ))}
@@ -118,21 +109,22 @@ export default function MediaFilesView({ mediaData = {} }) {
         )
       )}
 
+      {/* 3. Videos Tab */}
       {activeTab === 'videos' && (
         videos.length === 0 ? (
-          renderEmptyState('Videos', <Video size={22} />)
+          renderEmptyState('Videos', <Video size={20} />)
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5">
             {videos.map((item) => (
               <a
                 key={item.id}
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="aspect-video rounded-xl bg-zinc-900 border border-white/10 flex flex-col items-center justify-center text-zinc-400 gap-1.5 p-4 hover:border-cyan-500/40 transition-all cursor-pointer"
+                className="aspect-video rounded-xl bg-[var(--bg-hover)] border border-[var(--border-color)] flex flex-col items-center justify-center text-[var(--text-secondary)] gap-1 p-3 hover:border-[var(--primary)] transition-all"
               >
-                <Video size={24} className="text-cyan-400" />
-                <span className="text-[11px] truncate max-w-[120px]">
+                <Video size={22} className="text-[var(--primary)]" />
+                <span className="text-[11px] truncate max-w-[120px] text-[var(--text-primary)]">
                   {item.url?.split('/').pop() || 'Video'}
                 </span>
               </a>
@@ -141,11 +133,12 @@ export default function MediaFilesView({ mediaData = {} }) {
         )
       )}
 
+      {/* 4. Files Tab */}
       {activeTab === 'files' && (
         files.length === 0 ? (
-          renderEmptyState('Files', <FileText size={22} />)
+          renderEmptyState('Files', <FileText size={20} />)
         ) : (
-          <div className="space-y-2">
+          <div className="vg-card-subtle divide-y divide-[var(--border-color)]">
             {files.map((file) => {
               const style = getFileIcon(file.name);
               return (
@@ -155,23 +148,23 @@ export default function MediaFilesView({ mediaData = {} }) {
                   target="_blank"
                   rel="noopener noreferrer"
                   download
-                  className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all group"
+                  className="vg-file-row hover:bg-[var(--bg-card)] transition-colors text-inherit no-underline"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-9 h-9 rounded-xl ${style.bgColor} ${style.color} border ${style.borderColor} flex items-center justify-center shrink-0`}>
+                    <div className={`w-8 h-8 rounded-lg ${style.bgColor} ${style.color} flex items-center justify-center shrink-0`}>
                       {style.icon}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-white truncate group-hover:text-emerald-300 transition-colors">
+                      <p className="text-xs font-semibold text-[var(--text-primary)] truncate m-0">
                         {file.name || 'Document'}
                       </p>
-                      <p className="text-[10px] text-zinc-400">
+                      <p className="text-[10px] text-[var(--text-muted)] m-0">
                         {file.size || 'File'} • {file.created_at ? new Date(file.created_at).toLocaleDateString() : 'Shared'}
                       </p>
                     </div>
                   </div>
 
-                  <Download size={16} className="text-zinc-500 group-hover:text-white transition-all shrink-0" />
+                  <Download size={15} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] shrink-0" />
                 </a>
               );
             })}
@@ -179,83 +172,34 @@ export default function MediaFilesView({ mediaData = {} }) {
         )
       )}
 
+      {/* 5. Links Tab */}
       {activeTab === 'links' && (
         links.length === 0 ? (
-          renderEmptyState('Links', <Link2 size={22} />)
+          renderEmptyState('Links', <Link2 size={20} />)
         ) : (
-          <div className="space-y-2">
+          <div className="vg-card-subtle divide-y divide-[var(--border-color)]">
             {links.map((link) => (
               <a
                 key={link.id}
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/10 hover:border-cyan-500/30 transition-all group"
+                className="flex items-center justify-between p-3 hover:bg-[var(--bg-card)] transition-colors text-inherit no-underline"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0">
-                    <Link2 size={16} />
+                  <div className="w-8 h-8 rounded-lg bg-[var(--primary-light)] text-[var(--primary)] flex items-center justify-center shrink-0">
+                    <Link2 size={15} />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-white truncate">{link.title || link.url}</p>
-                    <p className="text-[10px] text-zinc-400 truncate">{link.url}</p>
+                    <p className="text-xs font-semibold text-[var(--text-primary)] truncate m-0">{link.title || link.url}</p>
+                    <p className="text-[10px] text-[var(--text-muted)] truncate m-0">{link.url}</p>
                   </div>
                 </div>
-                <ExternalLink size={14} className="text-zinc-500 group-hover:text-cyan-400 shrink-0" />
+                <ExternalLink size={14} className="text-[var(--text-muted)] shrink-0" />
               </a>
             ))}
           </div>
         )
-      )}
-
-      {/* Recent Files Section */}
-      {activeTab !== 'files' && files.length > 0 && (
-        <div className="space-y-2 pt-2">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-              Recent Files
-            </h3>
-            <button
-              type="button"
-              onClick={() => setActiveTab('files')}
-              className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium"
-            >
-              View All &gt;
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {files.slice(0, 3).map((f) => {
-              const style = getFileIcon(f.name);
-              return (
-                <a
-                  key={f.id}
-                  href={f.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download
-                  className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all group"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-9 h-9 rounded-xl ${style.bgColor} ${style.color} border ${style.borderColor} flex items-center justify-center shrink-0`}>
-                      {style.icon}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-white truncate group-hover:text-emerald-300 transition-colors">
-                        {f.name || 'Document'}
-                      </p>
-                      <p className="text-[10px] text-zinc-400">
-                        {f.size || 'File'} • {f.created_at ? new Date(f.created_at).toLocaleDateString() : 'Shared'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <Download size={16} className="text-zinc-500 group-hover:text-white transition-all shrink-0" />
-                </a>
-              );
-            })}
-          </div>
-        </div>
       )}
     </div>
   );

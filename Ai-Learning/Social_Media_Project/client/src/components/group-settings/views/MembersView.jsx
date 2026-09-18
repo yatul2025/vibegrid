@@ -1,7 +1,7 @@
 /**
  * client/src/components/group-settings/views/MembersView.jsx
  * ==========================================================
- * Screen 2: Members Management
+ * Screen 2: Members Management — Unified VibeGrid Design
  */
 
 import React, { useState } from 'react';
@@ -14,8 +14,7 @@ import {
   MoreVertical,
   UserMinus,
   CheckCircle2,
-  X,
-  AlertCircle
+  X
 } from 'lucide-react';
 
 export default function MembersView({
@@ -60,47 +59,44 @@ export default function MembersView({
   const renderMemberRow = (member, roleBadge) => {
     const isSelf = Number(member.id) === Number(currentUser?.id);
     const isMemberOwner = Number(member.id) === ownerId;
-    const isMemberAdmin = member.role === 'admin' || isMemberOwner;
-
-    // Relative online status mockup or actual
     const isOnline = member.is_online || member.id % 2 === 0;
-    const lastSeen = isOnline ? 'Online' : `${(member.id % 5) + 1}h`;
+    const lastSeen = isOnline ? 'Online' : `${(member.id % 5) + 1}h ago`;
 
     return (
       <div
         key={member.id}
-        className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all text-left group"
+        className="flex items-center justify-between p-3 transition-all text-left group hover:bg-[var(--bg-card)]"
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="relative">
+          <div className="relative shrink-0">
             {member.avatar_url ? (
               <img
                 src={member.avatar_url}
                 alt={member.full_name || member.username}
-                className="w-10 h-10 rounded-full object-cover bg-zinc-800"
+                className="w-9 h-9 rounded-full object-cover bg-[var(--bg-page)] border border-[var(--border-color)]"
               />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-500/20 to-cyan-500/20 border border-emerald-500/30 flex items-center justify-center font-bold text-emerald-400 text-sm">
+              <div className="w-9 h-9 rounded-full bg-[var(--primary-light)] text-[var(--primary)] border border-[var(--primary)] flex items-center justify-center font-bold text-xs">
                 {(member.full_name || member.username || '?')[0].toUpperCase()}
               </div>
             )}
             {isOnline && (
-              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-zinc-900" />
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[var(--success)] border-2 border-[var(--bg-card)]" />
             )}
           </div>
 
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-white truncate max-w-[140px] sm:max-w-[200px]">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-[var(--text-primary)] truncate max-w-[140px] sm:max-w-[200px]">
                 {member.full_name || member.username}
               </span>
               {isSelf && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-zinc-400 font-medium">
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-[var(--bg-page)] text-[var(--text-muted)] border border-[var(--border-color)] font-medium">
                   You
                 </span>
               )}
             </div>
-            <p className="text-xs text-zinc-400 truncate">@{member.username}</p>
+            <p className="text-[11px] text-[var(--text-muted)] truncate m-0">@{member.username}</p>
           </div>
         </div>
 
@@ -108,26 +104,21 @@ export default function MembersView({
         <div className="flex items-center gap-2 relative shrink-0">
           {roleBadge}
 
-          {!isMemberOwner && !isOnline && (
-            <span className="text-xs text-zinc-500">{lastSeen}</span>
-          )}
-
-          {isOnline && !isMemberOwner && member.role === 'member' && (
-            <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Online
+          {!isMemberOwner && (
+            <span className={`text-[11px] ${isOnline ? 'text-[var(--success)] font-medium' : 'text-[var(--text-muted)]'}`}>
+              {lastSeen}
             </span>
           )}
 
           {/* 3-dots action menu for Admin or Owner */}
           {isAdmin && !isMemberOwner && !isSelf && (
-            <div>
+            <div className="relative">
               <button
                 type="button"
                 onClick={() =>
                   setActiveMenuUserId((prev) => (prev === member.id ? null : member.id))
                 }
-                className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+                className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-hover)] transition-colors"
                 title="Member options"
               >
                 <MoreVertical size={16} />
@@ -135,7 +126,7 @@ export default function MembersView({
 
               {activeMenuUserId === member.id && (
                 <div
-                  className="absolute right-0 top-full mt-1 w-44 rounded-xl bg-zinc-900 border border-white/15 shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
+                  className="absolute right-0 top-full mt-1 w-44 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] shadow-xl p-1.5 z-50"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {/* Admin toggle */}
@@ -146,7 +137,7 @@ export default function MembersView({
                         setActiveMenuUserId(null);
                         onDemoteMember(member.id);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-amber-400 hover:bg-white/10 rounded-lg text-left"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[var(--warning)] hover:bg-[var(--bg-hover)] rounded-lg text-left"
                     >
                       <Shield size={14} />
                       <span>Dismiss as Admin</span>
@@ -160,7 +151,7 @@ export default function MembersView({
                         setActiveMenuUserId(null);
                         onPromoteMember(member.id);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-emerald-400 hover:bg-white/10 rounded-lg text-left"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[var(--primary)] hover:bg-[var(--bg-hover)] rounded-lg text-left"
                     >
                       <Shield size={14} />
                       <span>Make Group Admin</span>
@@ -174,7 +165,7 @@ export default function MembersView({
                       setActiveMenuUserId(null);
                       onRemoveMember(member);
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-rose-400 hover:bg-rose-500/10 rounded-lg text-left border-t border-white/10 mt-1 pt-1.5"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[var(--danger)] hover:bg-[var(--bg-hover)] rounded-lg text-left border-t border-[var(--border-color)] mt-1 pt-1.5"
                   >
                     <UserMinus size={14} />
                     <span>Remove from Group</span>
@@ -189,99 +180,84 @@ export default function MembersView({
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-200">
+    <div className="space-y-4 text-left">
       {/* Search Input */}
-      <div className="relative">
-        <Search
-          size={16}
-          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"
-        />
+      <div className="vg-search-input-wrap">
+        <Search size={15} className="vg-search-icon" />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search members..."
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-white text-xs placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-500/50"
+          className="vg-search-input"
         />
-        {searchQuery && (
+      </div>
+
+      {/* Header action bar */}
+      <div className="flex items-center justify-between px-1">
+        <span className="vg-section-label m-0">
+          {filtered.length} {filtered.length === 1 ? 'MEMBER' : 'MEMBERS'}
+        </span>
+        {isAdmin && (
           <button
             type="button"
-            onClick={() => setSearchQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+            onClick={onOpenAddMember}
+            className="btn-primary btn-sm"
           >
-            <X size={14} />
+            <UserPlus size={14} />
+            <span>Add Member</span>
           </button>
         )}
       </div>
 
-      {/* Add Members Action Card */}
-      <button
-        type="button"
-        onClick={onOpenAddMember}
-        className="w-full flex items-center justify-between p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/15 hover:border-emerald-500/50 transition-all group text-left"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-emerald-500 text-black flex items-center justify-center font-bold shadow-md group-hover:scale-105 transition-transform">
-            <UserPlus size={16} />
-          </div>
-          <span className="text-sm font-semibold text-emerald-400">Add Members</span>
-        </div>
-        <span className="text-xs text-emerald-400/80 group-hover:translate-x-0.5 transition-transform">
-          &gt;
-        </span>
-      </button>
-
-      {/* Group Owner Section */}
+      {/* 1. Group Owner Section */}
       {owner && (
-        <div className="space-y-2 text-left">
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider px-1">
-            Group Owner
-          </h3>
-          {renderMemberRow(
-            owner,
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[11px] font-semibold">
-              <Crown size={12} className="text-amber-400" />
-              Owner
-            </span>
-          )}
+        <div className="space-y-1">
+          <p className="vg-section-label">Group Owner</p>
+          <div className="vg-card-subtle">
+            {renderMemberRow(
+              owner,
+              <span className="vg-badge vg-badge-owner">Owner</span>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Admins Section */}
+      {/* 2. Group Admins Section */}
       {admins.length > 0 && (
-        <div className="space-y-2 text-left">
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider px-1">
+        <div className="space-y-1">
+          <p className="vg-section-label">
             Admins ({admins.length})
-          </h3>
-          <div className="space-y-2">
+          </p>
+          <div className="vg-card-subtle divide-y divide-[var(--border-color)]">
             {admins.map((adm) =>
               renderMemberRow(
                 adm,
-                <span
-                  key={adm.id}
-                  className="px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 text-[11px] font-medium"
-                >
-                  Admin
-                </span>
+                <span className="vg-badge vg-badge-admin">Admin</span>
               )
             )}
           </div>
         </div>
       )}
 
-      {/* Regular Members Section */}
-      <div className="space-y-2 text-left">
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider px-1">
-          Members ({regularMembers.length})
-        </h3>
-        {regularMembers.length === 0 ? (
-          <p className="text-xs text-zinc-500 py-3 text-center">No matching members found.</p>
-        ) : (
-          <div className="space-y-2">
+      {/* 3. Regular Members Section */}
+      {regularMembers.length > 0 && (
+        <div className="space-y-1">
+          <p className="vg-section-label">
+            Members ({regularMembers.length})
+          </p>
+          <div className="vg-card-subtle divide-y divide-[var(--border-color)]">
             {regularMembers.map((m) => renderMemberRow(m, null))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {filtered.length === 0 && (
+        <div className="p-8 text-center vg-card-subtle">
+          <Users size={28} className="mx-auto text-[var(--text-muted)] mb-2" />
+          <p className="text-xs text-[var(--text-muted)] m-0">No matching members found.</p>
+        </div>
+      )}
     </div>
   );
 }

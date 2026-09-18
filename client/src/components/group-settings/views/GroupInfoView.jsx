@@ -1,7 +1,7 @@
 /**
  * client/src/components/group-settings/views/GroupInfoView.jsx
  * ============================================================
- * Screen 5: Group Info & Metadata
+ * Screen 5: Group Info & Metadata — Unified VibeGrid Design
  */
 
 import React, { useState } from 'react';
@@ -19,8 +19,10 @@ import {
   Bell,
   Clock,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Lock
 } from 'lucide-react';
+import SpringToggle from '../../SpringToggle';
 
 export default function GroupInfoView({
   group,
@@ -67,150 +69,160 @@ export default function GroupInfoView({
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-200 text-left">
-      {/* Top Banner Identity */}
-      <div className="flex flex-col items-center text-center p-4 rounded-2xl bg-white/[0.03] border border-white/10">
-        <div className="w-20 h-20 rounded-full p-1 bg-gradient-to-tr from-emerald-500 via-cyan-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-emerald-500/10 mb-3">
+    <div className="space-y-4 text-left">
+      {/* 1. Top Identity Card */}
+      <div className="vg-card-subtle p-4 flex flex-col items-center text-center">
+        <div className="vg-avatar-ring-large mb-3">
           {convDetails?.avatar_url || group?.avatar_url ? (
             <img
               src={convDetails?.avatar_url || group?.avatar_url}
               alt={title}
-              className="w-full h-full rounded-full object-cover bg-zinc-900"
+              className="vg-avatar-img-large"
             />
           ) : (
-            <div className="w-full h-full rounded-full bg-zinc-900 flex items-center justify-center text-emerald-400">
+            <div className="vg-avatar-fallback-large">
               <Users size={32} />
             </div>
           )}
         </div>
 
-        <h2 className="text-lg font-bold text-white tracking-tight">{title}</h2>
-        <p className="text-xs text-zinc-400 mt-0.5">
+        <h2 className="text-base font-bold text-[var(--text-primary)] m-0">{title}</h2>
+        <p className="text-xs text-[var(--text-muted)] mt-0.5 mb-3">
           {memberCount} members • Created {createdDate.split(',')[0]}
         </p>
 
-        {/* 4 Action Buttons */}
-        <div className="grid grid-cols-4 gap-2 w-full mt-4 pt-3 border-t border-white/10">
+        {/* 4 Action Pills */}
+        <div className="grid grid-cols-3 gap-2 w-full pt-3 border-t border-[var(--border-color)]">
           <button
             type="button"
             onClick={() => onNavigate('overview')}
-            className="flex flex-col items-center py-2 px-1 rounded-xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.07] transition-all"
+            className="btn-secondary btn-sm flex items-center justify-center gap-1.5"
           >
-            <Edit3 size={16} className="text-emerald-400 mb-1" />
-            <span className="text-[10px] text-zinc-300">Edit Group</span>
+            <Edit3 size={14} className="text-[var(--primary)]" />
+            <span>Edit</span>
           </button>
 
           <button
             type="button"
             onClick={onOpenAddMember}
-            className="flex flex-col items-center py-2 px-1 rounded-xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.07] transition-all"
+            className="btn-secondary btn-sm flex items-center justify-center gap-1.5"
           >
-            <UserPlus size={16} className="text-cyan-400 mb-1" />
-            <span className="text-[10px] text-zinc-300">Add Members</span>
+            <UserPlus size={14} className="text-[var(--primary)]" />
+            <span>Add</span>
           </button>
 
           <button
             type="button"
             onClick={() => onNavigate('invite')}
-            className="flex flex-col items-center py-2 px-1 rounded-xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.07] transition-all"
+            className="btn-secondary btn-sm flex items-center justify-center gap-1.5"
           >
-            <Share2 size={16} className="text-indigo-400 mb-1" />
-            <span className="text-[10px] text-zinc-300">Invite</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onNavigate('overview')}
-            className="flex flex-col items-center py-2 px-1 rounded-xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.07] transition-all"
-          >
-            <MoreHorizontal size={16} className="text-zinc-400 mb-1" />
-            <span className="text-[10px] text-zinc-300">More</span>
+            <Share2 size={14} className="text-[var(--primary)]" />
+            <span>Invite</span>
           </button>
         </div>
       </div>
 
-      {/* Group Description */}
-      <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-1.5">
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+      {/* 2. Security & Encryption Card */}
+      <div className="p-3 rounded-xl bg-[var(--primary-light)] border border-[var(--primary)] space-y-1">
+        <div className="flex items-center gap-2 text-xs font-bold text-[var(--primary)]">
+          <Lock size={15} />
+          <span>End-to-End Encrypted</span>
+        </div>
+        <p className="text-[11px] text-[var(--text-secondary)] m-0 leading-relaxed">
+          Messages and calls in this group are secured with AES-256-GCM Sender Keys. No one outside of this group can read or listen to them.
+        </p>
+      </div>
+
+      {/* 3. Group Description */}
+      <div className="vg-card-subtle p-3.5 space-y-1">
+        <p className="vg-section-label">
           Group Description
-        </h3>
-        <p className="text-xs text-zinc-300 leading-relaxed">{description}</p>
+        </p>
+        <p className="text-xs text-[var(--text-primary)] leading-relaxed m-0">{description}</p>
       </div>
 
-      {/* Group Details Card */}
-      <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+      {/* 4. Group Metadata Details */}
+      <div className="space-y-1">
+        <p className="vg-section-label">
           Group Details
-        </h3>
+        </p>
+        <div className="vg-card-subtle divide-y divide-[var(--border-color)]">
+          <div className="flex items-center justify-between p-3 text-xs">
+            <span className="text-[var(--text-secondary)] flex items-center gap-2">
+              <User size={14} className="text-[var(--primary)]" />
+              Created by
+            </span>
+            <span className="font-semibold text-[var(--text-primary)]">{creatorName}</span>
+          </div>
 
-        <div className="flex items-center justify-between py-1 text-xs">
-          <span className="text-zinc-400 flex items-center gap-2">
-            <User size={14} className="text-cyan-400" />
-            Created by
-          </span>
-          <span className="font-semibold text-white">{creatorName}</span>
-        </div>
+          <div className="flex items-center justify-between p-3 text-xs">
+            <span className="text-[var(--text-secondary)] flex items-center gap-2">
+              <Calendar size={14} className="text-[var(--primary)]" />
+              Created on
+            </span>
+            <span className="text-[var(--text-secondary)]">{createdDate}</span>
+          </div>
 
-        <div className="flex items-center justify-between py-1 text-xs border-t border-white/5">
-          <span className="text-zinc-400 flex items-center gap-2">
-            <Calendar size={14} className="text-emerald-400" />
-            Creation date
-          </span>
-          <span className="text-zinc-300">{createdDate}</span>
-        </div>
-
-        <div className="flex items-center justify-between py-1 text-xs border-t border-white/5">
-          <span className="text-zinc-400 flex items-center gap-2">
-            <Hash size={14} className="text-indigo-400" />
-            Group ID
-          </span>
-          <div className="flex items-center gap-1.5">
-            <code className="text-[11px] font-mono text-zinc-300 bg-white/5 px-2 py-0.5 rounded">
-              {displayGroupId}
-            </code>
-            <button
-              type="button"
-              onClick={handleCopyId}
-              className="p-1 text-zinc-400 hover:text-white rounded hover:bg-white/10"
-              title="Copy Group ID"
-            >
-              {copiedId ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-            </button>
+          <div className="flex items-center justify-between p-3 text-xs">
+            <span className="text-[var(--text-secondary)] flex items-center gap-2">
+              <Hash size={14} className="text-[var(--primary)]" />
+              Group ID
+            </span>
+            <div className="flex items-center gap-1.5">
+              <code className="text-[11px] font-mono text-[var(--primary)] bg-[var(--bg-page)] px-2 py-0.5 rounded border border-[var(--border-color)]">
+                {displayGroupId}
+              </code>
+              <button
+                type="button"
+                onClick={handleCopyId}
+                className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-hover)]"
+                title="Copy Group ID"
+              >
+                {copiedId ? <Check size={13} className="text-[var(--success)]" /> : <Copy size={13} />}
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Notifications Card */}
-      <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-          Notifications
-        </h3>
-
-        <div
-          onClick={() => setIsMuted((prev) => !prev)}
-          className="flex items-center justify-between py-1 cursor-pointer group"
-        >
-          <span className="text-xs text-zinc-300 flex items-center gap-2 group-hover:text-white">
-            <Bell size={14} className="text-amber-400" />
-            Mute notifications
-          </span>
-          <div className="flex items-center gap-1 text-xs text-zinc-400 group-hover:text-amber-300">
-            <span>{isMuted ? 'Always' : 'Off'}</span>
-            <ChevronRight size={14} />
+      {/* 5. Notifications & Privacy Card */}
+      <div className="space-y-1">
+        <p className="vg-section-label">
+          Notifications & Privacy
+        </p>
+        <div className="vg-card-subtle divide-y divide-[var(--border-color)]">
+          <div className="flex items-center justify-between p-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-[var(--primary-light)] text-[var(--primary)] flex items-center justify-center">
+                <Bell size={15} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[var(--text-primary)] m-0">Mute Notifications</p>
+                <p className="text-[11px] text-[var(--text-muted)] m-0">Silence sound and vibration</p>
+              </div>
+            </div>
+            <SpringToggle
+              checked={isMuted}
+              onChange={() => setIsMuted((prev) => !prev)}
+              id="info-mute-toggle"
+              title="Mute Notifications"
+            />
           </div>
-        </div>
 
-        <div
-          onClick={() => onNavigate('disappearing')}
-          className="flex items-center justify-between py-1 border-t border-white/5 cursor-pointer group"
-        >
-          <span className="text-xs text-zinc-300 flex items-center gap-2 group-hover:text-white">
-            <Clock size={14} className="text-rose-400" />
-            Disappearing messages
-          </span>
-          <div className="flex items-center gap-1 text-xs text-zinc-400 group-hover:text-rose-300">
-            <span>Off</span>
-            <ChevronRight size={14} />
+          <div
+            onClick={() => onNavigate('disappearing')}
+            className="flex items-center justify-between p-3 cursor-pointer hover:bg-[var(--bg-card)] transition-colors"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-[var(--primary-light)] text-[var(--primary)] flex items-center justify-center">
+                <Clock size={15} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[var(--text-primary)] m-0">Disappearing Messages</p>
+                <p className="text-[11px] text-[var(--text-muted)] m-0">Configure self-destruct timers</p>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-[var(--text-muted)]" />
           </div>
         </div>
       </div>

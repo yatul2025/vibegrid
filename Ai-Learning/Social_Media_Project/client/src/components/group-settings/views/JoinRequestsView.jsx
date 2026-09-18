@@ -1,7 +1,7 @@
 /**
  * client/src/components/group-settings/views/JoinRequestsView.jsx
  * ==============================================================
- * Screen 8: Join Requests (Review, Approve, Reject)
+ * Screen 8: Join Requests (Review, Approve, Reject) — Unified VibeGrid Design
  */
 
 import React, { useState } from 'react';
@@ -45,53 +45,53 @@ export default function JoinRequestsView({
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-200 text-left">
-      <div className="px-1">
-        <p className="text-xs text-zinc-400">
-          People are requesting to join your group.
-        </p>
+    <div className="space-y-4 text-left">
+      <div className="px-1 flex items-center justify-between">
+        <span className="vg-section-label m-0">
+          {requests.length} {requests.length === 1 ? 'PENDING REQUEST' : 'PENDING REQUESTS'}
+        </span>
       </div>
 
       {requests.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-8 rounded-2xl bg-white/[0.02] border border-white/10 text-center space-y-2">
-          <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-            <UserCheck size={24} />
+        <div className="py-12 px-4 text-center space-y-2 vg-card-subtle">
+          <div className="w-10 h-10 mx-auto rounded-xl bg-[var(--bg-page)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-muted)]">
+            <UserCheck size={20} />
           </div>
-          <h3 className="text-sm font-semibold text-white">No pending requests</h3>
-          <p className="text-xs text-zinc-400 max-w-xs">
-            New members will appear here when they request to join via invite link.
+          <p className="text-xs font-semibold text-[var(--text-primary)] m-0">No pending join requests</p>
+          <p className="text-[11px] text-[var(--text-muted)] m-0 max-w-xs mx-auto">
+            When admin approval is required, new join requests will appear here for your review.
           </p>
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           {requests.map((req) => {
             const isBusy = processingId === req.id;
             return (
               <div
                 key={req.id}
-                className="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all text-left group"
+                className="flex items-center justify-between p-3.5 rounded-xl vg-card-subtle gap-3"
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-2.5 min-w-0">
                   {req.avatar_url ? (
                     <img
                       src={req.avatar_url}
                       alt={req.full_name}
-                      className="w-10 h-10 rounded-full object-cover bg-zinc-800"
+                      className="w-9 h-9 rounded-full object-cover bg-[var(--bg-page)] border border-[var(--border-color)] shrink-0"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500/20 to-indigo-500/20 border border-cyan-500/30 flex items-center justify-center font-bold text-cyan-300 text-sm shrink-0">
-                      {(req.full_name || req.username || '?')[0]}
+                    <div className="w-9 h-9 rounded-full bg-[var(--primary-light)] text-[var(--primary)] border border-[var(--primary)] flex items-center justify-center font-bold text-xs shrink-0">
+                      {(req.full_name || req.username || '?')[0].toUpperCase()}
                     </div>
                   )}
 
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-white truncate">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
                         {req.full_name || req.username}
                       </span>
-                      <span className="text-[10px] text-zinc-500">{req.time || 'recent'}</span>
+                      <span className="text-[10px] text-[var(--text-muted)]">{req.time || 'recently'}</span>
                     </div>
-                    <p className="text-[11px] text-zinc-400 truncate">@{req.username}</p>
+                    <p className="text-[11px] text-[var(--text-muted)] truncate m-0">@{req.username}</p>
                   </div>
                 </div>
 
@@ -99,20 +99,22 @@ export default function JoinRequestsView({
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    disabled={isBusy}
+                    disabled={isBusy || actionLoading}
                     onClick={() => handleAction(req, 'approve')}
-                    className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs shadow-md shadow-emerald-500/20 transition-all hover:scale-105"
+                    className="btn-primary btn-sm"
                   >
-                    Approve
+                    <Check size={14} />
+                    <span>Approve</span>
                   </button>
 
                   <button
                     type="button"
-                    disabled={isBusy}
+                    disabled={isBusy || actionLoading}
                     onClick={() => handleAction(req, 'reject')}
-                    className="px-3.5 py-1.5 rounded-lg bg-white/10 hover:bg-rose-500/20 hover:text-rose-400 text-zinc-300 font-semibold text-xs border border-white/10 transition-all hover:scale-105"
+                    className="btn-secondary btn-sm"
                   >
-                    Reject
+                    <X size={14} />
+                    <span>Decline</span>
                   </button>
                 </div>
               </div>

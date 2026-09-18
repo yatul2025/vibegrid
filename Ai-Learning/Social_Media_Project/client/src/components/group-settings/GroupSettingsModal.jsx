@@ -481,41 +481,45 @@ export default function GroupSettingsModal({
 
   return (
     <div
-      className="group-settings-modal-overlay fixed inset-0 bg-black/80 backdrop-blur-md z-[2500] flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200"
+      className="group-settings-modal-overlay"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={getScreenTitle()}
     >
       <div
-        className="group-settings-card relative w-full max-w-md max-h-[92vh] flex flex-col bg-[#0a0c10] border border-white/10 rounded-2xl shadow-2xl shadow-black overflow-hidden"
+        className="group-settings-card"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Navigation Header */}
-        <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/10 bg-zinc-950/60 backdrop-blur-sm shrink-0">
-          <div className="flex items-center gap-2.5">
+        {/* VibeGrid Standard Navigation Header */}
+        <div className="group-settings-header">
+          <div className="group-settings-header-left">
             {currentScreen !== 'overview' ? (
               <button
                 type="button"
                 onClick={goBack}
-                className="p-1.5 -ml-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                className="group-settings-nav-btn"
                 title="Back"
               >
                 <ArrowLeft size={18} />
               </button>
             ) : (
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-pink-500 via-purple-500 to-cyan-500 p-[1px] flex items-center justify-center">
-                <div className="w-full h-full bg-zinc-900 rounded-[7px] flex items-center justify-center text-white font-bold text-xs">
+              <div className="group-settings-logo-badge">
+                <div className="group-settings-logo-inner">
                   V
                 </div>
               </div>
             )}
-            <h3 className="text-sm font-bold text-white tracking-tight truncate max-w-[240px]">
-              {getScreenTitle()}
-            </h3>
+            <div className="group-settings-title-group">
+              <h3 className="group-settings-title">{getScreenTitle()}</h3>
+              <p className="group-settings-subtitle">Encrypted Group</p>
+            </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="group-settings-nav-btn"
             title="Close"
           >
             <X size={18} />
@@ -525,21 +529,21 @@ export default function GroupSettingsModal({
         {/* Status Toast Banner */}
         {toast.visible && (
           <div
-            className={`px-4 py-2 text-xs font-semibold flex items-center gap-2 border-b ${
+            className={`group-settings-toast ${
               toast.type === 'error'
-                ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                ? 'toast-error'
                 : toast.type === 'success'
-                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
-            } animate-in slide-in-from-top duration-150 shrink-0`}
+                ? 'toast-success'
+                : 'toast-info'
+            }`}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
             <span>{toast.message}</span>
           </div>
         )}
 
         {/* Main Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 custom-scroll">
+        <div className="group-settings-body">
           {currentScreen === 'overview' && (
             <OverviewView
               group={group}
@@ -665,65 +669,66 @@ export default function GroupSettingsModal({
         {/* Add Member Live Drawer Slide-Over */}
         {showAddDrawer && (
           <div
-            className="absolute inset-0 bg-zinc-950/95 backdrop-blur-md z-50 flex flex-col p-4 animate-in slide-in-from-bottom-5 duration-200"
+            className="vg-slide-drawer p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--border-color)] shrink-0">
               <div className="flex items-center gap-2">
-                <UserPlus size={18} className="text-emerald-400" />
-                <h4 className="text-sm font-bold text-white">Add New Members</h4>
+                <UserPlus size={18} className="text-[var(--primary)]" />
+                <h4 className="text-sm font-bold text-[var(--text-primary)] m-0">Add New Members</h4>
               </div>
               <button
                 type="button"
                 onClick={() => setShowAddDrawer(false)}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-white"
+                className="group-settings-nav-btn"
+                title="Close"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Search Input */}
-            <div className="relative mt-3 shrink-0">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+            <div className="vg-search-input-wrap mt-3 shrink-0">
+              <Search size={15} className="vg-search-icon" />
               <input
                 type="text"
                 value={searchMemberQuery}
                 onChange={(e) => setSearchMemberQuery(e.target.value)}
                 placeholder="Search by username or name..."
                 autoFocus
-                className="w-full pl-9 pr-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-xs placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                className="vg-search-input"
               />
             </div>
 
             {/* Result List */}
-            <div className="flex-1 overflow-y-auto mt-3 space-y-2 custom-scroll">
+            <div className="flex-1 overflow-y-auto mt-3 space-y-2">
               {searchingMembers ? (
-                <p className="text-xs text-zinc-400 text-center py-6">Searching...</p>
+                <p className="text-xs text-[var(--text-muted)] text-center py-6">Searching...</p>
               ) : searchMemberResults.length === 0 ? (
-                <p className="text-xs text-zinc-500 text-center py-6">No matching users found.</p>
+                <p className="text-xs text-[var(--text-muted)] text-center py-6">No matching users found.</p>
               ) : (
                 searchMemberResults.map((candidate) => (
                   <div
                     key={candidate.id}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all text-left"
+                    className="flex items-center justify-between p-2.5 rounded-xl vg-card-subtle text-left"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       {candidate.avatar_url ? (
                         <img
                           src={candidate.avatar_url}
                           alt={candidate.full_name}
-                          className="w-9 h-9 rounded-full object-cover bg-zinc-800 shrink-0"
+                          className="w-9 h-9 rounded-full object-cover bg-[var(--bg-page)] border border-[var(--border-color)] shrink-0"
                         />
                       ) : (
-                        <div className="w-9 h-9 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0">
+                        <div className="w-9 h-9 rounded-full bg-[var(--primary-light)] text-[var(--primary)] font-bold text-xs flex items-center justify-center shrink-0">
                           {(candidate.full_name || candidate.username || '?')[0]}
                         </div>
                       )}
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-white truncate">
+                        <p className="text-xs font-semibold text-[var(--text-primary)] truncate m-0">
                           {candidate.full_name || candidate.username}
                         </p>
-                        <p className="text-[10px] text-zinc-400 truncate">@{candidate.username}</p>
+                        <p className="text-[10px] text-[var(--text-muted)] truncate m-0">@{candidate.username}</p>
                       </div>
                     </div>
 
@@ -731,7 +736,7 @@ export default function GroupSettingsModal({
                       type="button"
                       disabled={addingMemberId === candidate.id}
                       onClick={() => handleAddMember(candidate)}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition-transform hover:scale-105 shrink-0"
+                      className="btn-primary btn-sm shrink-0"
                     >
                       {addingMemberId === candidate.id ? 'Adding...' : 'Add'}
                     </button>
