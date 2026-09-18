@@ -41,6 +41,8 @@ class E2EEService {
     this.deviceId = null;
     this.isInitialized = false;
     this.activeCryptoKeys = new Map(); // peerUserId -> AES CryptoKey
+    this._sessionKeyPromises = new Map(); // peerUserId -> in-flight Promise<CryptoKey|null>
+    this.decryptedTextCache = new Map(); // cacheKey -> decryptedText string
   }
 
   // ==========================================================================
@@ -184,89 +186,101 @@ class E2EEService {
     const peerId = Number(peerUserId);
     if (!peerId || !this.currentUserId) return null;
 
-    // Check in-memory cache
+    // 1. Check in-memory cache
     if (this.activeCryptoKeys.has(peerId)) {
       return this.activeCryptoKeys.get(peerId);
     }
 
-    // Check IndexedDB
-    const savedSession = await keyStore.getSession(this.currentUserId, peerId);
-    if (savedSession && savedSession.rawKeyBase64) {
-      const rawBuf = base64ToArrayBuffer(savedSession.rawKeyBase64);
-      const aesKey = await window.crypto.subtle.importKey(
-        'raw',
-        rawBuf,
-        { name: 'AES-GCM', length: 256 },
-        true,
-        ['encrypt', 'decrypt']
-      );
-      this.activeCryptoKeys.set(peerId, aesKey);
-      return aesKey;
+    // 2. Check in-flight promise to prevent concurrent duplicate DH math / bundle fetches
+    if (this._sessionKeyPromises.has(peerId)) {
+      return this._sessionKeyPromises.get(peerId);
     }
 
-    // Fetch peer's PreKey bundle from server
-    try {
-      const bundleRes = await apiClient.get(`/e2ee/keys/bundle/${peerId}`);
-      if (!bundleRes.success || !bundleRes.data) {
-        console.warn(`[E2EE] Peer ${peerId} has no public PreKey bundle.`);
+    const keyPromise = (async () => {
+      try {
+        // Check IndexedDB
+        const savedSession = await keyStore.getSession(this.currentUserId, peerId);
+        if (savedSession && savedSession.rawKeyBase64) {
+          const rawBuf = base64ToArrayBuffer(savedSession.rawKeyBase64);
+          const aesKey = await window.crypto.subtle.importKey(
+            'raw',
+            rawBuf,
+            { name: 'AES-GCM', length: 256 },
+            true,
+            ['encrypt', 'decrypt']
+          );
+          this.activeCryptoKeys.set(peerId, aesKey);
+          return aesKey;
+        }
+
+        // Fetch peer's PreKey bundle from server
+        const bundleRes = await apiClient.get(`/e2ee/keys/bundle/${peerId}`);
+        if (!bundleRes.success || !bundleRes.data) {
+          console.warn(`[E2EE] Peer ${peerId} has no public PreKey bundle.`);
+          return null;
+        }
+
+        const bundle = bundleRes.data;
+        const identity = await keyStore.getDeviceIdentity(this.currentUserId);
+        if (!identity) return null;
+
+        // Import Alice's Identity Private Key
+        const myIdPrivKey = await importPrivateKeyJWK(identity.identityPrivateKeyJWK);
+
+        // Import Bob's Identity Public Key & Signed PreKey
+        const peerIdPubKey = await importPublicKey(bundle.identityKey);
+        const peerSpkPubKey = await importPublicKey(bundle.signedPreKey.publicKey);
+
+        // Alice generates Ephemeral KeyPair
+        const myEphemeralKeyPair = await generateECDHKeyPair();
+        const myEphemeralPubBase64 = await exportPublicKey(myEphemeralKeyPair.publicKey);
+
+        // Triple Diffie-Hellman Computations:
+        // DH1 = DH(Alice.IdentityPriv, Bob.SignedPreKeyPub)
+        const dh1 = await deriveSharedSecret(myIdPrivKey, peerSpkPubKey);
+        // DH2 = DH(Alice.EphemeralPriv, Bob.IdentityPub)
+        const dh2 = await deriveSharedSecret(myEphemeralKeyPair.privateKey, peerIdPubKey);
+        // DH3 = DH(Alice.EphemeralPriv, Bob.SignedPreKeyPub)
+        const dh3 = await deriveSharedSecret(myEphemeralKeyPair.privateKey, peerSpkPubKey);
+
+        const dhParts = [dh1, dh2, dh3];
+
+        // If Bob provided One-Time PreKey (OPK):
+        if (bundle.oneTimePreKey?.publicKey) {
+          const peerOpkPubKey = await importPublicKey(bundle.oneTimePreKey.publicKey);
+          const dh4 = await deriveSharedSecret(myEphemeralKeyPair.privateKey, peerOpkPubKey);
+          dhParts.push(dh4);
+        }
+
+        const masterSecretBuf = this._concatBuffers(dhParts);
+
+        // Derive AES-256-GCM symmetric session key via HKDF-SHA256
+        const info = `VibeGrid-Session-${Math.min(this.currentUserId, peerId)}-${Math.max(this.currentUserId, peerId)}`;
+        const aesKey = await deriveAESKeyFromRawSecret(masterSecretBuf, new Uint8Array(32), info);
+
+        // Export raw key bytes to persist in IndexedDB
+        const rawKeyBuf = await window.crypto.subtle.exportKey('raw', aesKey);
+        const rawKeyBase64 = arrayBufferToBase64(rawKeyBuf);
+
+        await keyStore.saveSession(this.currentUserId, peerId, {
+          rawKeyBase64,
+          peerIdentityKey: bundle.identityKey,
+          ephemeralPubBase64: myEphemeralPubBase64,
+          createdAt: new Date().toISOString()
+        });
+
+        this.activeCryptoKeys.set(peerId, aesKey);
+        return aesKey;
+      } catch (err) {
+        console.error(`[E2EE] Failed to establish session with peer ${peerId}:`, err);
         return null;
+      } finally {
+        this._sessionKeyPromises.delete(peerId);
       }
+    })();
 
-      const bundle = bundleRes.data;
-      const identity = await keyStore.getDeviceIdentity(this.currentUserId);
-      if (!identity) return null;
-
-      // Import Alice's Identity Private Key
-      const myIdPrivKey = await importPrivateKeyJWK(identity.identityPrivateKeyJWK);
-
-      // Import Bob's Identity Public Key & Signed PreKey
-      const peerIdPubKey = await importPublicKey(bundle.identityKey);
-      const peerSpkPubKey = await importPublicKey(bundle.signedPreKey.publicKey);
-
-      // Alice generates Ephemeral KeyPair
-      const myEphemeralKeyPair = await generateECDHKeyPair();
-      const myEphemeralPubBase64 = await exportPublicKey(myEphemeralKeyPair.publicKey);
-
-      // Triple Diffie-Hellman Computations:
-      // DH1 = DH(Alice.IdentityPriv, Bob.SignedPreKeyPub)
-      const dh1 = await deriveSharedSecret(myIdPrivKey, peerSpkPubKey);
-      // DH2 = DH(Alice.EphemeralPriv, Bob.IdentityPub)
-      const dh2 = await deriveSharedSecret(myEphemeralKeyPair.privateKey, peerIdPubKey);
-      // DH3 = DH(Alice.EphemeralPriv, Bob.SignedPreKeyPub)
-      const dh3 = await deriveSharedSecret(myEphemeralKeyPair.privateKey, peerSpkPubKey);
-
-      const dhParts = [dh1, dh2, dh3];
-
-      // If Bob provided One-Time PreKey (OPK):
-      if (bundle.oneTimePreKey?.publicKey) {
-        const peerOpkPubKey = await importPublicKey(bundle.oneTimePreKey.publicKey);
-        const dh4 = await deriveSharedSecret(myEphemeralKeyPair.privateKey, peerOpkPubKey);
-        dhParts.push(dh4);
-      }
-
-      const masterSecretBuf = this._concatBuffers(dhParts);
-
-      // Derive AES-256-GCM symmetric session key via HKDF-SHA256
-      const info = `VibeGrid-Session-${Math.min(this.currentUserId, peerId)}-${Math.max(this.currentUserId, peerId)}`;
-      const aesKey = await deriveAESKeyFromRawSecret(masterSecretBuf, new Uint8Array(32), info);
-
-      // Export raw key bytes to persist in IndexedDB
-      const rawKeyBuf = await window.crypto.subtle.exportKey('raw', aesKey);
-      const rawKeyBase64 = arrayBufferToBase64(rawKeyBuf);
-
-      await keyStore.saveSession(this.currentUserId, peerId, {
-        rawKeyBase64,
-        peerIdentityKey: bundle.identityKey,
-        ephemeralPubBase64: myEphemeralPubBase64,
-        createdAt: new Date().toISOString()
-      });
-
-      this.activeCryptoKeys.set(peerId, aesKey);
-      return aesKey;
-    } catch (err) {
-      console.error(`[E2EE] Failed to establish session with peer ${peerId}:`, err);
-      return null;
-    }
+    this._sessionKeyPromises.set(peerId, keyPromise);
+    return keyPromise;
   }
 
   // ==========================================================================
@@ -317,6 +331,15 @@ class E2EEService {
       return message.content;
     }
 
+    // Fast Cache Check: message ID or ciphertext hash
+    const cacheKey = message.id
+      ? `msg_${message.id}`
+      : `${message.ciphertext}:${message.iv_nonce}`;
+
+    if (this.decryptedTextCache.has(cacheKey)) {
+      return this.decryptedTextCache.get(cacheKey);
+    }
+
     // Message is ciphertext
     if (message.ciphertext && message.iv_nonce) {
       try {
@@ -328,10 +351,20 @@ class E2EEService {
         }
 
         const decryptedText = await decryptAESGCM(aesKey, message.ciphertext, message.iv_nonce);
+
+        // Bound cache size to prevent memory leaks (keep latest 2500 messages)
+        if (this.decryptedTextCache.size > 2500) {
+          const firstKey = this.decryptedTextCache.keys().next().value;
+          this.decryptedTextCache.delete(firstKey);
+        }
+        this.decryptedTextCache.set(cacheKey, decryptedText);
+
         return decryptedText;
       } catch (err) {
         console.warn('[E2EE] Decryption error for message ID:', message.id, err.message);
-        return '🔒 [Encrypted message - could not be decrypted on this device]';
+        const fallback = '🔒 [Encrypted message - could not be decrypted on this device]';
+        this.decryptedTextCache.set(cacheKey, fallback);
+        return fallback;
       }
     }
 
@@ -339,24 +372,60 @@ class E2EEService {
   }
 
   /**
-   * Batch decrypt a list of messages
+   * Batch decrypt a list of messages progressively in micro-batches
+   * @param {Array} messages - Message objects
+   * @param {number|string} partnerUserId - Partner user ID
+   * @param {Function} [onBatchProgress] - Callback invoked as each batch resolves
    */
-  async decryptMessageList(messages, partnerUserId) {
-    if (!Array.isArray(messages)) return [];
+  async decryptMessageList(messages, partnerUserId, onBatchProgress = null) {
+    if (!Array.isArray(messages) || messages.length === 0) return [];
 
-    const decryptedList = await Promise.all(
-      messages.map(async (m) => {
-        if (!m.ciphertext) return m;
-        const decryptedContent = await this.decryptMessage(m, partnerUserId);
-        return {
-          ...m,
-          content: decryptedContent,
-          is_encrypted: true
-        };
-      })
-    );
+    // Pre-warm the session key once so messages in this conversation resolve immediately
+    const peerId = Number(partnerUserId);
+    if (peerId) {
+      try {
+        await this.getOrCreateSessionKey(peerId);
+      } catch {}
+    }
 
-    return decryptedList;
+    const results = new Array(messages.length);
+    const BATCH_SIZE = 15;
+
+    for (let i = 0; i < messages.length; i += BATCH_SIZE) {
+      const chunk = messages.slice(i, i + BATCH_SIZE);
+      const chunkDecrypted = await Promise.all(
+        chunk.map(async (m) => {
+          if (!m.ciphertext) return m;
+          const decryptedContent = await this.decryptMessage(m, partnerUserId);
+          return {
+            ...m,
+            content: decryptedContent,
+            is_encrypted: true
+          };
+        })
+      );
+
+      for (let j = 0; j < chunkDecrypted.length; j++) {
+        results[i + j] = chunkDecrypted[j];
+      }
+
+      if (typeof onBatchProgress === 'function') {
+        try {
+          onBatchProgress([...results.slice(0, i + chunkDecrypted.length)]);
+        } catch {}
+      }
+
+      // Yield briefly to event loop between chunks if more messages remain
+      if (i + BATCH_SIZE < messages.length) {
+        if (typeof queueMicrotask === 'function') {
+          await new Promise((resolve) => queueMicrotask(resolve));
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      }
+    }
+
+    return results;
   }
 }
 

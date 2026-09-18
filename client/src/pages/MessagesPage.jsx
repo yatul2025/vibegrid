@@ -501,6 +501,7 @@ export default function MessagesPage({
   isSearchInChatOpenRef.current = isSearchInChatOpen;
   const isActionBarMoreOpenRef = useRef(isActionBarMoreOpen);
   isActionBarMoreOpenRef.current = isActionBarMoreOpen;
+  const inFlightPartnerFetchRef = useRef(null);
 
   const pushModalHistory = (modalName) => {
     if (typeof window !== 'undefined' && window.history) {
@@ -922,10 +923,12 @@ export default function MessagesPage({
   // Fetch messages for active conversation partner
   const fetchMessagesForPartner = useCallback(async (username, isInitialLoad = false) => {
     if (!username) return;
+    if (inFlightPartnerFetchRef.current === username) return;
+    inFlightPartnerFetchRef.current = username;
+
     try {
-      if (isInitialLoad) {
+      if (isInitialLoad && (!activePartnerRef.current || activePartnerRef.current.username !== username)) {
         setLoadingMessages(true);
-        setMessages([]);
       }
       const res = await apiClient.get(`/messages/${username}`);
       if (res.success && res.data) {
@@ -976,91 +979,122 @@ export default function MessagesPage({
 
         // Check verification status from local keyStore
         if (user && !partner.is_group) {
-          const verified = await keyStore.isPeerVerified(user.id, partner.id);
-          setIsPeerVerified(verified);
+          try {
+            const verified = await keyStore.isPeerVerified(user.id, partner.id);
+            setIsPeerVerified(verified);
+          } catch {}
         } else if (partner.is_group) {
           setIsPeerVerified(true);
         }
 
-        // Decrypt all incoming/outgoing messages (groups use plaintext/senderKeys)
-        let decryptedMessages = res.data.messages || [];
-        if (!partner.is_group) {
-          decryptedMessages = await e2eeService.decryptMessageList(
-            res.data.messages,
-            partner.id
-          );
-        }
+        const rawMessages = res.data.messages || [];
 
-        // Check for first unread incoming message
-        let firstUnreadId = null;
-        let unreadCount = 0;
-        for (const msg of decryptedMessages) {
-          if (!msg.is_mine && !msg.is_read) {
-            if (!firstUnreadId) firstUnreadId = msg.id;
-            unreadCount++;
+        // Helper to commit processed messages to React state
+        const applyMessagesToState = (msgList, isInitial) => {
+          let firstUnreadId = null;
+          let unreadCount = 0;
+          for (const msg of msgList) {
+            if (!msg.is_mine && !msg.is_read) {
+              if (!firstUnreadId) firstUnreadId = msg.id;
+              unreadCount++;
+            }
           }
-        }
-        setFirstUnreadMessageId(firstUnreadId);
-        setUnreadDividerCount(unreadCount);
+          setFirstUnreadMessageId(firstUnreadId);
+          setUnreadDividerCount(unreadCount);
 
-        // Deduplicate messages by ID to prevent duplicate placeholders or messages
-        const uniqueMessages = [];
-        const seenMsgIds = new Set();
-        for (const msg of decryptedMessages) {
-          const key = String(msg.id);
-          if (!seenMsgIds.has(key)) {
-            seenMsgIds.add(key);
-            uniqueMessages.push(msg);
-          }
-        }
-
-        setMessages((prev) => {
-          // Retain any pending or failed optimistic messages awaiting network response or retry
-          const pendingOrFailed = prev.filter(
-            (m) => (m.pending || m.failed) && String(m.id).startsWith('temp-')
-          );
-
-          if (!isInitialLoad && prev.length === uniqueMessages.length && prev.length > 0 && pendingOrFailed.length === 0) {
-            const isUnchanged =
-              prev[0]?.id === uniqueMessages[0]?.id &&
-              prev[prev.length - 1]?.id === uniqueMessages[uniqueMessages.length - 1]?.id &&
-              !uniqueMessages.some((msg, idx) => {
-                const old = prev[idx];
-                return (
-                  !old ||
-                  old.id !== msg.id ||
-                  old.content !== msg.content ||
-                  old.is_read !== msg.is_read ||
-                  old.delivered_at !== msg.delivered_at ||
-                  old.is_deleted !== msg.is_deleted ||
-                  old.edited_at !== msg.edited_at ||
-                  old.is_starred !== msg.is_starred ||
-                  (old.reactions?.length || 0) !== (msg.reactions?.length || 0)
-                );
-              });
-            if (isUnchanged) {
-              return prev;
+          const uniqueMessages = [];
+          const seenMsgIds = new Set();
+          for (const msg of msgList) {
+            const key = String(msg.id);
+            if (!seenMsgIds.has(key)) {
+              seenMsgIds.add(key);
+              uniqueMessages.push(msg);
             }
           }
 
-          if (!isInitialLoad && uniqueMessages.length > prev.length) {
-            const lastMsg = uniqueMessages[uniqueMessages.length - 1];
-            if (lastMsg && !lastMsg.is_mine) {
-              stopPartnerTypingImmediately();
-            }
-          }
-
-          if (pendingOrFailed.length > 0) {
-            const remaining = pendingOrFailed.filter(
-              (p) => !uniqueMessages.some((m) => m.content === p.content && m.is_mine)
+          setMessages((prev) => {
+            const pendingOrFailed = prev.filter(
+              (m) => (m.pending || m.failed) && String(m.id).startsWith('temp-')
             );
-            return [...uniqueMessages, ...remaining];
-          }
 
-          return uniqueMessages;
+            if (!isInitial && prev.length === uniqueMessages.length && prev.length > 0 && pendingOrFailed.length === 0) {
+              const isUnchanged =
+                prev[0]?.id === uniqueMessages[0]?.id &&
+                prev[prev.length - 1]?.id === uniqueMessages[uniqueMessages.length - 1]?.id &&
+                !uniqueMessages.some((msg, idx) => {
+                  const old = prev[idx];
+                  return (
+                    !old ||
+                    old.id !== msg.id ||
+                    old.content !== msg.content ||
+                    old.is_read !== msg.is_read ||
+                    old.delivered_at !== msg.delivered_at ||
+                    old.is_deleted !== msg.is_deleted ||
+                    old.edited_at !== msg.edited_at ||
+                    old.is_starred !== msg.is_starred ||
+                    (old.reactions?.length || 0) !== (msg.reactions?.length || 0)
+                  );
+                });
+              if (isUnchanged) return prev;
+            }
+
+            if (!isInitial && uniqueMessages.length > prev.length) {
+              const lastMsg = uniqueMessages[uniqueMessages.length - 1];
+              if (lastMsg && !lastMsg.is_mine) {
+                stopPartnerTypingImmediately();
+              }
+            }
+
+            if (pendingOrFailed.length > 0) {
+              const remaining = pendingOrFailed.filter(
+                (p) => !uniqueMessages.some((m) => m.content === p.content && m.is_mine)
+              );
+              return [...uniqueMessages, ...remaining];
+            }
+
+            return uniqueMessages;
+          });
+
+          return firstUnreadId;
+        };
+
+        // 1. Fast path: display immediately using cached decrypted plaintexts
+        const initialFastMessages = rawMessages.map((m) => {
+          if (!m.ciphertext) return m;
+          const cacheKey = m.id ? `msg_${m.id}` : `${m.ciphertext}:${m.iv_nonce}`;
+          if (e2eeService.decryptedTextCache.has(cacheKey)) {
+            return {
+              ...m,
+              content: e2eeService.decryptedTextCache.get(cacheKey),
+              is_encrypted: true
+            };
+          }
+          return {
+            ...m,
+            content: m.content || '🔒 [Decrypting message...]',
+            is_encrypted: true
+          };
         });
 
-        if (isInitialLoad) {
+        const initialFirstUnreadId = applyMessagesToState(initialFastMessages, isInitialLoad);
+        setLoadingMessages(false);
+
+        // 2. Non-blocking progressive micro-batch decryption in background
+        if (!partner.is_group && rawMessages.length > 0) {
+          e2eeService.decryptMessageList(
+            rawMessages,
+            partner.id,
+            (partialBatch) => {
+              applyMessagesToState(partialBatch, false);
+            }
+          ).then((fullyDecrypted) => {
+            applyMessagesToState(fullyDecrypted, false);
+          }).catch((decErr) => {
+            console.warn('[MessagesPage] Progressive decryption error:', decErr);
+          });
+        }
+
+        if (isInitialLoad && initialFirstUnreadId) {
           if (firstUnreadId) {
             setTimeout(() => {
               const unreadEl = document.getElementById('new-messages-divider');
@@ -1084,7 +1118,8 @@ export default function MessagesPage({
         setMessages([]);
       }
     } finally {
-      if (isInitialLoad) setLoadingMessages(false);
+      inFlightPartnerFetchRef.current = null;
+      setLoadingMessages(false);
     }
   }, [user, onUnreadCountChange, handleIncomingTyping, stopPartnerTypingImmediately, scrollToBottom]);
 

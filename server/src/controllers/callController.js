@@ -376,6 +376,8 @@ const acceptCall = async (req, res, next) => {
       const io = req.app.get('io');
       if (io) {
         io.to(`user:${initiatorId}`).emit('call:accepted', { callId, calleeId: userId });
+        // Multi-device synchronization: dismiss ringing on callee's other devices
+        io.to(`user:${userId}`).emit('call:answered_elsewhere', { callId, action: 'accepted' });
       }
     }
 
@@ -419,6 +421,8 @@ const rejectCall = async (req, res, next) => {
       const io = req.app.get('io');
       if (io) {
         io.to(`user:${initiatorId}`).emit('call:rejected', { callId, reason });
+        // Multi-device synchronization: dismiss ringing on callee's other devices
+        io.to(`user:${userId}`).emit('call:answered_elsewhere', { callId, action: 'rejected' });
       }
     }
 
@@ -468,6 +472,7 @@ const endCall = async (req, res, next) => {
       const io = req.app.get('io');
       if (io) {
         io.to(`user:${peerId}`).emit('call:ended', { callId });
+        io.to(`user:${userId}`).emit('call:ended', { callId });
       }
     }
 
@@ -514,6 +519,7 @@ const cancelCall = async (req, res, next) => {
       const io = req.app.get('io');
       if (io) {
         io.to(`user:${targetUserId}`).emit('call:cancelled', { callId, callerId: userId });
+        io.to(`user:${userId}`).emit('call:cancelled', { callId, callerId: userId });
       }
     }
 

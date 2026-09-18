@@ -251,6 +251,8 @@ export default function CallModal() {
   const ringToneOscillatorRef = useRef(null);
   const ringToneIntervalRef = useRef(null);
   const durationTimerRef = useRef(null);
+  const callDataRef = useRef(callData);
+  callDataRef.current = callData;
 
   // Unmount cleanup to guarantee zero audio or media leaks
   useEffect(() => {
@@ -258,6 +260,177 @@ export default function CallModal() {
       stopAllMedia();
     };
   }, []);
+
+  // ==========================================================================
+  // Background / Closed App Call Recovery (Deep Link / Push Notification)
+  // ==========================================================================
+  useEffect(() => {
+    if (!user) return;
+
+    const restoreCallFromPayload = async (payload) => {
+      if (!payload || !payload.callId) return;
+      console.log('📲 [CallModal] Restoring background/push call session:', payload);
+
+      const targetCallId = String(payload.callId);
+      const action = payload.callAction; // 'answer' | 'decline' | 'open'
+
+      // Clean URL params if present so page refreshes don't re-trigger
+      try {
+        if (typeof window !== 'undefined' && window.history && window.location.search.includes('callId=')) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('callId');
+          url.searchParams.delete('callAction');
+          url.searchParams.delete('callType');
+          url.searchParams.delete('callerId');
+          url.searchParams.delete('callerName');
+          url.searchParams.delete('callerAvatar');
+          window.history.replaceState(null, '', url.pathname + url.hash);
+        }
+      } catch {}
+
+      // If user tapped 'decline' from push action
+      if (action === 'decline' || action === 'reject') {
+        try {
+          await apiClient.post(`/calls/${targetCallId}/reject`, { reason: 'declined' });
+        } catch {}
+        stopAllMedia();
+        setCallState(null);
+        setCallData(null);
+        return;
+      }
+
+      // Check with backend to confirm call is still active/ringing
+      let activeCallData = null;
+      try {
+        const activeRes = await apiClient.get('/calls/active');
+        if (activeRes.success && activeRes.data?.activeCall) {
+          const ac = activeRes.data.activeCall;
+          if (String(ac.callId) === targetCallId && (ac.callStatus === 'initiated' || ac.callStatus === 'ringing')) {
+            activeCallData = ac;
+          }
+        }
+      } catch (e) {
+        console.warn('[CallModal] Active call verification failed:', e);
+      }
+
+      // Build peer descriptor
+      const peer = activeCallData?.caller || {
+        id: payload.callerId ? Number(payload.callerId) : null,
+        username: payload.callerName || payload.username || 'Contact',
+        full_name: payload.callerName || payload.username || 'Contact',
+        avatar_url: payload.callerAvatar || payload.icon || null
+      };
+
+      const restoredCall = {
+        callId: targetCallId,
+        peer,
+        callType: activeCallData?.callType || payload.callType || 'audio',
+        isInitiator: false
+      };
+
+      clearAllCallTimers();
+      setCallData(restoredCall);
+      callDataRef.current = restoredCall;
+
+      if (action === 'answer') {
+        // One-tap Answer from notification
+        console.log('📞 [CallModal] Auto-answering restored call as requested by notification action');
+        stopRingtone();
+        setCallState('connected');
+        setCallSubState('connecting');
+
+        try {
+          await webrtcService.getLocalMedia(restoredCall.callType);
+          if (localVideoRef.current && webrtcService.localStream) {
+            localVideoRef.current.srcObject = webrtcService.localStream;
+            localVideoRef.current.play().catch(() => {});
+          }
+        } catch (e) {
+          console.warn('Pre-acquiring callee media error:', e.message);
+        }
+
+        socketService.emit('call:accept', {
+          callId: targetCallId,
+          callerId: peer.id
+        });
+      } else {
+        // User opened app: show incoming call ringing state
+        setCallState('incoming');
+        setCallSubState('incoming');
+        startRingtone(false);
+
+        // Auto dismiss after 40s if not answered
+        incomingTimeoutRef.current = setTimeout(() => {
+          stopAllMedia();
+          if (targetCallId) {
+            socketService.emit('call:reject', {
+              callId: targetCallId,
+              callerId: peer.id,
+              reason: 'timeout'
+            });
+          }
+          setCallState(null);
+          setCallData(null);
+        }, 40000);
+      }
+    };
+
+    // 1. Check URL parameters on mount
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      let callId = searchParams.get('callId');
+      let callAction = searchParams.get('callAction');
+      let callerId = searchParams.get('callerId');
+      let callerName = searchParams.get('callerName');
+      let callerAvatar = searchParams.get('callerAvatar');
+      let callType = searchParams.get('callType') || 'audio';
+
+      if (!callId && window.location.hash.includes('callId=')) {
+        const hashQuery = window.location.hash.split('?')[1];
+        if (hashQuery) {
+          const hashParams = new URLSearchParams(hashQuery);
+          callId = hashParams.get('callId');
+          callAction = hashParams.get('callAction');
+          callerId = hashParams.get('callerId');
+          callerName = hashParams.get('callerName') || hashParams.get('partner');
+          callerAvatar = hashParams.get('callerAvatar');
+          callType = hashParams.get('callType') || 'audio';
+        }
+      }
+
+      if (callId) {
+        restoreCallFromPayload({
+          callId,
+          callAction,
+          callerId,
+          callerName,
+          callerAvatar,
+          callType
+        });
+      }
+    } catch {}
+
+    // 2. Listen for Service Worker postMessage (when window is focused from notification)
+    const handleServiceWorkerCallMessage = (event) => {
+      if (event.data?.type === 'RESTORE_CALL_SESSION' && event.data.data?.callId) {
+        restoreCallFromPayload(event.data.data);
+      }
+    };
+
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      try {
+        navigator.serviceWorker.addEventListener('message', handleServiceWorkerCallMessage);
+      } catch {}
+    }
+
+    return () => {
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        try {
+          navigator.serviceWorker.removeEventListener('message', handleServiceWorkerCallMessage);
+        } catch {}
+      }
+    };
+  }, [user]);
 
   // ==========================================================================
   // Web Audio Ringtone Generator (Phone-Style Cadence: Ring -> Pause -> Repeat)
@@ -478,7 +651,17 @@ export default function CallModal() {
 
       // Auto dismiss if caller hangs up or recipient does not answer within 40s
       incomingTimeoutRef.current = setTimeout(() => {
-        handleEndCall();
+        console.log('⏰ [CallModal] Incoming call timed out (40s). Declining with timeout.');
+        stopAllMedia();
+        if (data.callId) {
+          socketService.emit('call:reject', {
+            callId: data.callId,
+            callerId: data.caller?.id,
+            reason: 'timeout'
+          });
+        }
+        setCallState(null);
+        setCallData(null);
       }, 40000);
     };
 
@@ -514,9 +697,10 @@ export default function CallModal() {
       setConnectionStatus('connecting');
 
       try {
-        const targetUserId = data.calleeId || callData?.peer?.id;
-        const callId = data.callId || callData?.callId;
-        const callType = callData?.callType || 'audio';
+        const currentData = callDataRef.current;
+        const targetUserId = data.calleeId || currentData?.peer?.id;
+        const callId = data.callId || currentData?.callId;
+        const callType = currentData?.callType || 'audio';
         await webrtcService.startCallAsInitiator(
           targetUserId,
           callId,
@@ -698,7 +882,7 @@ export default function CallModal() {
       socketService.off('call:ice-restart', handleRemoteIceRestart);
       socketService.off('call:track-state', handleRemoteTrackState);
     };
-  }, [user, callData]);
+  }, [user]);
 
   // ==========================================================================
   // Attach Media Streams to HTML Video & Audio Elements

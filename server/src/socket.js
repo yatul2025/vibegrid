@@ -143,6 +143,37 @@ function initSocket(httpServer) {
       socket.broadcast.emit('presence:update', { userId, status: 'online' });
     }
 
+    // Check for active ringing incoming call for this user upon socket connect / reconnect
+    query(`
+      SELECT c.id AS call_id, c.conversation_id, c.initiator_id, c.call_type,
+             u.username, u.full_name, u.avatar_url
+      FROM calls c
+      JOIN call_participants cp ON c.id = cp.call_id AND cp.user_id = $1
+      JOIN users u ON c.initiator_id = u.id
+      WHERE c.status IN ('initiated', 'ringing')
+        AND cp.status IN ('invited', 'ringing')
+        AND c.started_at > (CURRENT_TIMESTAMP - INTERVAL '60 seconds')
+      ORDER BY c.started_at DESC LIMIT 1
+    `, [userId]).then((pendingCallRes) => {
+      if (pendingCallRes.rows.length > 0) {
+        const row = pendingCallRes.rows[0];
+        socket.emit('call:incoming', {
+          callId: row.call_id,
+          caller: {
+            id: row.initiator_id,
+            username: row.username,
+            full_name: row.full_name,
+            avatar_url: row.avatar_url
+          },
+          callType: row.call_type || 'audio',
+          conversationId: row.conversation_id,
+          restored: true
+        });
+      }
+    }).catch((callErr) => {
+      console.warn('[Socket] Failed to check pending call for user', userId, callErr.message);
+    });
+
     // Return active online users (sockets + recent heartbeat)
     socket.on('presence:get', async (callback) => {
       if (typeof callback === 'function') {
@@ -412,11 +443,19 @@ function initSocket(httpServer) {
             type: 'call',
             data: {
               type: 'call',
-              url: `/#messages?callId=${callId}&partner=${user.username}`,
+              url: `/?callId=${callId}&callType=${callType}&callerId=${userId}&callerName=${encodeURIComponent(user.full_name || user.username)}&callerAvatar=${encodeURIComponent(user.avatar_url || '')}&partner=${encodeURIComponent(user.username)}`,
               callId,
               callType,
               callerId: userId,
-              username: user.username
+              callerName: user.full_name || user.username,
+              callerAvatar: user.avatar_url,
+              username: user.username,
+              caller: {
+                id: userId,
+                username: user.username,
+                full_name: user.full_name,
+                avatar_url: user.avatar_url
+              }
             }
           }).catch((err) => console.warn('[Push Notification Call Error]:', err.message));
         } catch (pushErr) {
@@ -463,6 +502,11 @@ function initSocket(httpServer) {
           callerId: userId
         });
       }
+      // Synchronize cancellation to caller's other tabs/devices
+      io.to(`user:${userId}`).emit('call:cancelled', {
+        callId: effectiveCallId,
+        callerId: userId
+      });
 
       try {
         if (effectiveCallId) {
@@ -587,8 +631,8 @@ function initSocket(httpServer) {
         });
       }
 
-      // Also confirm to the sender so their UI can never stay stuck
-      socket.emit('call:ended', {
+      // Also notify all devices of the user that ended the call so all their tabs/devices close
+      io.to(`user:${userId}`).emit('call:ended', {
         callId: effectiveCallId,
         reason: 'hangup'
       });

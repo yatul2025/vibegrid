@@ -1,6 +1,6 @@
 /**
  * VibeGrid Progressive Web App Service Worker
- * Version: vibegrid-pwa-v55
+ * Version: vibegrid-pwa-v56
  * Updated: Auto-generated with enhanced offline caching, sync fallbacks, and instant update activation.
  * 
  * Features:
@@ -10,7 +10,7 @@
  * 4. Automatic cache cleanup on deployment and immediate client claiming
  */
 
-const CACHE_NAME = 'vibegrid-pwa-v55';
+const CACHE_NAME = 'vibegrid-pwa-v56';
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_ASSETS = [
@@ -260,14 +260,44 @@ self.addEventListener('notificationclick', (event) => {
 
   const notifData = event.notification.data || {};
   const action = event.action;
+  const isCall = notifData.type === 'call' || Boolean(notifData.callId);
 
-  // If user tapped "Decline" on an incoming call action button
-  if (action === 'decline') {
+  // If user tapped "Decline" on an incoming call action button from lock screen/notification
+  if (action === 'decline' && notifData.callId) {
+    event.waitUntil(
+      fetch(`/api/calls/${notifData.callId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'declined' }),
+        credentials: 'include'
+      }).catch((err) => {
+        console.warn('[SW Notification] Background call reject error:', err);
+      })
+    );
     return;
   }
 
+  // Determine call action: 'answer' if answer button tapped, 'open' if notification tapped
+  const callAction = isCall
+    ? (action === 'answer' ? 'answer' : 'open')
+    : null;
+
   // Determine destination URL
   let targetUrl = notifData.url || '/';
+  if (isCall && notifData.callId) {
+    const params = new URLSearchParams();
+    params.set('callId', notifData.callId);
+    if (callAction) params.set('callAction', callAction);
+    if (notifData.callType) params.set('callType', notifData.callType);
+    if (notifData.callerId) params.set('callerId', notifData.callerId);
+    if (notifData.callerName || notifData.username) {
+      params.set('callerName', notifData.callerName || notifData.username);
+    }
+    if (notifData.callerAvatar || notifData.icon) {
+      params.set('callerAvatar', notifData.callerAvatar || notifData.icon);
+    }
+    targetUrl = `/?${params.toString()}`;
+  }
 
   // Ensure target URL is absolute or properly formatted
   if (targetUrl.startsWith('/')) {
@@ -280,8 +310,11 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of clientList) {
         if (client.url && 'focus' in client) {
           client.postMessage({
-            type: 'NAVIGATE_FROM_NOTIFICATION',
-            data: notifData
+            type: isCall ? 'RESTORE_CALL_SESSION' : 'NAVIGATE_FROM_NOTIFICATION',
+            data: {
+              ...notifData,
+              callAction
+            }
           });
           return client.focus().then(() => {
             if ('navigate' in client && targetUrl) {
