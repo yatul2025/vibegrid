@@ -62,7 +62,7 @@ function AppContent() {
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('vibegrid_theme') || 'light';
   });
-  const [settingsSection, setSettingsSection] = useState('privacy');
+  const [settingsSection, setSettingsSection] = useState(null);
   const [slideDirection, setSlideDirection] = useState(null);
   const currentTabRef = useRef(currentTab);
   useEffect(() => {
@@ -206,7 +206,7 @@ function AppContent() {
   };
 
   // Open Settings helper
-  const openSettings = (section = 'privacy') => {
+  const openSettings = (section = null) => {
     const isSub = Boolean(section && !['privacy', 'overview'].includes(section));
     setSettingsSection(section);
     navigateToTab('settings', { viewedUser: null, section, subSection: isSub });
@@ -1025,7 +1025,7 @@ function AppContent() {
                           className="dropdown-item"
                           role="menuitem"
                           onClick={() => {
-                            openSettings('privacy');
+                            openSettings();
                             setIsProfileMenuOpen(false);
                           }}
                         >
@@ -1207,7 +1207,7 @@ function AppContent() {
 
                 <button
                   className={`nav-icon-btn-mobile ${currentTab === 'settings' ? 'active' : ''}`}
-                  onClick={() => openSettings('privacy')}
+                  onClick={() => openSettings()}
                   title="Settings & Privacy"
                   aria-label="Settings & Privacy"
                 >

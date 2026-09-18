@@ -49,21 +49,21 @@ import {
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
 export default function SettingsPage({
-  initialSection = 'privacy',
+  initialSection = null,
   onNavigateToProfile,
   currentTheme = 'dark',
   onThemeChange
 }) {
   const { user: currentUser, updateUser, logout } = useAuth();
 
-  // Active section: 'profile' | 'contact' | 'security' | 'privacy' | 'notifications' | 'danger'
-  const [activeSection, setActiveSection] = useState(initialSection || 'privacy');
+  // Active section: 'profile' | 'appearance' | 'contact' | 'security' | 'privacy' | 'notifications' | 'danger' | null
+  const [activeSection, setActiveSection] = useState(initialSection || null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [mobileViewingSection, setMobileViewingSection] = useState(() => {
     if (typeof window !== 'undefined' && window.history?.state?.tab === 'settings' && window.history?.state?.subSection !== undefined) {
       return Boolean(window.history.state.subSection);
     }
-    return window.innerWidth > 768 || (initialSection && !['privacy', 'overview'].includes(initialSection));
+    return Boolean(initialSection);
   });
 
   const mobileViewingSectionRef = useRef(mobileViewingSection);
@@ -418,9 +418,12 @@ export default function SettingsPage({
         if (hasHistorySub) {
           setMobileViewingSection(Boolean(window.history.state.subSection));
         } else {
-          setMobileViewingSection(!['privacy', 'overview'].includes(initialSection));
+          setMobileViewingSection(Boolean(initialSection));
         }
       }
+    } else {
+      setActiveSection(null);
+      setMobileViewingSection(false);
     }
   }, [initialSection, isMobile]);
 
@@ -1161,7 +1164,10 @@ export default function SettingsPage({
   };
 
   const handleBackToMenu = () => {
-    navigationService.goBack(() => setMobileViewingSection(false));
+    navigationService.goBack(() => {
+      setMobileViewingSection(false);
+      setActiveSection(null);
+    });
   };
 
   if (loadingProfile && !profile) {
@@ -1338,6 +1344,15 @@ export default function SettingsPage({
           {/* Right Content Panel (Desktop or Mobile Active Section View) */}
           {(!isMobile || mobileViewingSection) && (
             <section className="settings-content-panel">
+              {/* Empty Selection Placeholder (Shown on Desktop when no section is selected) */}
+              {!activeSection && (
+                <div className="settings-empty-selection">
+                  <div className="settings-empty-icon">⚙️</div>
+                  <h3>Settings & Privacy</h3>
+                  <p>Select a category from the menu to manage your account details, appearance, security, notifications, and preferences.</p>
+                </div>
+              )}
+
               {/* ========================================================== */}
               {/* CATEGORY 1: EDIT PROFILE                                    */}
               {/* ========================================================== */}
