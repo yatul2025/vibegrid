@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../api/client';
+import accountSuggestionService from '../services/accountSuggestionService';
+import { getDefaultAvatar } from '../utils/avatar';
 
 export default function AuthPage({ initialTab = 'login' }) {
   const { user, login, verifyLoginOtp, resendLoginOtp, register, verifyRegisterOtp, resendRegisterOtp, logout, startDemoSession } = useAuth();
@@ -55,6 +57,47 @@ export default function AuthPage({ initialTab = 'login' }) {
     }
     return () => clearInterval(timer);
   }, [registerOtpCooldown]);
+
+  // Remembered Login Accounts Suggestions
+  const [rememberedAccounts, setRememberedAccounts] = useState(() => accountSuggestionService.getRememberedAccounts());
+  const [selectedAccount, setSelectedAccount] = useState(null);
+  const passwordInputRef = useRef(null);
+
+  // Sync suggestions whenever navigating to login tab
+  useEffect(() => {
+    if (activeTab === 'login') {
+      const accounts = accountSuggestionService.getRememberedAccounts();
+      setRememberedAccounts(accounts);
+    }
+  }, [activeTab]);
+
+  const handleSelectAccount = (account) => {
+    setSelectedAccount(account);
+    setLoginData((prev) => ({
+      ...prev,
+      identifier: account.identifier || account.username,
+      password: ''
+    }));
+    if (error) setError(null);
+    setTimeout(() => {
+      passwordInputRef.current?.focus();
+    }, 60);
+  };
+
+  const handleRemoveAccount = (accountToRemove) => {
+    const updated = accountSuggestionService.removeRememberedAccount(accountToRemove.id || accountToRemove.username);
+    setRememberedAccounts(updated);
+    if (selectedAccount && (selectedAccount.id === accountToRemove.id || selectedAccount.username === accountToRemove.username)) {
+      setSelectedAccount(null);
+      setLoginData((prev) => ({ ...prev, identifier: '' }));
+    }
+  };
+
+  const handleClearSelectedAccount = () => {
+    setSelectedAccount(null);
+    setLoginData((prev) => ({ ...prev, identifier: '', password: '' }));
+    if (error) setError(null);
+  };
 
   // Form states
   const [loginData, setLoginData] = useState({
@@ -790,26 +833,110 @@ export default function AuthPage({ initialTab = 'login' }) {
 
                 {error && <div className="ig-auth-error">⚠️ {error}</div>}
 
-                <form onSubmit={handleLoginSubmit} className="ig-form">
-                  <div className="ig-input-group">
-                    <label htmlFor="login-identifier" className="sr-only">
-                      Mobile number, username or email
-                    </label>
-                    <input
-                      id="login-identifier"
-                      aria-label="Mobile number, username or email"
-                      type="text"
-                      name="identifier"
-                      placeholder="Mobile number, username or email"
-                      value={loginData.identifier}
-                      onChange={handleLoginChange}
-                      required
-                      maxLength={255}
-                      autoComplete="username"
-                      inputMode="text"
-                      className="ig-input"
-                    />
+                {/* Remembered Accounts Login Suggestions */}
+                {loginStep === 'credentials' && rememberedAccounts.length > 0 && (
+                  <div className="vg-login-suggestions" role="region" aria-label="Suggested accounts" data-testid="login-suggestions">
+                    <div className="vg-login-suggestions-header">
+                      <span className="vg-login-suggestions-title">
+                        {selectedAccount ? 'Selected Account' : 'Recent Accounts'}
+                      </span>
+                    </div>
+
+                    {!selectedAccount ? (
+                      <div className="vg-suggestions-list" data-testid="suggestions-list">
+                        {rememberedAccounts.map((acc) => (
+                           <div
+                            key={acc.id || acc.username}
+                            className="vg-suggestion-card"
+                            onClick={() => handleSelectAccount(acc)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleSelectAccount(acc);
+                              }
+                            }}
+                            data-testid={`account-suggestion-${acc.username}`}
+                            title={`Log in as @${acc.username}`}
+                          >
+                            <img
+                              src={acc.avatarUrl || getDefaultAvatar(acc.gender)}
+                              alt={acc.fullName || acc.username}
+                              className="vg-suggestion-avatar"
+                              onError={(e) => { e.target.src = getDefaultAvatar(acc.gender); }}
+                            />
+                            <div className="vg-suggestion-info">
+                              <strong className="vg-suggestion-name">{acc.fullName || acc.username}</strong>
+                              <span className="vg-suggestion-username">@{acc.username}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="vg-suggestion-remove-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveAccount(acc);
+                              }}
+                              title="Remove from suggestions"
+                              aria-label={`Remove @${acc.username} from suggestions`}
+                              data-testid={`remove-suggestion-${acc.username}`}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                        <div className="vg-suggestion-divider">
+                          <span>or log in with username/email</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="vg-selected-account-banner" data-testid="selected-account-banner">
+                        <img
+                          src={selectedAccount.avatarUrl || getDefaultAvatar(selectedAccount.gender)}
+                          alt={selectedAccount.fullName || selectedAccount.username}
+                          className="vg-selected-avatar"
+                          onError={(e) => { e.target.src = getDefaultAvatar(selectedAccount.gender); }}
+                        />
+                        <div className="vg-selected-info">
+                          <strong className="vg-selected-name">{selectedAccount.fullName || selectedAccount.username}</strong>
+                          <span className="vg-selected-username">@{selectedAccount.username}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="vg-switch-account-link"
+                          onClick={handleClearSelectedAccount}
+                          data-testid="switch-account-btn"
+                          title="Switch or use another account"
+                        >
+                          Switch
+                        </button>
+                      </div>
+                    )}
                   </div>
+                )}
+
+                <form onSubmit={handleLoginSubmit} className="ig-form">
+                  {!selectedAccount && (
+                    <div className="ig-input-group">
+                      <label htmlFor="login-identifier" className="sr-only">
+                        Mobile number, username or email
+                      </label>
+                      <input
+                        id="login-identifier"
+                        aria-label="Mobile number, username or email"
+                        type="text"
+                        name="identifier"
+                        placeholder="Mobile number, username or email"
+                        value={loginData.identifier}
+                        onChange={handleLoginChange}
+                        required
+                        maxLength={255}
+                        autoComplete="username"
+                        inputMode="text"
+                        className="ig-input"
+                      />
+                    </div>
+                  )}
 
                   <div className="ig-input-group ig-password-group">
                     <label htmlFor="login-password" className="sr-only">
@@ -817,10 +944,11 @@ export default function AuthPage({ initialTab = 'login' }) {
                     </label>
                     <input
                       id="login-password"
+                      ref={passwordInputRef}
                       aria-label="Password"
                       type={showPassword ? 'text' : 'password'}
                       name="password"
-                      placeholder="Password"
+                      placeholder={selectedAccount ? `Enter password for @${selectedAccount.username}` : "Password"}
                       value={loginData.password}
                       onChange={handleLoginChange}
                       required
@@ -852,7 +980,7 @@ export default function AuthPage({ initialTab = 'login' }) {
                         <span>Logging in...</span>
                       </span>
                     ) : (
-                      'Log in'
+                      selectedAccount ? `Log in as @${selectedAccount.username}` : 'Log in'
                     )}
                   </button>
                 </form>

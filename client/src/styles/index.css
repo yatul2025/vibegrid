@@ -14161,4 +14161,227 @@ select.form-input option,
   color: var(--text-primary, #ffffff);
 }
 
+/* ==========================================================================
+   Remembered Login Account Suggestions
+   ========================================================================== */
+.vg-login-suggestions {
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.vg-login-suggestions-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  text-align: left;
+}
+
+.vg-suggestions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.vg-suggestion-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-surface, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  cursor: pointer;
+  transition: all 0.18s ease;
+  position: relative;
+  text-align: left;
+}
+
+.vg-suggestion-card:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.3);
+  transform: translateY(-1px);
+}
+
+.vg-suggestion-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #1e2330;
+}
+
+.vg-suggestion-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.vg-suggestion-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary, #ffffff);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vg-suggestion-username {
+  font-size: 0.78rem;
+  color: var(--text-muted, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vg-suggestion-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #64748b);
+  font-size: 0.85rem;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.vg-suggestion-remove-btn:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.vg-selected-account-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.vg-selected-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid #6366f1;
+}
+
+.vg-selected-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.vg-selected-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vg-selected-username {
+  font-size: 0.78rem;
+  color: #a5b4fc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vg-switch-account-link {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-muted, #cbd5e1);
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.vg-switch-account-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.vg-suggestion-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 10px 0 6px;
+  font-size: 0.78rem;
+  color: var(--text-muted, #64748b);
+}
+
+.vg-suggestion-divider::before,
+.vg-suggestion-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.vg-suggestion-divider span {
+  padding: 0 10px;
+}
+
+[data-theme="light"] .vg-suggestion-card {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .vg-suggestion-card:hover {
+  background: #eef2ff;
+  border-color: #6366f1;
+}
+
+[data-theme="light"] .vg-suggestion-name {
+  color: #0f172a;
+}
+
+[data-theme="light"] .vg-selected-account-banner {
+  background: #f5f3ff;
+  border-color: #c7d2fe;
+}
+
+[data-theme="light"] .vg-selected-name {
+  color: #1e1b4b;
+}
+
+[data-theme="light"] .vg-selected-username {
+  color: #4338ca;
+}
+
+[data-theme="light"] .vg-switch-account-link {
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+[data-theme="light"] .vg-switch-account-link:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+
 

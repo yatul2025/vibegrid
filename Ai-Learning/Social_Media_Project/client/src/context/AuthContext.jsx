@@ -12,6 +12,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import apiClient from '../api/client';
 import pushNotificationService from '../services/pushNotificationService';
 import permissionService from '../services/permissionService';
+import accountSuggestionService from '../services/accountSuggestionService';
 
 const AuthContext = createContext(null);
 
@@ -64,6 +65,7 @@ export const AuthProvider = ({ children }) => {
           try {
             localStorage.setItem('vibegrid_user', JSON.stringify(data.data.user));
           } catch {}
+          accountSuggestionService.saveRememberedAccount(data.data.user);
           return;
         }
       }
@@ -230,6 +232,7 @@ export const AuthProvider = ({ children }) => {
         try {
           localStorage.setItem('vibegrid_user', JSON.stringify(res.data.user));
         } catch {}
+        accountSuggestionService.saveRememberedAccount(res.data.user, identifier);
         return { success: true, user: res.data.user };
       }
       throw new Error(res.error || 'Login failed.');
@@ -249,6 +252,7 @@ export const AuthProvider = ({ children }) => {
         try {
           localStorage.setItem('vibegrid_user', JSON.stringify(res.data.user));
         } catch {}
+        accountSuggestionService.saveRememberedAccount(res.data.user);
         return { success: true, user: res.data.user };
       }
       throw new Error(res.error || 'Verification failed.');
@@ -289,6 +293,7 @@ export const AuthProvider = ({ children }) => {
         try {
           localStorage.setItem('vibegrid_user', JSON.stringify(res.data.user));
         } catch {}
+        accountSuggestionService.saveRememberedAccount(res.data.user, formData?.username || formData?.email);
         return { success: true, user: res.data.user };
       }
       throw new Error(res.error || 'Registration failed.');
@@ -308,6 +313,7 @@ export const AuthProvider = ({ children }) => {
         try {
           localStorage.setItem('vibegrid_user', JSON.stringify(res.data.user));
         } catch {}
+        accountSuggestionService.saveRememberedAccount(res.data.user);
         return { success: true, user: res.data.user };
       }
       throw new Error(res.error || 'Registration verification failed.');
