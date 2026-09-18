@@ -45,6 +45,12 @@ const config = {
     tlsPort: parseInt(process.env.TURN_TLS_PORT, 10) || 5349,
     meteredDomain: process.env.METERED_DOMAIN || null,
     meteredApiKey: process.env.METERED_API_KEY || null
+  },
+  vibi: {
+    geminiApiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null,
+    openaiApiKey: process.env.OPENAI_API_KEY || null,
+    defaultProvider: process.env.VIBI_AI_PROVIDER || 'auto', // 'auto' | 'gemini' | 'openai' | 'knowledge_base'
+    modelName: process.env.VIBI_MODEL_NAME || 'gemini-1.5-flash'
   }
 };
 

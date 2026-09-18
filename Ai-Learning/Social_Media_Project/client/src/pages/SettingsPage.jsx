@@ -27,6 +27,7 @@ import pushNotificationService from '../services/pushNotificationService';
 import { THEMES, getThemeById } from '../constants/themes';
 import soundFx, { SOUND_PACKS } from '../services/soundFxService';
 import navigationService from '../services/navigationService';
+import { useVibiAssistant } from '../context/VibiAssistantContext';
 import { SettingsSkeleton, SkeletonLine, SkeletonCircle, SkeletonPill } from '../components/common/Skeleton';
 import {
   User,
@@ -110,6 +111,20 @@ export default function SettingsPage({
       return false;
     }
   });
+
+  // Vibi Assistant settings state & hook
+  const {
+    preferences: vibiPreferences,
+    updatePreferences: updateVibiPreferences,
+    resetPreferences: resetVibiPreferences
+  } = useVibiAssistant();
+  const [vibiResetToast, setVibiResetToast] = useState(false);
+
+  const handleResetVibi = () => {
+    if (resetVibiPreferences) resetVibiPreferences();
+    setVibiResetToast(true);
+    setTimeout(() => setVibiResetToast(false), 3000);
+  };
 
   useEffect(() => {
     if (currentTheme) {
@@ -1171,6 +1186,7 @@ export default function SettingsPage({
     { id: 'security', label: 'Password & Security', icon: <Lock size={18} strokeWidth={1.75} />, description: 'Password, sessions & devices' },
     { id: 'privacy', label: 'Privacy & Permissions', icon: <ShieldCheck size={18} strokeWidth={1.75} />, description: 'Account privacy, DMs & comments' },
     { id: 'notifications', label: 'Notifications', icon: <Bell size={18} strokeWidth={1.75} />, description: 'Push, sound FX & email' },
+    { id: 'vibi', label: 'Vibi Assistant', icon: <span style={{ fontSize: '18px', display: 'inline-flex', alignItems: 'center' }}>🦊</span>, description: 'AI companion, controls & smart features' },
     { id: 'danger', label: 'Account Status', icon: <AlertTriangle size={18} strokeWidth={1.75} />, description: 'Deactivate or delete account' }
   ];
 
@@ -3231,6 +3247,212 @@ export default function SettingsPage({
                           disabled={savingNotif || isDemoUser}
                           aria-label="Email Notifications"
                         />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ========================================================== */}
+              {/* CATEGORY: VIBI AI ASSISTANT                                */}
+              {/* ========================================================== */}
+              {activeSection === 'vibi' && (
+                <div className="settings-section-body" data-testid="vibi-settings-section">
+                  <div className="settings-panel-header">
+                    <h3>🦊 Vibi AI Assistant</h3>
+                    <p>Customize your native VibeGrid AI companion, privacy controls, and contextual assistance.</p>
+                  </div>
+
+                  {/* Master Switch Card */}
+                  <div className="pwa-push-status-card vibi-master-status-card" data-testid="vibi-master-card" style={{ marginBottom: '16px' }}>
+                    <div className="pwa-push-status-header">
+                      <div className="pwa-push-status-title">
+                        <span className="pwa-push-icon" style={{
+                          background: vibiPreferences?.enabled ? 'rgba(239, 68, 68, 0.15)' : 'rgba(148, 163, 184, 0.1)',
+                          border: vibiPreferences?.enabled ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(148, 163, 184, 0.2)',
+                          fontSize: '20px'
+                        }}>
+                          🦊
+                        </span>
+                        <div>
+                          <strong>Enable Vibi Assistant (Master Control)</strong>
+                          <p>Turn Vibi assistant on or off completely across VibeGrid. When disabled, all Vibi UI, contextual listeners, and AI actions are stopped immediately.</p>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span className={`pwa-status-pill ${vibiPreferences?.enabled ? 'pill-success' : 'pill-muted'}`}>
+                          {vibiPreferences?.enabled ? 'Active' : 'Disabled'}
+                        </span>
+                        <SpringToggle
+                          checked={Boolean(vibiPreferences?.enabled)}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            updateVibiPreferences({ enabled: val });
+                            if (soundFx && typeof soundFx.play === 'function') {
+                              soundFx.play('toggle');
+                            }
+                          }}
+                          aria-label="Enable Vibi Assistant Master Toggle"
+                          data-testid="vibi-master-toggle"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Individual Controls Card */}
+                  <div
+                    className="account-mgmt-card"
+                    data-testid="vibi-controls-card"
+                    style={{
+                      opacity: vibiPreferences?.enabled ? 1 : 0.45,
+                      pointerEvents: vibiPreferences?.enabled ? 'auto' : 'none',
+                      transition: 'opacity 0.25s ease'
+                    }}
+                  >
+                    {!vibiPreferences?.enabled && (
+                      <div style={{
+                        background: 'rgba(245, 158, 11, 0.12)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        marginBottom: '16px',
+                        color: 'var(--warning, #f59e0b)',
+                        fontSize: '13px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }} data-testid="vibi-disabled-banner">
+                        <span>⚠️</span>
+                        <span>Vibi is currently disabled. Turn on the master control above to activate individual features.</span>
+                      </div>
+                    )}
+
+                    <div className="privacy-group">
+                      <span className="privacy-group-title">🎛️ Assistant Features & UI</span>
+
+                      {/* Welcome Experience */}
+                      <div className="privacy-toggle-row">
+                        <div className="privacy-toggle-info">
+                          <strong>Welcome Experience & Greeting</strong>
+                          <p>Display Vibi's friendly red panda greeting banner and starter tips when opening VibeGrid.</p>
+                        </div>
+                        <SpringToggle
+                          checked={Boolean(vibiPreferences?.welcome)}
+                          onChange={(e) => updateVibiPreferences({ welcome: e.target.checked })}
+                          disabled={!vibiPreferences?.enabled}
+                          aria-label="Welcome Experience"
+                          data-testid="vibi-welcome-toggle"
+                        />
+                      </div>
+
+                      {/* Floating Action Button (FAB) */}
+                      <div className="privacy-toggle-row">
+                        <div className="privacy-toggle-info">
+                          <strong>Floating Action Button (FAB)</strong>
+                          <p>Show the persistent floating Vibi launcher button on desktop and mobile screens.</p>
+                        </div>
+                        <SpringToggle
+                          checked={Boolean(vibiPreferences?.floatingButton)}
+                          onChange={(e) => updateVibiPreferences({ floatingButton: e.target.checked })}
+                          disabled={!vibiPreferences?.enabled}
+                          aria-label="Floating Action Button"
+                          data-testid="vibi-fab-toggle"
+                        />
+                      </div>
+
+                      {/* Smart Contextual Suggestions */}
+                      <div className="privacy-toggle-row">
+                        <div className="privacy-toggle-info">
+                          <strong>Smart Contextual Suggestions</strong>
+                          <p>Provide quick interactive suggestion chips relevant to your current tab or action.</p>
+                        </div>
+                        <SpringToggle
+                          checked={Boolean(vibiPreferences?.smartSuggestions)}
+                          onChange={(e) => updateVibiPreferences({ smartSuggestions: e.target.checked })}
+                          disabled={!vibiPreferences?.enabled}
+                          aria-label="Smart Suggestions"
+                          data-testid="vibi-suggestions-toggle"
+                        />
+                      </div>
+
+                      {/* App Context Awareness */}
+                      <div className="privacy-toggle-row">
+                        <div className="privacy-toggle-info">
+                          <strong>App Context Awareness</strong>
+                          <p>Allow Vibi to read current screen names and public UI state to answer questions faster. Never reads private messages or encrypted keys.</p>
+                        </div>
+                        <SpringToggle
+                          checked={Boolean(vibiPreferences?.appContext)}
+                          onChange={(e) => updateVibiPreferences({ appContext: e.target.checked })}
+                          disabled={!vibiPreferences?.enabled}
+                          aria-label="App Context Awareness"
+                          data-testid="vibi-context-toggle"
+                        />
+                      </div>
+
+                      {/* In-App Notifications */}
+                      <div className="privacy-toggle-row">
+                        <div className="privacy-toggle-info">
+                          <strong>Vibi In-App Notifications</strong>
+                          <p>Receive proactive, high-value assistance alerts and discovery tips while using VibeGrid.</p>
+                        </div>
+                        <SpringToggle
+                          checked={Boolean(vibiPreferences?.notifications)}
+                          onChange={(e) => updateVibiPreferences({ notifications: e.target.checked })}
+                          disabled={!vibiPreferences?.enabled}
+                          aria-label="Vibi In-App Notifications"
+                          data-testid="vibi-notifications-toggle"
+                        />
+                      </div>
+
+                      {/* Delight Animations */}
+                      <div className="privacy-toggle-row">
+                        <div className="privacy-toggle-info">
+                          <strong>Delight Animations & Micro-Interactions</strong>
+                          <p>Enable smooth spring transitions, mascot animations, and typing shimmer effects.</p>
+                        </div>
+                        <SpringToggle
+                          checked={Boolean(vibiPreferences?.animations)}
+                          onChange={(e) => updateVibiPreferences({ animations: e.target.checked })}
+                          disabled={!vibiPreferences?.enabled}
+                          aria-label="Delight Animations"
+                          data-testid="vibi-animations-toggle"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Reset Preferences Card / Row */}
+                    <div style={{
+                      marginTop: '20px',
+                      paddingTop: '16px',
+                      borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '12px'
+                    }}>
+                      <div>
+                        <strong style={{ display: 'block', fontSize: '14px' }}>Reset Preferences</strong>
+                        <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: 'var(--text-secondary, #94a3b8)' }}>
+                          Restore all Vibi Assistant settings to their default out-of-the-box values.
+                        </p>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {vibiResetToast && (
+                          <span style={{ fontSize: '12px', color: '#10b981', display: 'inline-flex', alignItems: 'center', gap: '4px' }} data-testid="vibi-reset-toast">
+                            <CheckCircle2 size={14} /> Reset!
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ padding: '7px 14px', fontSize: '13px' }}
+                          onClick={handleResetVibi}
+                          data-testid="vibi-reset-btn"
+                        >
+                          Reset to Defaults
+                        </button>
                       </div>
                     </div>
                   </div>

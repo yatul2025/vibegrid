@@ -117,6 +117,7 @@ app.use('/api/conversations', require('./routes/conversationRoutes'));
 app.use('/api/e2ee', require('./routes/e2eeRoutes'));
 app.use('/api/calls', require('./routes/callRoutes'));
 app.use('/api/hashtags', require('./routes/hashtagRoutes'));
+app.use('/api/vibi', require('./routes/vibiRoutes'));
 
 // ============================================================================
 // 4. Centralized Error Handling Middleware

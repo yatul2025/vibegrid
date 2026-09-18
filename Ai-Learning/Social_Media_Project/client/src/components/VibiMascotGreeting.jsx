@@ -15,8 +15,10 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useVibiAssistant } from '../context/VibiAssistantContext';
 
 export default function VibiMascotGreeting({ user, forceShow = false, onDismiss, customMessage = null }) {
+  const { isEnabled, preferences } = useVibiAssistant();
   const [isVisible, setIsVisible] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
@@ -72,7 +74,7 @@ export default function VibiMascotGreeting({ user, forceShow = false, onDismiss,
     }, 450);
   };
 
-  if (!isVisible) return null;
+  if (!isVisible || ((!isEnabled || !preferences.welcome) && !forceShow)) return null;
 
   const displayName = user?.username ? `@${user.username}` : (user?.full_name || 'Viber');
   const greetingMessage = customMessage || (user

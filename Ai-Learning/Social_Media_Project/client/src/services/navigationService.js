@@ -56,6 +56,15 @@ class NavigationService {
   }
 
   /**
+   * Programmatically navigate to a tab and optional section
+   */
+  navigate(tab, options = {}) {
+    if (this.routeListener) {
+      this.routeListener({ tab, ...options });
+    }
+  }
+
+  /**
    * Check if any active modal, drawer, or nested subview intercepts back.
    * Runs handlers in order of highest priority / most recently registered.
    * @returns {boolean} true if an interceptor consumed the back event

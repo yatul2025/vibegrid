@@ -25,7 +25,12 @@ import PermissionOnboardingModal from './components/PermissionOnboardingModal';
 import soundFx from './services/soundFxService';
 import navigationService from './services/navigationService';
 import permissionService from './services/permissionService';
+import vibiContextService from './services/vibiContextService';
 import { NavigationProvider } from './context/NavigationContext';
+import { VibiAssistantProvider } from './context/VibiAssistantContext';
+import VibiHeaderEntry from './components/vibi/VibiHeaderEntry';
+import VibiLauncher from './components/vibi/VibiLauncher';
+import VibiPanel from './components/vibi/VibiPanel';
 import {
   Home,
   Compass,
@@ -71,6 +76,7 @@ function AppContent() {
   const currentTabRef = useRef(currentTab);
   useEffect(() => {
     currentTabRef.current = currentTab;
+    vibiContextService.setActiveTab(currentTab);
   }, [currentTab]);
   const touchStartRef = useRef({ x: 0, y: 0, time: 0, isIgnored: false });
   const [a11yStatus, setA11yStatus] = useState('');
@@ -550,7 +556,11 @@ function AppContent() {
       }
 
       setSlideDirection(direction === 'left' ? 'slide-nav-left' : 'slide-nav-right');
-      setTimeout(() => setSlideDirection(null), 250);
+      setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          try { setSlideDirection(null); } catch {}
+        }
+      }, 250);
 
       const hadNotifications = isNotificationsOpen;
 
@@ -955,7 +965,8 @@ function AppContent() {
 
   return (
     <NavigationProvider navigateToTab={navigateToTab} currentTab={currentTab} viewedUsername={viewedUsername}>
-      <div className={`app-viewport ${!user ? 'guest-viewport' : ''}`}>
+      <VibiAssistantProvider>
+        <div className={`app-viewport ${!user ? 'guest-viewport' : ''}`}>
       {/* Dynamic Screen Reader Live Region for Announcements (WCAG 2.2 AA) */}
       <div 
         id="a11y-live-region"
@@ -1114,6 +1125,11 @@ function AppContent() {
                         </span>
                       )}
                     </a>
+                  </li>
+
+                  {/* Vibi AI Assistant Entry */}
+                  <li className="nav-item-vibi-header">
+                    <VibiHeaderEntry />
                   </li>
 
                   {/* Profile Dropdown Menu */}
@@ -1337,6 +1353,9 @@ function AppContent() {
             >
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
+
+            {/* Vibi Mobile Header Entry */}
+            <VibiHeaderEntry isMobile={true} />
 
             {user ? (
               <>
@@ -1651,7 +1670,12 @@ function AppContent() {
           }}
         />
       )}
+
+      {/* Phase 2: Vibi AI Assistant UI Shell */}
+      <VibiLauncher />
+      <VibiPanel />
       </div>
+    </VibiAssistantProvider>
     </NavigationProvider>
   );
 }

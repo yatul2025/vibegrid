@@ -22,6 +22,7 @@ export default defineConfig({
     setupFiles: ['./src/__tests__/setup.js'],
   },
   server: {
+    host: true,
     port: 5173,
     proxy: {
       // Forwards /api requests directly to the Node.js Express backend

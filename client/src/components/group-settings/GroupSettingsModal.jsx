@@ -4,7 +4,7 @@
  * Production 10-Screen VibeGrid Group Settings Master Modal
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -86,11 +86,20 @@ export default function GroupSettingsModal({
   const isOwner = creatorId ? Number(creatorId) === Number(user?.id) : false;
   const isAdmin = isOwner || currentUserMember?.role === 'admin' || group?.user_role === 'admin';
 
+  const toastTimeoutRef = useRef(null);
+
   const showToast = useCallback((message, type = 'info') => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToast({ message, type, visible: true });
-    setTimeout(() => {
+    toastTimeoutRef.current = setTimeout(() => {
       setToast((prev) => ({ ...prev, visible: false }));
     }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
   }, []);
 
   // Navigation Helpers
