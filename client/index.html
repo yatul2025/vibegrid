@@ -2,7 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+    <script>
+      // Immediate anti-zoom guard for early iOS gesture suppression
+      (function() {
+        if (typeof document === 'undefined') return;
+        var preventZoom = function(e) {
+          if (e.target && e.target.closest && e.target.closest('.allow-zoom, [data-allow-zoom="true"]')) return;
+          if (e.cancelable) e.preventDefault();
+        };
+        document.addEventListener('gesturestart', preventZoom, { passive: false });
+        document.addEventListener('gesturechange', preventZoom, { passive: false });
+      })();
+    </script>
     <meta name="description" content="VibeGrid is a modern, real-time social platform featuring live curated feeds, 24-hour stories, end-to-end encrypted messaging, and creator discovery." />
     <meta name="theme-color" content="#090d16" />
     <meta name="color-scheme" content="dark light" />
