@@ -43,6 +43,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import navigationService from '../services/navigationService';
+import { ProfileSkeleton, ExploreGridSkeleton } from '../components/common/Skeleton';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -1325,12 +1326,7 @@ export default function ProfilePage({
   };
 
   if (loading) {
-    return (
-      <div className="profile-loading-state">
-        <div className="spinner"></div>
-        <p>Loading profile from PostgreSQL...</p>
-      </div>
-    );
+    return <ProfileSkeleton />;
   }
 
   if (error || !profile) {
@@ -1898,10 +1894,7 @@ export default function ProfilePage({
           {/* Active Tab: User Posts Grid or Empty State */}
           {activeTab === 'posts' && (
             loadingPosts ? (
-              <div className="profile-posts-loading">
-                <div className="spinner"></div>
-                <p>Loading photos...</p>
-              </div>
+              <ExploreGridSkeleton count={6} />
             ) : userPosts.length > 0 ? (
               <div className="profile-posts-grid">
                 {userPosts.map((post) => (
@@ -1944,10 +1937,7 @@ export default function ProfilePage({
           {/* Active Tab: Saved Posts Grid (Phase 12) */}
           {activeTab === 'saved' && isOwnProfile && (
             loadingSaved ? (
-              <div className="profile-posts-loading">
-                <div className="spinner"></div>
-                <p>Loading saved photos...</p>
-              </div>
+              <ExploreGridSkeleton count={6} />
             ) : savedPosts.length > 0 ? (
               <div className="profile-posts-grid">
                 {savedPosts.map((post) => (

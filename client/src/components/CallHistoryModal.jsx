@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api/client';
+import { CallHistorySkeleton } from './common/Skeleton';
 
 export default function CallHistoryModal({ isOpen, onClose }) {
   const [calls, setCalls] = useState([]);
@@ -86,9 +87,8 @@ export default function CallHistoryModal({ isOpen, onClose }) {
 
         <div className="call-history-body">
           {loading ? (
-            <div className="call-history-loading">
-              <div className="spinner-sm"></div>
-              <span>Loading call logs...</span>
+            <div style={{ padding: '8px 0' }}>
+              <CallHistorySkeleton count={5} />
             </div>
           ) : calls.length === 0 ? (
             <div className="call-history-empty">

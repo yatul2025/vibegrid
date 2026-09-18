@@ -13,6 +13,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
+import { UserListSkeleton } from './common/Skeleton';
 
 export default function FollowListModal({ isOpen, onClose, username, type = 'followers', onNavigateToProfile }) {
   const { user: currentUser } = useAuth();
@@ -94,9 +95,8 @@ export default function FollowListModal({ isOpen, onClose, username, type = 'fol
         {/* User List */}
         <div className="follow-list-content">
           {loading ? (
-            <div className="follow-list-loading">
-              <div className="spinner"></div>
-              <p>Loading {title.toLowerCase()}...</p>
+            <div style={{ padding: '8px' }}>
+              <UserListSkeleton count={5} />
             </div>
           ) : users.length === 0 ? (
             <div className="follow-list-empty">

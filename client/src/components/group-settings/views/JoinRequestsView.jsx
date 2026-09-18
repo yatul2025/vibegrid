@@ -14,14 +14,20 @@ import {
   Sparkles,
   ShieldAlert
 } from 'lucide-react';
+import { JoinRequestsSkeleton } from '../../common/Skeleton';
 
 export default function JoinRequestsView({
   requests = [],
   onReviewRequest,
   actionLoading = false,
-  onShowToast
+  onShowToast,
+  loading = false
 }) {
   const [processingId, setProcessingId] = useState(null);
+
+  if (loading && requests.length === 0) {
+    return <JoinRequestsSkeleton count={3} />;
+  }
 
   const handleAction = async (request, action) => {
     try {

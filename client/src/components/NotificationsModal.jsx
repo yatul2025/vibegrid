@@ -15,6 +15,7 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../api/client';
 import { Bell, Heart, MessageCircle, UserPlus, CheckCheck, AlertCircle } from 'lucide-react';
+import { NotificationsSkeleton } from './common/Skeleton';
 
 function formatTimeAgo(dateString) {
   if (!dateString) return '';
@@ -199,10 +200,7 @@ export default function NotificationsModal({
           )}
 
           {loading ? (
-            <div className="notifications-loading">
-              <div className="spinner"></div>
-              <p>Loading activity...</p>
-            </div>
+            <NotificationsSkeleton count={6} />
           ) : notifications.length === 0 ? (
             <div className="notifications-empty-state">
               <div className="empty-bell-icon">

@@ -27,6 +27,7 @@ import pushNotificationService from '../services/pushNotificationService';
 import { THEMES, getThemeById } from '../constants/themes';
 import soundFx, { SOUND_PACKS } from '../services/soundFxService';
 import navigationService from '../services/navigationService';
+import { SettingsSkeleton, SkeletonLine, SkeletonCircle, SkeletonPill } from '../components/common/Skeleton';
 import {
   User,
   Mail,
@@ -1198,10 +1199,7 @@ export default function SettingsPage({
   if (loadingProfile && !profile) {
     return (
       <div className="settings-page-wrapper">
-        <div className="profile-loading-state">
-          <div className="spinner"></div>
-          <p>Loading settings & preferences...</p>
-        </div>
+        <SettingsSkeleton />
       </div>
     );
   }
@@ -2541,9 +2539,19 @@ export default function SettingsPage({
                       </div>
 
                       {loadingSessions ? (
-                        <div className="sessions-loading">
-                          <div className="spinner-small" />
-                          <span>Loading active sessions...</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '8px 0' }}>
+                          {[1, 2].map((i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--bg-card)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <SkeletonCircle size={36} />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <SkeletonLine width="150px" height="13px" />
+                                  <SkeletonLine width="100px" height="10px" />
+                                </div>
+                              </div>
+                              <SkeletonPill width="50px" height="24px" />
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <div className="sessions-list">

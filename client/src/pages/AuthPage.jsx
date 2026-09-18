@@ -845,7 +845,7 @@ export default function AuthPage({ initialTab = 'login' }) {
                     {!selectedAccount ? (
                       <div className="vg-suggestions-list" data-testid="suggestions-list">
                         {rememberedAccounts.map((acc) => (
-                          <div
+                           <div
                             key={acc.id || acc.username}
                             className="vg-suggestion-card"
                             onClick={() => handleSelectAccount(acc)}

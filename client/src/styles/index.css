@@ -8846,6 +8846,56 @@ a.mobile-nav-item {
   100% { background-position: 200% 0; }
 }
 
+/* ==========================================================================
+   Global Skeleton Loading System (Unified with Feed Shimmer)
+   ========================================================================== */
+.vg-skeleton-grid {
+  pointer-events: none;
+}
+
+.vg-skeleton-photo-card {
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+
+.vg-skeleton-conv-card {
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.vg-skeleton-chat-thread {
+  padding: 16px 20px;
+}
+
+.vg-skeleton-bubble {
+  position: relative;
+  overflow: hidden;
+}
+
+.vg-skeleton-notif-item {
+  pointer-events: none;
+}
+
+.vg-skeleton-user-row {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
+
+.vg-skeleton-group-overview,
+.vg-skeleton-media-files,
+.vg-skeleton-pinned-messages,
+.vg-skeleton-join-requests,
+.vg-skeleton-settings,
+.vg-skeleton-profile,
+.vg-skeleton-comments,
+.vg-skeleton-call-history {
+  pointer-events: none;
+}
+
+
 /* Full-bleed layout when user is in Auth Mode */
 .auth-mode-viewport .main-content {
   padding: 0 !important;

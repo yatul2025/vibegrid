@@ -16,14 +16,19 @@ import {
   FileArchive,
   Download
 } from 'lucide-react';
+import { MediaFilesSkeleton } from '../../common/Skeleton';
 
-export default function MediaFilesView({ mediaData = {} }) {
+export default function MediaFilesView({ mediaData = {}, loading = false }) {
   const [activeTab, setActiveTab] = useState('photos'); // 'photos', 'videos', 'files', 'links'
 
   const photos = Array.isArray(mediaData.photos) ? mediaData.photos : [];
   const videos = Array.isArray(mediaData.videos) ? mediaData.videos : [];
   const files = Array.isArray(mediaData.files) ? mediaData.files : [];
   const links = Array.isArray(mediaData.links) ? mediaData.links : [];
+
+  if (loading && photos.length === 0 && videos.length === 0 && files.length === 0 && links.length === 0) {
+    return <MediaFilesSkeleton />;
+  }
 
   const getFileIcon = (fileName = '') => {
     const ext = fileName.split('.').pop()?.toLowerCase();

@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   X
 } from 'lucide-react';
+import { UserListSkeleton } from '../../common/Skeleton';
 
 export default function MembersView({
   members = [],
@@ -27,10 +28,19 @@ export default function MembersView({
   onRemoveMember,
   onPromoteMember,
   onDemoteMember,
-  actionLoading
+  actionLoading,
+  loading = false
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMenuUserId, setActiveMenuUserId] = useState(null);
+
+  if (loading && members.length === 0) {
+    return (
+      <div className="space-y-4 text-left">
+        <UserListSkeleton count={5} />
+      </div>
+    );
+  }
 
   const ownerId = Number(convDetails?.created_by || members.find((m) => m.role === 'owner')?.id || 0);
 

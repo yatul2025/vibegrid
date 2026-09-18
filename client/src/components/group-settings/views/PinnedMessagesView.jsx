@@ -13,14 +13,19 @@ import {
   Clock,
   Sparkles
 } from 'lucide-react';
+import { PinnedMessagesSkeleton } from '../../common/Skeleton';
 
 export default function PinnedMessagesView({
   pinnedMessages = [],
   isAdmin = false,
   onUnpinMessage,
   onCloseModal,
-  onShowToast
+  onShowToast,
+  loading = false
 }) {
+  if (loading && pinnedMessages.length === 0) {
+    return <PinnedMessagesSkeleton count={3} />;
+  }
   const formatTime = (ts) => {
     if (!ts) return '1d';
     const d = new Date(ts);

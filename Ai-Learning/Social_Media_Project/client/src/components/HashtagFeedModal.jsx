@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import CommentsModal from './CommentsModal';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
+import { ExploreGridSkeleton } from './common/Skeleton';
 
 export default function HashtagFeedModal({
   isOpen,
@@ -179,9 +180,8 @@ export default function HashtagFeedModal({
         {/* Content Body */}
         <div className="hashtag-modal-body">
           {loading ? (
-            <div className="hashtag-loading-box">
-              <div className="spinner"></div>
-              <p>Loading #{cleanTag} photos...</p>
+            <div style={{ padding: '8px' }}>
+              <ExploreGridSkeleton count={6} />
             </div>
           ) : posts.length === 0 ? (
             <div className="hashtag-empty-box">

@@ -28,6 +28,7 @@ import MediaFilesView from './views/MediaFilesView';
 import JoinRequestsView from './views/JoinRequestsView';
 import AdminManagementView from './views/AdminManagementView';
 import DisappearingMessagesView from './views/DisappearingMessagesView';
+import { GroupOverviewSkeleton, UserListSkeleton } from '../common/Skeleton';
 import './GroupSettingsModal.css';
 
 const EMPTY_PINNED_MESSAGES = [];
@@ -52,7 +53,7 @@ export default function GroupSettingsModal({
   const currentScreen = screenStack[screenStack.length - 1] || 'overview';
 
   // State
-  const [members, setMembers] = useState([]);
+  const [members, setMembers] = useState(() => (Array.isArray(group?.members) ? group.members : []));
   const [convDetails, setConvDetails] = useState(null);
   const [permissions, setPermissions] = useState({});
   const [inviteData, setInviteData] = useState({ code: null, url: null });
@@ -578,25 +579,29 @@ export default function GroupSettingsModal({
         {/* Main Content Area */}
         <div className="group-settings-body">
           {currentScreen === 'overview' && (
-            <OverviewView
-              group={group}
-              members={members}
-              convDetails={convDetails}
-              currentUser={user}
-              isAdmin={isAdmin}
-              isOwner={isOwner}
-              pinnedCount={pinnedMessages.length}
-              joinRequestsCount={joinRequests.length}
-              ephemeralTimer={convDetails?.ephemeral_timer_seconds}
-              initialAction={initialAction}
-              onNavigate={navigateTo}
-              onUpdateTitle={handleUpdateTitle}
-              onUpdateDescription={handleUpdateDescription}
-              onOpenAddMember={() => setShowAddDrawer(true)}
-              onLeaveGroup={handleLeaveGroup}
-              onDeleteGroup={handleDeleteGroup}
-              actionLoading={actionLoading}
-            />
+            loading && !convDetails && !group ? (
+              <GroupOverviewSkeleton />
+            ) : (
+              <OverviewView
+                group={group}
+                members={members}
+                convDetails={convDetails}
+                currentUser={user}
+                isAdmin={isAdmin}
+                isOwner={isOwner}
+                pinnedCount={pinnedMessages.length}
+                joinRequestsCount={joinRequests.length}
+                ephemeralTimer={convDetails?.ephemeral_timer_seconds}
+                initialAction={initialAction}
+                onNavigate={navigateTo}
+                onUpdateTitle={handleUpdateTitle}
+                onUpdateDescription={handleUpdateDescription}
+                onOpenAddMember={() => setShowAddDrawer(true)}
+                onLeaveGroup={handleLeaveGroup}
+                onDeleteGroup={handleDeleteGroup}
+                actionLoading={actionLoading}
+              />
+            )
           )}
 
           {currentScreen === 'members' && (
@@ -611,6 +616,7 @@ export default function GroupSettingsModal({
               onPromoteMember={handlePromoteMember}
               onDemoteMember={handleDemoteMember}
               actionLoading={actionLoading}
+              loading={loading}
             />
           )}
 
@@ -659,11 +665,12 @@ export default function GroupSettingsModal({
               onUnpinMessage={handleUnpinMessage}
               onCloseModal={onClose}
               onShowToast={showToast}
+              loading={loading}
             />
           )}
 
           {currentScreen === 'media' && (
-            <MediaFilesView mediaData={mediaData} />
+            <MediaFilesView mediaData={mediaData} loading={loading} />
           )}
 
           {currentScreen === 'join_requests' && (
@@ -672,6 +679,7 @@ export default function GroupSettingsModal({
               onReviewRequest={handleReviewJoinRequest}
               actionLoading={actionLoading}
               onShowToast={showToast}
+              loading={loading}
             />
           )}
 
@@ -736,7 +744,9 @@ export default function GroupSettingsModal({
             {/* Result List */}
             <div className="flex-1 overflow-y-auto mt-3 space-y-2">
               {searchingMembers ? (
-                <p className="text-xs text-[var(--text-muted)] text-center py-6">Searching...</p>
+                <div className="py-2">
+                  <UserListSkeleton count={4} compact />
+                </div>
               ) : searchMemberResults.length === 0 ? (
                 <p className="text-xs text-[var(--text-muted)] text-center py-6">No matching users found.</p>
               ) : (

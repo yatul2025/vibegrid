@@ -16,6 +16,7 @@ import apiClient from '../api/client';
 import ConfirmModal from './ConfirmModal';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 import { Send } from 'lucide-react';
+import { CommentsSkeleton } from './common/Skeleton';
 
 function formatTimeAgo(dateString) {
   if (!dateString) return '';
@@ -215,10 +216,7 @@ export default function CommentsModal({
             {/* Comments List */}
             <div className="comments-scroll-list">
               {loading ? (
-                <div className="comments-loading-state">
-                  <div className="spinner"></div>
-                  <p>Loading comments...</p>
-                </div>
+                <CommentsSkeleton count={4} />
               ) : comments.length === 0 ? (
                 <div className="comments-empty-state">
                   <p className="no-comments-title">No comments yet.</p>

@@ -42,6 +42,7 @@ import senderKeysService from '../services/crypto/senderKeys';
 import VibiEmptyState from '../components/VibiEmptyState';
 import soundFx from '../services/soundFxService';
 import navigationService from '../services/navigationService';
+import { ConversationsListSkeleton, ChatThreadSkeleton, UserListSkeleton, PinnedMessagesSkeleton, SkeletonLine } from '../components/common/Skeleton';
 import {
   Phone,
   Video,
@@ -3702,10 +3703,7 @@ export default function MessagesPage({
               </div>
             )}
             {loadingConversations ? (
-              <div className="conversations-loading">
-                <div className="spinner-sm"></div>
-                <span>Loading conversations...</span>
-              </div>
+              <ConversationsListSkeleton count={6} />
             ) : filteredConversations.length === 0 ? (
               <div className="conversations-empty">
                 <VibiEmptyState
@@ -4678,10 +4676,7 @@ export default function MessagesPage({
                 </div>
 
                 {loadingMessages ? (
-                  <div className="chat-loading">
-                    <div className="spinner"></div>
-                    <p>Decrypting conversation...</p>
-                  </div>
+                  <ChatThreadSkeleton count={5} />
                 ) : filteredMessages.length === 0 ? (
                   <div className="chat-thread-empty">
                     {messages.length === 0 ? (
@@ -5471,7 +5466,9 @@ export default function MessagesPage({
 
             <div className="new-chat-results-list">
               {searching ? (
-                <div className="new-chat-loading">Searching...</div>
+                <div className="p-2">
+                  <UserListSkeleton count={4} compact />
+                </div>
               ) : searchResults.length === 0 && searchQuery.trim() ? (
                 <div className="new-chat-no-results">No users found matching "{searchQuery}"</div>
               ) : (
@@ -5808,7 +5805,22 @@ export default function MessagesPage({
             </div>
 
             {messageInfoTarget.loading ? (
-              <div className="vg-info-loading">Loading message timestamps...</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className="skeleton-avatar shimmer" style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                    <SkeletonLine width="70px" height="13px" />
+                    <SkeletonLine width="120px" height="10px" />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className="skeleton-avatar shimmer" style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                    <SkeletonLine width="70px" height="13px" />
+                    <SkeletonLine width="120px" height="10px" />
+                  </div>
+                </div>
+              </div>
             ) : messageInfoTarget.data ? (
               <div className="vg-info-timestamps">
                 <div className="vg-info-status-card">
@@ -5887,7 +5899,9 @@ export default function MessagesPage({
 
             <div className="starred-messages-list">
               {loadingStarred ? (
-                <div className="starred-loading">Loading starred messages...</div>
+                <div style={{ padding: '12px' }}>
+                  <PinnedMessagesSkeleton count={3} />
+                </div>
               ) : starredMessages.length === 0 ? (
                 <div className="starred-empty">
                   <Star size={32} color="#64748b" />

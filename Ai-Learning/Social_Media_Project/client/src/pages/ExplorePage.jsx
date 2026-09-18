@@ -20,6 +20,7 @@ import VibiEmptyState from '../components/VibiEmptyState';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 import { Heart, MessageCircle, Bookmark, ArrowLeft } from 'lucide-react';
 import navigationService from '../services/navigationService';
+import { ExploreGridSkeleton, UserListSkeleton } from '../components/common/Skeleton';
 
 export default function ExplorePage({ onNavigateToProfile }) {
   const { user } = useAuth();
@@ -98,9 +99,12 @@ export default function ExplorePage({ onNavigateToProfile }) {
   }, [postToHide]);
 
   // Fetch explore posts
-  const fetchExplorePosts = async () => {
+  const fetchExplorePosts = async (force = false) => {
     try {
-      setLoadingPosts(true);
+      const hasCached = posts && posts.length > 0;
+      if (!hasCached || force) {
+        setLoadingPosts(true);
+      }
       setError(null);
       const res = await apiClient.get('/posts/explore');
       if (res.success && res.data?.posts) {
@@ -334,8 +338,8 @@ export default function ExplorePage({ onNavigateToProfile }) {
         {showDropdown && searchQuery.trim() && (
           <div className="search-dropdown-menu">
             {searching ? (
-              <div className="search-status-row">
-                <div className="spinner-mini"></div> Searching creators...
+              <div className="p-2">
+                <UserListSkeleton count={3} compact />
               </div>
             ) : searchResults.length === 0 ? (
               <div className="search-status-row no-results">
@@ -413,10 +417,7 @@ export default function ExplorePage({ onNavigateToProfile }) {
 
       {/* Explore Photos Grid */}
       {loadingPosts ? (
-        <div className="explore-loading-container">
-          <div className="spinner"></div>
-          <p>Discovering photos...</p>
-        </div>
+        <ExploreGridSkeleton count={9} />
       ) : posts.length === 0 ? (
         <VibiEmptyState
           pose="magnifier"
