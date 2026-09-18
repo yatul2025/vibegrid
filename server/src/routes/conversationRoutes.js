@@ -16,6 +16,7 @@ router.use(protect);
 router.get('/', conversationController.getConversations);
 router.post('/', conversationController.getOrCreateConversation);
 router.post('/group', conversationController.createGroupConversation);
+router.post('/media/encrypted', uploadEncryptedMedia, conversationController.uploadEncryptedAttachment);
 router.delete('/:id', conversationController.deleteGroup);
 router.post('/:id/leave', conversationController.leaveGroup);
 router.get('/:id/members', conversationController.getGroupMembers);

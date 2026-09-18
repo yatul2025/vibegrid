@@ -336,6 +336,24 @@ const sendMessage = async (req, res, next) => {
       });
     }
 
+    const convPermCheck = await query(
+      `SELECT c.permissions, c.created_by, cm.role
+       FROM conversations c
+       JOIN conversation_members cm ON cm.conversation_id = c.id
+       WHERE c.id = $1 AND cm.user_id = $2 LIMIT 1`,
+      [conversationId, senderId]
+    );
+    if (convPermCheck.rows.length > 0) {
+      const { permissions, created_by, role } = convPermCheck.rows[0];
+      const isAdm = role === 'admin' || Number(created_by) === Number(senderId);
+      if (!isAdm && permissions?.allow_member_messages === false) {
+        return res.status(403).json({
+          success: false,
+          error: 'Regular members are not allowed to send messages in this group.'
+        });
+      }
+    }
+
     // Check blocked status with conversation partners
     const otherMembers = membersRes.rows.filter((m) => Number(m.user_id) !== Number(senderId));
     for (const partner of otherMembers) {
@@ -952,12 +970,22 @@ const addMembers = async (req, res, next) => {
 
     // Verify requester is in the group
     const requesterRes = await query(
-      'SELECT role FROM conversation_members WHERE conversation_id = $1 AND user_id = $2 LIMIT 1',
+      `SELECT cm.role, c.permissions, c.created_by
+       FROM conversation_members cm
+       JOIN conversations c ON cm.conversation_id = c.id
+       WHERE cm.conversation_id = $1 AND cm.user_id = $2 LIMIT 1`,
       [cleanId, userId]
     );
 
     if (requesterRes.rows.length === 0) {
       return res.status(403).json({ success: false, error: 'You must be a group member to add participants.' });
+    }
+
+    const reqRow = requesterRes.rows[0];
+    const isAdm = reqRow.role === 'admin' || Number(reqRow.created_by) === Number(userId);
+    const perms = reqRow.permissions || {};
+    if (!isAdm && perms.allow_member_adds === false) {
+      return res.status(403).json({ success: false, error: 'Only group admins are allowed to add members.' });
     }
 
     const addedUsernames = [];

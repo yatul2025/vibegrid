@@ -52,8 +52,8 @@ describe('GroupDetailsModal Component', () => {
     expect(screen.getByText('Alpha Developers')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText('John Doe')).toBeInTheDocument();
-      expect(screen.getByText('Jane Smith')).toBeInTheDocument();
+      expect(screen.getByText('Members')).toBeInTheDocument();
+      expect(screen.getByText('Group Permissions')).toBeInTheDocument();
     });
   });
 
@@ -63,6 +63,7 @@ describe('GroupDetailsModal Component', () => {
         isOpen={true}
         onClose={vi.fn()}
         group={mockGroup}
+        initialScreen="members"
       />
     );
 

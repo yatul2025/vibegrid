@@ -22,6 +22,7 @@ export default function CreateGroupModal({ isOpen, onClose, onGroupCreated }) {
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [searching, setSearching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -29,6 +30,7 @@ export default function CreateGroupModal({ isOpen, onClose, onGroupCreated }) {
       setSearchQuery('');
       setSelectedMembers([]);
       setSearchResults([]);
+      setError(null);
     }
   }, [isOpen]);
 
@@ -93,33 +95,29 @@ export default function CreateGroupModal({ isOpen, onClose, onGroupCreated }) {
     if (!title.trim() || selectedMembers.length === 0 || submitting) return;
 
     try {
+      setError(null);
       setSubmitting(true);
       const memberIds = selectedMembers.map((m) => m.id);
 
-      let group = null;
+      let res;
       try {
-        const res = await apiClient.post('/conversations/group', {
+        res = await apiClient.post('/conversations/group', {
           title: title.trim(),
           memberIds
         });
-
-        if (res.success && res.data?.conversation) {
-          group = res.data.conversation;
-        }
       } catch (apiErr) {
-        console.warn('Group creation backend notice:', apiErr);
+        setError(apiErr.message || 'Failed to create group. Please check connection and try again.');
+        setSubmitting(false);
+        return;
       }
 
-      // If backend was offline or failed (e.g. demo mode / mock), fallback to local group creation
-      if (!group) {
-        group = {
-          id: 'grp-' + Date.now(),
-          title: title.trim(),
-          type: 'group',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
+      if (!res?.success || !res?.data?.conversation) {
+        setError(res?.error || 'Failed to create group on server.');
+        setSubmitting(false);
+        return;
       }
+
+      const group = res.data.conversation;
 
       const fullGroupRecord = {
         ...group,
@@ -185,6 +183,11 @@ export default function CreateGroupModal({ isOpen, onClose, onGroupCreated }) {
 
         <form onSubmit={handleCreateGroup}>
           <div className="create-group-body">
+            {error && (
+              <div className="create-group-error text-xs text-rose-400 bg-rose-500/15 border border-rose-500/30 p-2.5 rounded-lg mb-3">
+                {error}
+              </div>
+            )}
             <div className="form-group">
               <label htmlFor="group-title-input">Group Name</label>
               <input

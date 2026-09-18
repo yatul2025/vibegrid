@@ -30,6 +30,8 @@ import AdminManagementView from './views/AdminManagementView';
 import DisappearingMessagesView from './views/DisappearingMessagesView';
 import './GroupSettingsModal.css';
 
+const EMPTY_PINNED_MESSAGES = [];
+
 export default function GroupSettingsModal({
   isOpen,
   onClose,
@@ -37,6 +39,7 @@ export default function GroupSettingsModal({
   conversationId,
   initialScreen = 'overview',
   initialAction = null,
+  pinnedMessages: externalPinnedMessages = EMPTY_PINNED_MESSAGES,
   onGroupUpdated,
   onGroupDeleted,
   onGroupLeft
@@ -54,10 +57,16 @@ export default function GroupSettingsModal({
   const [inviteData, setInviteData] = useState({ code: null, url: null });
   const [joinRequests, setJoinRequests] = useState([]);
   const [mediaData, setMediaData] = useState({ photos: [], videos: [], files: [], links: [] });
-  const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [pinnedMessages, setPinnedMessages] = useState(externalPinnedMessages || []);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'info', visible: false });
+
+  useEffect(() => {
+    if (externalPinnedMessages && Array.isArray(externalPinnedMessages) && externalPinnedMessages !== pinnedMessages) {
+      setPinnedMessages(externalPinnedMessages);
+    }
+  }, [externalPinnedMessages]);
 
   // Add Member Live Drawer
   const [showAddDrawer, setShowAddDrawer] = useState(false);
@@ -97,7 +106,7 @@ export default function GroupSettingsModal({
       setScreenStack([initialScreen || 'overview']);
       setShowAddDrawer(false);
     }
-  }, [isOpen, groupId, initialScreen]);
+  }, [isOpen, initialScreen]);
 
   // Load Group Data
   const fetchGroupDetails = useCallback(async () => {
@@ -421,6 +430,26 @@ export default function GroupSettingsModal({
     }
   };
 
+  // 13. Unpin Message
+  const handleUnpinMessage = async (messageId) => {
+    if (!groupId || actionLoading) return;
+    try {
+      setActionLoading(true);
+      const res = await apiClient.post(`/messages/conv/${groupId}/pin`, {
+        messageId,
+        isPinned: false
+      });
+      if (res.success) {
+        setPinnedMessages((prev) => prev.filter((m) => String(m.id) !== String(messageId)));
+        showToast('Message unpinned.', 'success');
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to unpin message', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   // Screen Title Formatter
@@ -519,7 +548,7 @@ export default function GroupSettingsModal({
               currentUser={user}
               isAdmin={isAdmin}
               isOwner={isOwner}
-              pinnedCount={pinnedMessages.length || 2}
+              pinnedCount={pinnedMessages.length}
               joinRequestsCount={joinRequests.length}
               ephemeralTimer={convDetails?.ephemeral_timer_seconds}
               initialAction={initialAction}
@@ -590,7 +619,7 @@ export default function GroupSettingsModal({
             <PinnedMessagesView
               pinnedMessages={pinnedMessages}
               isAdmin={isAdmin}
-              onUnpinMessage={(id) => setPinnedMessages((prev) => prev.filter((m) => m.id !== id))}
+              onUnpinMessage={handleUnpinMessage}
               onCloseModal={onClose}
               onShowToast={showToast}
             />

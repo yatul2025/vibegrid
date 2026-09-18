@@ -4,7 +4,7 @@
  * Screen 10: Disappearing Messages (Self-Destruct Timers)
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Clock,
   Check,
@@ -21,6 +21,10 @@ export default function DisappearingMessagesView({
   onShowToast
 }) {
   const [selectedTimer, setSelectedTimer] = useState(ephemeralTimer);
+
+  useEffect(() => {
+    setSelectedTimer(ephemeralTimer ?? null);
+  }, [ephemeralTimer]);
 
   const timerOptions = [
     { id: 'off', label: 'Off', seconds: null, title: 'Messages will not disappear' },

@@ -4,7 +4,7 @@
  * Screen 3: Group Permissions
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Shield,
   MessageSquare,
@@ -34,6 +34,21 @@ export default function PermissionsView({
     admins_manage_settings: permissions.admins_manage_settings !== false,
     admins_manage_admins: !!permissions.admins_manage_admins
   });
+
+  useEffect(() => {
+    if (permissions && typeof permissions === 'object') {
+      setLocalPerms({
+        allow_member_info_edit: !!permissions.allow_member_info_edit,
+        allow_member_messages: permissions.allow_member_messages !== false,
+        allow_member_adds: permissions.allow_member_adds !== false,
+        allow_member_invites: permissions.allow_member_invites !== false,
+        require_admin_approval: !!permissions.require_admin_approval,
+        admins_manage_members: permissions.admins_manage_members !== false,
+        admins_manage_settings: permissions.admins_manage_settings !== false,
+        admins_manage_admins: !!permissions.admins_manage_admins
+      });
+    }
+  }, [permissions]);
 
   const handleToggle = async (key) => {
     if (!isAdmin || actionLoading) return;

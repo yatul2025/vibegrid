@@ -498,6 +498,32 @@ function AppContent() {
     const handleDeepLink = () => {
       if (typeof window === 'undefined') return;
       const hash = window.location.hash || '';
+      const pathname = window.location.pathname || '';
+
+      // Check group invite link, e.g. /join/:code or #join/:code
+      let inviteCode = null;
+      if (pathname.startsWith('/join/')) {
+        inviteCode = pathname.replace('/join/', '').split('?')[0].split('#')[0].trim();
+      } else if (hash.startsWith('#join/')) {
+        inviteCode = hash.replace('#join/', '').split('?')[0].trim();
+      }
+
+      if (inviteCode) {
+        window.history.replaceState(null, '', '/#messages');
+        apiClient.post(`/conversations/join/${inviteCode}`)
+          .then((res) => {
+            if (res.success && res.data?.conversation_id) {
+              navigateToTab('messages', { targetDM: `group-${res.data.conversation_id}` });
+            } else if (res.data?.requested) {
+              alert(res.data?.message || 'Join request submitted! An admin will review your request.');
+              navigateToTab('feed');
+            }
+          })
+          .catch((err) => {
+            alert(err.message || 'Failed to join group via invite link.');
+          });
+        return;
+      }
 
       // Check hash route, e.g. #messages?partner=username or #settings or #notifications
       if (hash.startsWith('#messages')) {
