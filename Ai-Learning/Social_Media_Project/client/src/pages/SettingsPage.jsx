@@ -3482,7 +3482,9 @@ export default function SettingsPage({
               </div>
               <div className="diagnostics-row">
                 <span className="diagnostics-label">PWA Cache Version:</span>
-                <span className="diagnostics-value">vibegrid-pwa-v52</span>
+                <span className="diagnostics-value">
+                  {pushDiagnostics.serviceWorker?.cacheVersion || 'vibegrid-pwa-v57'}
+                </span>
               </div>
               <div className="diagnostics-row">
                 <span className="diagnostics-label">Platform Notes</span>

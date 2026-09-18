@@ -279,6 +279,15 @@ export async function getPushDiagnostics() {
       console.warn('[Diagnostics] SW inspection error:', e);
     }
 
+    let cacheVersion = null;
+    try {
+      if ('caches' in window) {
+        const cacheKeys = await caches.keys();
+        const pwaKey = cacheKeys.find((k) => k.startsWith('vibegrid-pwa-'));
+        if (pwaKey) cacheVersion = pwaKey;
+      }
+    } catch (e) {}
+
     try {
       const statusRes = await apiClient.get('/notifications/push-status');
       if (statusRes.success) {
@@ -306,7 +315,8 @@ export async function getPushDiagnostics() {
     permission,
     serviceWorker: {
       registered: swRegistered,
-      scope: swScope
+      scope: swScope,
+      cacheVersion: cacheVersion || 'vibegrid-pwa-v57'
     },
     subscription: activeSub ? {
       endpoint: activeSub.endpoint,

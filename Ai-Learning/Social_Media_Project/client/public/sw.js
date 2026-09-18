@@ -26,10 +26,15 @@ const PRECACHE_ASSETS = [
   '/icons/icon.svg'
 ];
 
-// 0. Listen for SKIP_WAITING from client to activate immediately
+// 0. Listen for messages from client (SKIP_WAITING, GET_VERSION)
 self.addEventListener('message', (event) => {
   if (event.data && (event.data.type === 'SKIP_WAITING' || event.data === 'skipWaiting')) {
     self.skipWaiting();
+  }
+  if (event.data && event.data.type === 'GET_VERSION') {
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage({ version: CACHE_NAME });
+    }
   }
 });
 
