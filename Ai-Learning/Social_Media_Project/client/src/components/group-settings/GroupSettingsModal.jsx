@@ -42,7 +42,8 @@ export default function GroupSettingsModal({
   pinnedMessages: externalPinnedMessages = EMPTY_PINNED_MESSAGES,
   onGroupUpdated,
   onGroupDeleted,
-  onGroupLeft
+  onGroupLeft,
+  onRegisterBackHandler
 }) {
   const { user } = useAuth();
 
@@ -93,12 +94,41 @@ export default function GroupSettingsModal({
 
   // Navigation Helpers
   const navigateTo = (screen) => {
+    if (typeof window !== 'undefined' && window.history) {
+      window.history.pushState({
+        tab: 'messages',
+        modal: 'group_details',
+        screen: screen
+      }, '');
+    }
     setScreenStack((prev) => [...prev, screen]);
   };
 
-  const goBack = () => {
-    setScreenStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : ['overview']));
-  };
+  const goBack = useCallback(() => {
+    if (showAddDrawer) {
+      setShowAddDrawer(false);
+      return true;
+    }
+    if (screenStack.length > 1) {
+      setScreenStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : ['overview']));
+      if (typeof window !== 'undefined' && window.history && window.history.state?.screen) {
+        window.history.back();
+      }
+      return true;
+    }
+    return false;
+  }, [showAddDrawer, screenStack.length]);
+
+  useEffect(() => {
+    if (onRegisterBackHandler) {
+      onRegisterBackHandler(goBack);
+    }
+    return () => {
+      if (onRegisterBackHandler) {
+        onRegisterBackHandler(null);
+      }
+    };
+  }, [goBack, onRegisterBackHandler]);
 
   // Reset navigation when modal opens
   useEffect(() => {
@@ -504,11 +534,14 @@ export default function GroupSettingsModal({
                 <ArrowLeft size={18} />
               </button>
             ) : (
-              <div className="group-settings-logo-badge">
-                <div className="group-settings-logo-inner">
-                  V
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="group-settings-nav-btn"
+                title="Back to Chat"
+              >
+                <ArrowLeft size={18} />
+              </button>
             )}
             <div className="group-settings-title-group">
               <h3 className="group-settings-title">{getScreenTitle()}</h3>

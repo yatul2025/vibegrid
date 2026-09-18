@@ -473,6 +473,7 @@ export default function MessagesPage({
   isCreateGroupOpenRef.current = isCreateGroupOpen;
   const isGroupDetailsOpenRef = useRef(isGroupDetailsOpen);
   isGroupDetailsOpenRef.current = isGroupDetailsOpen;
+  const groupSettingsBackHandlerRef = useRef(null);
   const activeConversationIdRef = useRef(activeConversationId);
   activeConversationIdRef.current = activeConversationId;
   const isStarredModalOpenRef = useRef(isStarredModalOpen);
@@ -613,6 +614,9 @@ export default function MessagesPage({
         return;
       }
       if (isGroupDetailsOpenRef.current) {
+        if (groupSettingsBackHandlerRef.current && groupSettingsBackHandlerRef.current()) {
+          return;
+        }
         setIsGroupDetailsOpen(false);
         setGroupDetailsInitialAction(null);
         return;
@@ -5475,6 +5479,9 @@ export default function MessagesPage({
       <GroupDetailsModal
         isOpen={isGroupDetailsOpen}
         onClose={closeGroupDetailsModal}
+        onRegisterBackHandler={(handler) => {
+          groupSettingsBackHandlerRef.current = handler;
+        }}
         group={activePartner}
         conversationId={activeConversationId || (activePartner?.conversation_id || activePartner?.id)}
         initialScreen={groupDetailsInitialScreen}

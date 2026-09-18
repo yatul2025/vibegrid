@@ -263,4 +263,49 @@ describe('10-Screen VibeGrid Group Settings Suite', () => {
       );
     });
   });
+
+  it('Screen Navigation & Back Stack: onRegisterBackHandler handles subview back without closing modal, and allows closing on overview', async () => {
+    let registeredBackHandler = null;
+    const handleClose = vi.fn();
+
+    render(
+      <GroupSettingsModal
+        isOpen={true}
+        onClose={handleClose}
+        group={mockGroup}
+        onRegisterBackHandler={(handler) => {
+          registeredBackHandler = handler;
+        }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Group Details')).toBeInTheDocument();
+    });
+
+    // When on overview, back handler returns false (does not intercept, allowing modal to close)
+    expect(registeredBackHandler).toBeDefined();
+    expect(registeredBackHandler()).toBe(false);
+
+    // Clicking "Back to Chat" on overview calls onClose
+    const backToChatBtn = screen.getByTitle('Back to Chat');
+    fireEvent.click(backToChatBtn);
+    expect(handleClose).toHaveBeenCalledTimes(1);
+
+    // Navigate to a subscreen (Permissions)
+    fireEvent.click(screen.getByText('Group Permissions'));
+    await waitFor(() => {
+      expect(screen.getByText('Members can:')).toBeInTheDocument();
+    });
+
+    // Now on subscreen, back handler intercepts and returns true (keeps modal open, returns to overview)
+    expect(registeredBackHandler()).toBe(true);
+    await waitFor(() => {
+      expect(screen.getByText('Group Details')).toBeInTheDocument();
+    });
+
+    // Now back on overview, handler returns false again
+    expect(registeredBackHandler()).toBe(false);
+  });
 });
+
