@@ -1484,7 +1484,7 @@ export default function ProfilePage({
                     type="button"
                     className="btn-profile-secondary"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                    onClick={() => onOpenSettings && onOpenSettings('privacy')}
+                    onClick={() => onOpenSettings && onOpenSettings(null)}
                     title="Settings & Privacy"
                     aria-label="Settings & Privacy"
                   >
@@ -1808,7 +1808,7 @@ export default function ProfilePage({
                 <button
                   type="button"
                   className="btn-secondary btn-sm"
-                  onClick={() => onOpenSettings && onOpenSettings('privacy')}
+                  onClick={() => onOpenSettings && onOpenSettings(null)}
                 >
                   ⚙️ Open Settings →
                 </button>

@@ -842,6 +842,7 @@ export default function MessagesPage({
         const vv = window.visualViewport;
         if (vv) {
           document.documentElement.style.setProperty('--chat-viewport-height', `${vv.height}px`);
+          document.documentElement.style.setProperty('--chat-viewport-top', `${vv.offsetTop || 0}px`);
         }
         // Only scroll to bottom if user is already near bottom or actively typing in the input
         if (isNearBottomRef.current || isInputFocusedRef.current) {
@@ -851,12 +852,14 @@ export default function MessagesPage({
     };
 
     window.visualViewport.addEventListener('resize', handleVisualViewportChange);
-    // Note: Do NOT attach to visualViewport 'scroll' event, as user scrolling the chat fires it on mobile
+    window.visualViewport.addEventListener('scroll', handleVisualViewportChange);
     handleVisualViewportChange();
 
     return () => {
       window.visualViewport.removeEventListener('resize', handleVisualViewportChange);
+      window.visualViewport.removeEventListener('scroll', handleVisualViewportChange);
       document.documentElement.style.removeProperty('--chat-viewport-height');
+      document.documentElement.style.removeProperty('--chat-viewport-top');
     };
   }, [scrollToBottom]);
 
