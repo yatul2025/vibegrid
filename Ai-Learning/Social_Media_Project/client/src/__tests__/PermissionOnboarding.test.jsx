@@ -49,24 +49,24 @@ describe('Permission Onboarding & Live State Validation', () => {
       expect(shouldShow).toBe(false);
     });
 
-    it('detects cleared site data and prompts when push subscription is missing', async () => {
+    it('does NOT prompt existing completed user during normal app usage even if permissions were rejected or subscription missing', async () => {
       const user = { id: 999, username: 'cleared_user', has_completed_onboarding: true };
-      // No localStorage flag present (simulating cleared site data)
       vi.spyOn(permissionService, 'getLivePermissionState').mockResolvedValue({
-        notifications: 'default',
+        notifications: 'denied',
         pushSubscription: { active: false, endpoint: null },
         serviceWorker: { registered: true, scope: '/' },
-        microphone: 'unknown',
-        camera: 'unknown',
+        microphone: 'denied',
+        camera: 'denied',
         isIosSafari: false,
         isPwaInstalled: false
       });
 
       const shouldShow = await permissionService.shouldShowPermissionOnboarding(user);
-      expect(shouldShow).toBe(true);
+      expect(shouldShow).toBe(false);
+      expect(localStorage.getItem('vibegrid_onboarding_999')).toBe('completed');
     });
 
-    it('auto-heals localStorage and does NOT prompt if permissions and subscription are already valid', async () => {
+    it('auto-heals localStorage and does NOT prompt if user has completed onboarding in DB', async () => {
       const user = { id: 1000, username: 'valid_user', has_completed_onboarding: true };
       vi.spyOn(permissionService, 'getLivePermissionState').mockResolvedValue({
         notifications: 'granted',
@@ -84,7 +84,7 @@ describe('Permission Onboarding & Live State Validation', () => {
     });
   });
 
-  describe('PermissionOnboardingModal component', () => {
+  describe('PermissionOnboardingModal component - First Login Flow', () => {
     const mockUser = {
       id: 555,
       username: 'alice_vibe',
@@ -236,6 +236,132 @@ describe('Permission Onboarding & Live State Validation', () => {
       await waitFor(() => {
         expect(permissionService.markOnboardingCompleted).toHaveBeenCalledWith(555);
         expect(onComplete).toHaveBeenCalled();
+        expect(onClose).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('Permission Re-check & Setup Flow (isManualRecheck = true)', () => {
+    const existingUser = {
+      id: 777,
+      username: 'bob_builder',
+      full_name: 'Bob Builder',
+      has_completed_onboarding: true
+    };
+
+    it('shows ONLY missing permissions and skips already granted ones', async () => {
+      // Notifications is granted, Microphone is missing/denied, Camera is granted
+      vi.spyOn(permissionService, 'getLivePermissionState').mockResolvedValue({
+        notifications: 'granted',
+        pushSubscription: { active: true, endpoint: 'https://push.example.com' },
+        microphone: 'denied',
+        camera: 'granted',
+        isIosSafari: false,
+        isPwaInstalled: true
+      });
+      vi.spyOn(permissionService, 'requestMicrophonePermission').mockResolvedValue({ granted: true });
+      const onClose = vi.fn();
+      const onComplete = vi.fn();
+
+      render(
+        <PermissionOnboardingModal
+          user={existingUser}
+          isOpen={true}
+          isManualRecheck={true}
+          onClose={onClose}
+          onComplete={onComplete}
+        />
+      );
+
+      // Should show checking or resolve to Microphone directly
+      await waitFor(() => {
+        expect(screen.getByText(/Allow Microphone Access/i)).toBeInTheDocument();
+      });
+
+      // Must NOT show Notifications or Camera or Media
+      expect(screen.queryByText(/Enable Notifications & Calls/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Allow Camera for Video Calls/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Photos & Media Privacy/i)).not.toBeInTheDocument();
+
+      // Step counter should show Step 1 of 1
+      expect(screen.getByText(/Step 1 of 1/i)).toBeInTheDocument();
+
+      // Handle the missing permission
+      fireEvent.click(screen.getByTestId('onboarding-accept-btn'));
+
+      await waitFor(() => {
+        expect(permissionService.requestMicrophonePermission).toHaveBeenCalled();
+      });
+
+      // Once handled, finishes and returns to Settings
+      await waitFor(() => {
+        expect(onClose).toHaveBeenCalled();
+      }, { timeout: 2000 });
+    });
+
+    it('shows All Permissions Granted when all required permissions are already active', async () => {
+      vi.spyOn(permissionService, 'getLivePermissionState').mockResolvedValue({
+        notifications: 'granted',
+        pushSubscription: { active: true, endpoint: 'https://push.example.com' },
+        microphone: 'granted',
+        camera: 'granted',
+        isIosSafari: false,
+        isPwaInstalled: true
+      });
+      const onClose = vi.fn();
+      const onComplete = vi.fn();
+
+      render(
+        <PermissionOnboardingModal
+          user={existingUser}
+          isOpen={true}
+          isManualRecheck={true}
+          onClose={onClose}
+          onComplete={onComplete}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/All Permissions Granted!/i)).toBeInTheDocument();
+      });
+
+      expect(screen.getByText(/Done \/ Back to Settings →/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('onboarding-finish-btn'));
+
+      await waitFor(() => {
+        expect(onClose).toHaveBeenCalled();
+        expect(onComplete).toHaveBeenCalled();
+      });
+    });
+
+    it('returns to settings immediately when user clicks Close ✕ during re-check', async () => {
+      vi.spyOn(permissionService, 'getLivePermissionState').mockResolvedValue({
+        notifications: 'default',
+        pushSubscription: { active: false, endpoint: null },
+        microphone: 'unknown',
+        camera: 'unknown',
+        isIosSafari: false,
+        isPwaInstalled: false
+      });
+      const onClose = vi.fn();
+
+      render(
+        <PermissionOnboardingModal
+          user={existingUser}
+          isOpen={true}
+          isManualRecheck={true}
+          onClose={onClose}
+          onComplete={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('onboarding-skip-all-btn')).toHaveTextContent(/Close ✕/i);
+      });
+
+      fireEvent.click(screen.getByTestId('onboarding-skip-all-btn'));
+
+      await waitFor(() => {
         expect(onClose).toHaveBeenCalled();
       });
     });

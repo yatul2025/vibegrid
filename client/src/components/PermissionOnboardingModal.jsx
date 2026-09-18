@@ -1,15 +1,16 @@
 /**
  * client/src/components/PermissionOnboardingModal.jsx
  * ===================================================
- * VibeGrid Guided First-Login & Cleared-Data Permission Modal
+ * VibeGrid Guided First-Login & Re-check Permission Modal
  * 
  * Features:
  * 1. Requests permissions one-by-one (Notifications -> Microphone -> Camera -> Media -> Finish).
  * 2. Prominent Accept / Allow and Reject / Skip buttons visible on every step.
  * 3. Never cuts off buttons on mobile; fixed scrollable container with sticky actions.
- * 4. "Skip All ✕" button in header so users are never trapped.
- * 5. Immediate hardware stream release after permission verification.
- * 6. Non-blocking: skipped or denied permissions still allow full app entry.
+ * 4. "Skip All ✕" / "Close ✕" button in header so users are never trapped.
+ * 5. Re-check logic: when isManualRecheck is true, checks live browser permissions and shows ONLY missing/required permissions.
+ * 6. Immediate hardware stream release after permission verification.
+ * 7. Non-blocking: skipped or denied permissions still allow full app entry and return to Settings/Home.
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -22,9 +23,12 @@ export default function PermissionOnboardingModal({
   onComplete,
   isManualRecheck = false
 }) {
-  const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 5;
+  const [steps, setSteps] = useState(
+    isManualRecheck ? [] : ['notifications', 'microphone', 'camera', 'media', 'summary']
+  );
+  const [stepIndex, setStepIndex] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCheckingLive, setIsCheckingLive] = useState(isManualRecheck);
 
   // Live Permission Statuses
   const [notifStatus, setNotifStatus] = useState('default');
@@ -47,17 +51,38 @@ export default function PermissionOnboardingModal({
       setMicStatus(live.microphone);
       setCamStatus(live.camera);
       setIsIosSafari(live.isIosSafari);
+
+      if (isManualRecheck) {
+        const missing = [];
+        if (live.notifications !== 'granted' || !live.pushSubscription?.active) {
+          missing.push('notifications');
+        }
+        if (live.microphone !== 'granted') {
+          missing.push('microphone');
+        }
+        if (live.camera !== 'granted') {
+          missing.push('camera');
+        }
+
+        if (missing.length === 0) {
+          setSteps(['all_granted']);
+        } else {
+          setSteps(missing);
+        }
+        setStepIndex(0);
+        setIsCheckingLive(false);
+      }
     }
     loadStatus();
     return () => { isMounted = false; };
-  }, []);
+  }, [isManualRecheck]);
 
   if (!isOpen || !user) return null;
 
   const handleNext = () => {
     setStatusFeedback(null);
-    if (currentStep < totalSteps) {
-      setCurrentStep((prev) => prev + 1);
+    if (stepIndex < steps.length - 1) {
+      setStepIndex((prev) => prev + 1);
     } else {
       handleFinish();
     }
@@ -65,8 +90,8 @@ export default function PermissionOnboardingModal({
 
   const handleSkip = () => {
     setStatusFeedback(null);
-    if (currentStep < totalSteps) {
-      setCurrentStep((prev) => prev + 1);
+    if (stepIndex < steps.length - 1) {
+      setStepIndex((prev) => prev + 1);
     } else {
       handleFinish();
     }
@@ -148,6 +173,7 @@ export default function PermissionOnboardingModal({
   };
 
   const displayName = user.full_name || user.username || 'Friend';
+  const currentStepKey = steps[stepIndex] || (isCheckingLive ? 'checking' : 'notifications');
 
   return (
     <div
@@ -166,36 +192,81 @@ export default function PermissionOnboardingModal({
         onClick={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
       >
-        {/* Header with Stepper Dots, Counter, and Quick Skip All Button */}
+        {/* Header with Stepper Dots, Counter, and Quick Skip All / Close Button */}
         <div className="onboarding-stepper-header">
           <div className="onboarding-dots">
-            {Array.from({ length: totalSteps }, (_, i) => i + 1).map((stepNum) => (
+            {steps.map((s, idx) => (
               <span
-                key={stepNum}
-                className={`onboarding-dot ${currentStep === stepNum ? 'active' : currentStep > stepNum ? 'completed' : ''}`}
+                key={s}
+                className={`onboarding-dot ${stepIndex === idx ? 'active' : stepIndex > idx ? 'completed' : ''}`}
               />
             ))}
           </div>
           <div className="onboarding-header-right">
             <span className="onboarding-step-counter">
-              Step {currentStep} of {totalSteps}
+              {currentStepKey === 'all_granted'
+                ? 'Verified'
+                : isCheckingLive
+                ? 'Checking...'
+                : `Step ${stepIndex + 1} of ${steps.length}`}
             </span>
             <button
               type="button"
               className="onboarding-skip-all-btn"
               onClick={handleFinish}
-              title="Skip permission setup and enter app"
+              title={isManualRecheck ? 'Close permission re-check' : 'Skip permission setup and enter app'}
               data-testid="onboarding-skip-all-btn"
             >
-              Skip All ✕
+              {isManualRecheck ? 'Close ✕' : 'Skip All ✕'}
             </button>
           </div>
         </div>
 
         {/* Scrollable Step Body */}
         <div className="onboarding-step-body">
-          {/* STEP 1: NOTIFICATIONS & CALLS */}
-          {currentStep === 1 && (
+          {/* CHECKING STATE */}
+          {isCheckingLive && (
+            <div className="onboarding-slide fade-in" style={{ padding: '28px 0' }}>
+              <div className="onboarding-hero-icon-wrap variant-notif">
+                <span className="onboarding-icon">🔍</span>
+              </div>
+              <h2 className="onboarding-title">Checking Permissions...</h2>
+              <p className="onboarding-description">
+                Inspecting your current browser permission status.
+              </p>
+            </div>
+          )}
+
+          {/* ALL REQUIRED PERMISSIONS ALREADY GRANTED (RE-CHECK FLOW) */}
+          {currentStepKey === 'all_granted' && (
+            <div className="onboarding-slide fade-in">
+              <div className="onboarding-hero-icon-wrap variant-success">
+                <span className="onboarding-icon">✅</span>
+              </div>
+              <h2 className="onboarding-title">All Permissions Granted!</h2>
+              <p className="onboarding-description">
+                All required permissions (Notifications, Microphone, and Camera) are already active and functioning on this browser.
+              </p>
+
+              <div className="onboarding-summary-box">
+                <div className="onboarding-summary-row">
+                  <span>🔔 Notifications & Calls</span>
+                  <span className="onboarding-pill pill-green">Granted ✅</span>
+                </div>
+                <div className="onboarding-summary-row">
+                  <span>🎙️ Voice & Microphone</span>
+                  <span className="onboarding-pill pill-green">Granted ✅</span>
+                </div>
+                <div className="onboarding-summary-row">
+                  <span>📹 Video Calling & Camera</span>
+                  <span className="onboarding-pill pill-green">Granted ✅</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP: NOTIFICATIONS & CALLS */}
+          {currentStepKey === 'notifications' && (
             <div className="onboarding-slide fade-in">
               <div className="onboarding-hero-icon-wrap variant-notif">
                 <span className="onboarding-icon">🔔</span>
@@ -232,8 +303,8 @@ export default function PermissionOnboardingModal({
             </div>
           )}
 
-          {/* STEP 2: MICROPHONE */}
-          {currentStep === 2 && (
+          {/* STEP: MICROPHONE */}
+          {currentStepKey === 'microphone' && (
             <div className="onboarding-slide fade-in">
               <div className="onboarding-hero-icon-wrap variant-mic">
                 <span className="onboarding-icon">🎙️</span>
@@ -261,8 +332,8 @@ export default function PermissionOnboardingModal({
             </div>
           )}
 
-          {/* STEP 3: CAMERA */}
-          {currentStep === 3 && (
+          {/* STEP: CAMERA */}
+          {currentStepKey === 'camera' && (
             <div className="onboarding-slide fade-in">
               <div className="onboarding-hero-icon-wrap variant-cam">
                 <span className="onboarding-icon">📹</span>
@@ -290,8 +361,8 @@ export default function PermissionOnboardingModal({
             </div>
           )}
 
-          {/* STEP 4: PHOTOS & MEDIA (EDUCATIONAL & TRANSPARENT) */}
-          {currentStep === 4 && (
+          {/* STEP: PHOTOS & MEDIA (EDUCATIONAL & TRANSPARENT) */}
+          {currentStepKey === 'media' && (
             <div className="onboarding-slide fade-in">
               <div className="onboarding-hero-icon-wrap variant-media">
                 <span className="onboarding-icon">🖼️</span>
@@ -318,8 +389,8 @@ export default function PermissionOnboardingModal({
             </div>
           )}
 
-          {/* STEP 5: SUMMARY & GET STARTED */}
-          {currentStep === 5 && (
+          {/* STEP: SUMMARY & GET STARTED */}
+          {currentStepKey === 'summary' && (
             <div className="onboarding-slide fade-in">
               <div className="onboarding-hero-icon-wrap variant-success">
                 <span className="onboarding-icon">🎉</span>
@@ -361,16 +432,39 @@ export default function PermissionOnboardingModal({
 
         {/* ALWAYS VISIBLE BOTTOM ACTIONS */}
         <div className="onboarding-actions">
-          {currentStep === 1 && (
+          {isCheckingLive && (
+            <button
+              type="button"
+              className="btn-secondary onboarding-skip-btn"
+              onClick={handleFinish}
+              data-testid="onboarding-skip-all-btn"
+            >
+              Cancel
+            </button>
+          )}
+
+          {currentStepKey === 'all_granted' && (
+            <button
+              type="button"
+              className="btn-primary onboarding-main-btn"
+              onClick={handleFinish}
+              disabled={isProcessing}
+              data-testid="onboarding-finish-btn"
+            >
+              Done / Back to Settings →
+            </button>
+          )}
+
+          {currentStepKey === 'notifications' && (
             <>
               {notifStatus === 'granted' ? (
                 <button
                   type="button"
                   className="btn-primary onboarding-main-btn"
                   onClick={handleNext}
-                  data-testid="onboarding-next-btn"
+                  data-testid={isManualRecheck ? 'onboarding-finish-btn' : 'onboarding-next-btn'}
                 >
-                  Next: Microphone →
+                  {stepIndex < steps.length - 1 ? 'Next: Microphone →' : (isManualRecheck ? 'Done / Back to Settings →' : 'Next →')}
                 </button>
               ) : (
                 <button
@@ -395,16 +489,16 @@ export default function PermissionOnboardingModal({
             </>
           )}
 
-          {currentStep === 2 && (
+          {currentStepKey === 'microphone' && (
             <>
               {micStatus === 'granted' ? (
                 <button
                   type="button"
                   className="btn-primary onboarding-main-btn"
                   onClick={handleNext}
-                  data-testid="onboarding-next-btn"
+                  data-testid={isManualRecheck ? 'onboarding-finish-btn' : 'onboarding-next-btn'}
                 >
-                  Next: Camera →
+                  {stepIndex < steps.length - 1 ? 'Next: Camera →' : (isManualRecheck ? 'Done / Back to Settings →' : 'Next →')}
                 </button>
               ) : (
                 <button
@@ -429,16 +523,16 @@ export default function PermissionOnboardingModal({
             </>
           )}
 
-          {currentStep === 3 && (
+          {currentStepKey === 'camera' && (
             <>
               {camStatus === 'granted' ? (
                 <button
                   type="button"
                   className="btn-primary onboarding-main-btn"
                   onClick={handleNext}
-                  data-testid="onboarding-next-btn"
+                  data-testid={isManualRecheck ? 'onboarding-finish-btn' : 'onboarding-next-btn'}
                 >
-                  Next: Media Sharing →
+                  {stepIndex < steps.length - 1 ? 'Next →' : (isManualRecheck ? 'Done / Back to Settings →' : 'Next →')}
                 </button>
               ) : (
                 <button
@@ -463,7 +557,7 @@ export default function PermissionOnboardingModal({
             </>
           )}
 
-          {currentStep === 4 && (
+          {currentStepKey === 'media' && (
             <>
               <button
                 type="button"
@@ -484,7 +578,7 @@ export default function PermissionOnboardingModal({
             </>
           )}
 
-          {currentStep === 5 && (
+          {currentStepKey === 'summary' && (
             <button
               type="button"
               className="btn-primary onboarding-main-btn"

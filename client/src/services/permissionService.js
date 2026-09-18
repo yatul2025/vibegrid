@@ -106,11 +106,10 @@ class PermissionService {
 
   /**
    * Determine whether the permission onboarding modal should be displayed.
-   * Conforms to the 6 PWA specifications:
-   * 1. Never interrupts valid existing sessions.
-   * 2. Shows for brand new users (has_completed_onboarding === false).
-   * 3. Shows if site data was cleared AND critical permissions/subscriptions are missing.
-   * 4. Does not show if user dismissed/completed it in this session.
+   * Conforms to VibeGrid specifications:
+   * 1. If user has already completed the permission flow, do NOT show screens during normal app usage.
+   * 2. Only show on startup for brand new users (has_completed_onboarding === false).
+   * 3. Re-checking for existing users is triggered on-demand via Settings -> "Re-check & Setup Permissions".
    *
    * @param {Object} user
    * @returns {Promise<boolean>}
@@ -127,18 +126,17 @@ class PermissionService {
       sessionStorage.getItem(`vg_onboarding_dismissed_${user.id}`) === 'true';
     if (isSessionDismissed) return false;
 
-    // 1. Explicit New User: Database flag indicates brand new account
-    if (user.has_completed_onboarding === false) {
-      return true;
-    }
-
-    // 2. Check localStorage flag
+    // 1. Completed Users: If user has already completed onboarding (DB flag is true OR localStorage completed flag is present),
+    // do NOT show permission screens again during normal app usage.
     const hasLocalFlag = typeof localStorage !== 'undefined' &&
       localStorage.getItem(`vibegrid_onboarding_${user.id}`) === 'completed';
 
-    // If local flag is already present, user completed onboarding on this device
-    if (hasLocalFlag) {
-      // Silently sync push subscription in background if notification is granted
+    if (user.has_completed_onboarding || hasLocalFlag) {
+      // Auto-heal localStorage flag if missing
+      if (!hasLocalFlag && typeof localStorage !== 'undefined') {
+        localStorage.setItem(`vibegrid_onboarding_${user.id}`, 'completed');
+      }
+      // Silently sync push subscription in background if notifications are already granted
       if (this.getNotificationPermission() === 'granted') {
         const pushSub = await this.getPushSubscriptionStatus();
         if (!pushSub.active) {
@@ -148,24 +146,9 @@ class PermissionService {
       return false;
     }
 
-    // 3. Cleared Site Data / Reset App Data:
-    // localStorage was cleared. Inspect live browser state.
-    const liveState = await this.getLivePermissionState();
-
-    // If notifications are 'default' (prompt state, not yet decided) OR push subscription is missing:
-    // User needs to configure permissions on this fresh browser profile
-    if (liveState.notifications === 'default' || !liveState.pushSubscription.active) {
+    // 2. Only prompt for brand new accounts that have never completed onboarding
+    if (user.has_completed_onboarding === false) {
       return true;
-    }
-
-    // If browser already had permissions granted (e.g. Chrome remembered site settings)
-    // and push subscription is already active:
-    // Auto-heal localStorage and do NOT interrupt the user!
-    if (liveState.notifications === 'granted' && liveState.pushSubscription.active) {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(`vibegrid_onboarding_${user.id}`, 'completed');
-      }
-      return false;
     }
 
     return false;
