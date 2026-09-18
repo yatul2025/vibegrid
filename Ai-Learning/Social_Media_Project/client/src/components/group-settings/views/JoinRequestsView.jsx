@@ -23,34 +23,6 @@ export default function JoinRequestsView({
 }) {
   const [processingId, setProcessingId] = useState(null);
 
-  // Fallback demo requests if empty for instant visual validation
-  const displayRequests = requests.length > 0 ? requests : [
-    {
-      id: 201,
-      user_id: 881,
-      full_name: 'Neha Sharma',
-      username: 'neha_sharma',
-      time: '2m',
-      avatar_url: null
-    },
-    {
-      id: 202,
-      user_id: 882,
-      full_name: 'Vikram Singh',
-      username: 'vikram_singh',
-      time: '10m',
-      avatar_url: null
-    },
-    {
-      id: 203,
-      user_id: 883,
-      full_name: 'Anjali Patel',
-      username: 'anjali_patel',
-      time: '15m',
-      avatar_url: null
-    }
-  ];
-
   const handleAction = async (request, action) => {
     try {
       setProcessingId(request.id);
@@ -80,7 +52,7 @@ export default function JoinRequestsView({
         </p>
       </div>
 
-      {displayRequests.length === 0 ? (
+      {requests.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-8 rounded-2xl bg-white/[0.02] border border-white/10 text-center space-y-2">
           <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
             <UserCheck size={24} />
@@ -92,7 +64,7 @@ export default function JoinRequestsView({
         </div>
       ) : (
         <div className="space-y-2.5">
-          {displayRequests.map((req) => {
+          {requests.map((req) => {
             const isBusy = processingId === req.id;
             return (
               <div

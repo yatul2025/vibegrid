@@ -16,7 +16,9 @@ const {
   addMembers,
   removeMember,
   updateGroup,
-  getGroupMembers
+  getGroupMembers,
+  joinGroupByInviteCode,
+  getGroupMedia
 } = require('../controllers/conversationController');
 
 jest.mock('../config/db', () => ({
@@ -53,6 +55,7 @@ describe('Group Controller Lifecycle Suite', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    query.mockReset();
   });
 
   describe('deleteGroup', () => {
@@ -287,6 +290,130 @@ describe('Group Controller Lifecycle Suite', () => {
         success: true,
         data: expect.objectContaining({
           conversation: expect.objectContaining({ title: 'New Group Name' })
+        })
+      }));
+    });
+  });
+
+  describe('joinGroupByInviteCode', () => {
+    it('should return 404 if invite code is invalid', async () => {
+      query.mockResolvedValueOnce({ rows: [] });
+      const req = mockReq({ params: { inviteCode: 'invalidcode' } });
+      const res = mockRes();
+      const next = mockNext();
+
+      await joinGroupByInviteCode(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: false }));
+    });
+
+    it('should return already member if user is already in the group', async () => {
+      query.mockResolvedValueOnce({ rows: [{ id: validUuid, title: 'Test Group', permissions: {} }] });
+      query.mockResolvedValueOnce({ rows: [{ role: 'member' }] });
+
+      const req = mockReq({ params: { inviteCode: 'validcode' } });
+      const res = mockRes();
+      const next = mockNext();
+
+      await joinGroupByInviteCode(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({ already_member: true })
+      }));
+    });
+
+    it('should create join request if admin approval is required', async () => {
+      query.mockResolvedValueOnce({
+        rows: [{ id: validUuid, title: 'Approval Group', permissions: { require_admin_approval: true } }]
+      });
+      query.mockResolvedValueOnce({ rows: [] }); // Not a member yet
+      query.mockResolvedValueOnce({ rowCount: 1 }); // INSERT into group_join_requests
+
+      const req = mockReq({ params: { inviteCode: 'approvalcode' } });
+      const res = mockRes();
+      const next = mockNext();
+
+      await joinGroupByInviteCode(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({ requested: true })
+      }));
+    });
+
+    it('should join directly if no approval required', async () => {
+      query.mockResolvedValueOnce({
+        rows: [{ id: validUuid, title: 'Open Group', permissions: { require_admin_approval: false } }]
+      });
+      query.mockResolvedValueOnce({ rows: [] }); // Not a member yet
+      query.mockResolvedValueOnce({ rowCount: 1 }); // INSERT into conversation_members
+
+      const req = mockReq({ params: { inviteCode: 'opencode' } });
+      const res = mockRes();
+      const next = mockNext();
+
+      await joinGroupByInviteCode(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({ joined: true, conversation_id: validUuid })
+      }));
+    });
+  });
+
+  describe('getGroupMedia', () => {
+    it('should return 403 if requester is not a group member', async () => {
+      query.mockResolvedValueOnce({ rows: [] }); // memberCheck
+      const req = mockReq({ params: { id: validUuid } });
+      const res = mockRes();
+      const next = mockNext();
+
+      await getGroupMedia(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    it('should categorize messages into photos, videos, files, and links', async () => {
+      query.mockResolvedValueOnce({ rows: [{ role: 'member' }] }); // memberCheck
+      query.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 1,
+            sender_id: 1,
+            content: 'https://cdn.example.com/photo.jpg',
+            message_type: 'image',
+            created_at: new Date().toISOString(),
+            username: 'alice',
+            full_name: 'Alice',
+            avatar_url: null
+          },
+          {
+            id: 2,
+            sender_id: 2,
+            content: 'Check https://vibegrid.app and https://github.com',
+            message_type: 'text',
+            created_at: new Date().toISOString(),
+            username: 'bob',
+            full_name: 'Bob',
+            avatar_url: null
+          }
+        ]
+      });
+
+      const req = mockReq({ params: { id: validUuid } });
+      const res = mockRes();
+      const next = mockNext();
+
+      await getGroupMedia(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({
+          photos: expect.arrayContaining([expect.objectContaining({ id: 1 })]),
+          links: expect.arrayContaining([
+            expect.objectContaining({ url: 'https://vibegrid.app' }),
+            expect.objectContaining({ url: 'https://github.com' })
+          ])
         })
       }));
     });

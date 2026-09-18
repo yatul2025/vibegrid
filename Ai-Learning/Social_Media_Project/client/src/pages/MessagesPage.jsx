@@ -5479,6 +5479,7 @@ export default function MessagesPage({
         conversationId={activeConversationId || (activePartner?.conversation_id || activePartner?.id)}
         initialScreen={groupDetailsInitialScreen}
         initialAction={groupDetailsInitialAction}
+        pinnedMessages={pinnedMessages}
         onGroupUpdated={(updatedGroup) => {
           setActivePartner((prev) => (prev ? { ...prev, ...updatedGroup } : prev));
           fetchConversations();

@@ -100,15 +100,17 @@ describe('10-Screen VibeGrid Group Settings Suite', () => {
       />
     );
 
-    expect(screen.getByText('Group Details')).toBeInTheDocument();
-    expect(screen.getByText('Test Group')).toBeInTheDocument();
-    expect(screen.getByText('Add Member')).toBeInTheDocument();
-    expect(screen.getByText('Invite')).toBeInTheDocument();
-    expect(screen.getByText('Members')).toBeInTheDocument();
-    expect(screen.getByText('Group Permissions')).toBeInTheDocument();
-    expect(screen.getByText('Media & Files')).toBeInTheDocument();
-    expect(screen.getByText('Pinned Messages')).toBeInTheDocument();
-    expect(screen.getByText('Disappearing Messages')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Group Details')).toBeInTheDocument();
+      expect(screen.getByText('Test Group')).toBeInTheDocument();
+      expect(screen.getByText('Add Member')).toBeInTheDocument();
+      expect(screen.getByText('Invite')).toBeInTheDocument();
+      expect(screen.getByText('Members')).toBeInTheDocument();
+      expect(screen.getByText('Group Permissions')).toBeInTheDocument();
+      expect(screen.getByText('Media & Files')).toBeInTheDocument();
+      expect(screen.getByText('Pinned Messages')).toBeInTheDocument();
+      expect(screen.getByText('Disappearing Messages')).toBeInTheDocument();
+    });
   });
 
   it('Screen 2 (Members): navigates to Members screen and shows roster', async () => {

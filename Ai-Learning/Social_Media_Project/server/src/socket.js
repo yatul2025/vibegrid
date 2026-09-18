@@ -118,6 +118,22 @@ function initSocket(httpServer) {
     // Join user's individual channel for targeted events (calls, DMs, alerts)
     socket.join(`user:${userId}`);
 
+    // Auto-join all conversation rooms this user belongs to for real-time updates/sync
+    query(
+      `SELECT conversation_id FROM conversation_members WHERE user_id = $1`,
+      [userId]
+    ).then((res) => {
+      for (const row of res.rows) {
+        if (row.conversation_id) {
+          const cId = String(row.conversation_id);
+          socket.join(`conv:${cId}`);
+          socket.join(`conv:group-${cId}`);
+        }
+      }
+    }).catch((err) => {
+      console.warn('[Socket] Failed to auto-join conversation rooms for user', userId, err.message);
+    });
+
     // Track online status
     const currentCount = onlineUsers.get(userId) || 0;
     onlineUsers.set(userId, currentCount + 1);

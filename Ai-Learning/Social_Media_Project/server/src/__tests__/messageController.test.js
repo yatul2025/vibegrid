@@ -70,6 +70,7 @@ const mockIo = () => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  query.mockReset();
 });
 
 // =====================================================================
@@ -717,7 +718,7 @@ describe('bulkDeleteMessages', () => {
   });
 
   it('should delete for me by recording into message_deletions', async () => {
-    query.mockResolvedValue({ rowCount: 1 });
+    query.mockResolvedValueOnce({ rowCount: 1 });
 
     const req = mockReq({ body: { messageIds: [101, 102], type: 'for_me' } });
     const res = mockRes();
@@ -795,7 +796,7 @@ describe('bulkStarMessages', () => {
   });
 
   it('should star multiple messages', async () => {
-    query.mockResolvedValue({ rowCount: 1 });
+    query.mockResolvedValueOnce({ rowCount: 1 });
 
     const req = mockReq({ body: { messageIds: [201, 202], isStarred: true } });
     const res = mockRes();
@@ -812,7 +813,7 @@ describe('bulkStarMessages', () => {
   });
 
   it('should unstar multiple messages', async () => {
-    query.mockResolvedValue({ rowCount: 2 });
+    query.mockResolvedValueOnce({ rowCount: 2 });
 
     const req = mockReq({ body: { messageIds: [201, 202], isStarred: false } });
     const res = mockRes();
