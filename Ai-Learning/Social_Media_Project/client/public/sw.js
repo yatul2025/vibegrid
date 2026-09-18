@@ -1,6 +1,6 @@
 /**
  * VibeGrid Progressive Web App Service Worker
- * Version: vibegrid-pwa-v54
+ * Version: vibegrid-pwa-v55
  * Updated: Auto-generated with enhanced offline caching, sync fallbacks, and instant update activation.
  * 
  * Features:
@@ -10,7 +10,7 @@
  * 4. Automatic cache cleanup on deployment and immediate client claiming
  */
 
-const CACHE_NAME = 'vibegrid-pwa-v54';
+const CACHE_NAME = 'vibegrid-pwa-v55';
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_ASSETS = [
@@ -190,40 +190,63 @@ self.addEventListener('push', (event) => {
 
   const title = payload.title || (isCall ? '📞 Incoming Call' : 'VibeGrid Notification');
 
-  // Base options supported universally across Android, Desktop, and iOS Safari Web Push
-  const baseOptions = {
-    body: payload.body || (isCall ? 'Incoming call on VibeGrid...' : 'You have a new activity alert on VibeGrid.'),
-    icon: payload.icon || '/icons/icon-192.png',
-    badge: payload.badge || '/icons/icon-192.png',
-    tag: payload.tag || (isCall ? `vg-call-${payload.data?.callId || Date.now()}` : `vg-${notificationType}-${Date.now()}`),
-    data: payload.data || {},
-    renotify: true
-  };
-
-  // Rich options with vibration, requireInteraction, and actions where supported
-  const richOptions = {
-    ...baseOptions,
-    vibrate: isCall ? [300, 200, 300, 200, 500] : [200, 100, 200],
-    requireInteraction: isCall
-  };
-
-  if (isCall && ('actions' in Notification.prototype)) {
-    try {
-      richOptions.actions = [
-        { action: 'answer', title: '📞 Answer' },
-        { action: 'decline', title: '✕ Decline' }
-      ];
-    } catch (e) {
-      // Ignore if actions assignment fails
-    }
-  }
-
-  // Attempt rich notification; fallback to baseOptions if rejected (e.g., iOS Safari or strict Android ROMs)
+  // Check if any client window is open, active, and focused in the foreground
   event.waitUntil(
-    self.registration.showNotification(title, richOptions).catch((err) => {
-      console.warn('[SW Push] Rich notification failed, displaying base notification:', err?.message || err);
-      return self.registration.showNotification(title, baseOptions).catch((fallbackErr) => {
-        console.error('[SW Push] Base notification also failed:', fallbackErr?.message || fallbackErr);
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Determine if app is actively focused in foreground
+      const isAppInForeground = clientList.some((c) => c.visibilityState === 'visible' && c.focused);
+
+      // Notify open clients via postMessage for in-app badge/toast
+      clientList.forEach((client) => {
+        try {
+          client.postMessage({
+            type: 'PUSH_NOTIFICATION_RECEIVED',
+            payload,
+            inForeground: isAppInForeground
+          });
+        } catch {}
+      });
+
+      // If app is active in foreground and this is NOT a call, suppress OS notification
+      if (isAppInForeground && !isCall) {
+        console.log('[SW Push] App is active in foreground — suppressed OS notification to prevent duplicates.');
+        return Promise.resolve();
+      }
+
+      // Base options supported universally across Android, Desktop, and iOS Safari Web Push
+      const baseOptions = {
+        body: payload.body || (isCall ? 'Incoming call on VibeGrid...' : 'You have a new activity alert on VibeGrid.'),
+        icon: payload.icon || '/icons/icon-192.png',
+        badge: payload.badge || '/icons/icon-192.png',
+        tag: payload.tag || (isCall ? `vg-call-${payload.data?.callId || Date.now()}` : `vg-${notificationType}-${Date.now()}`),
+        data: payload.data || {},
+        renotify: true
+      };
+
+      // Rich options with vibration, requireInteraction, and actions where supported
+      const richOptions = {
+        ...baseOptions,
+        vibrate: isCall ? [300, 200, 300, 200, 500] : [200, 100, 200],
+        requireInteraction: isCall
+      };
+
+      if (isCall && ('actions' in Notification.prototype)) {
+        try {
+          richOptions.actions = [
+            { action: 'answer', title: '📞 Answer' },
+            { action: 'decline', title: '✕ Decline' }
+          ];
+        } catch (e) {
+          // Ignore if actions assignment fails
+        }
+      }
+
+      // Attempt rich notification; fallback to baseOptions if rejected (e.g., iOS Safari or strict Android ROMs)
+      return self.registration.showNotification(title, richOptions).catch((err) => {
+        console.warn('[SW Push] Rich notification failed, displaying base notification:', err?.message || err);
+        return self.registration.showNotification(title, baseOptions).catch((fallbackErr) => {
+          console.error('[SW Push] Base notification also failed:', fallbackErr?.message || fallbackErr);
+        });
       });
     })
   );

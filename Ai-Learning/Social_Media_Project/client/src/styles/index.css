@@ -13617,3 +13617,119 @@ select.form-input option,
   color: var(--text-muted);
 }
 
+/* --- In-App Notification Toast Banner --- */
+.in-app-notification-toast {
+  position: fixed;
+  top: max(16px, calc(10px + env(safe-area-inset-top, 0px)));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 280px;
+  max-width: min(440px, 92vw);
+  padding: 10px 14px;
+  background: var(--card-bg, #1a1e2e);
+  color: var(--text-primary, #ffffff);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  cursor: pointer;
+  animation: inAppToastSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@keyframes inAppToastSlideDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.in-app-notification-toast:active {
+  transform: translateX(-50%) scale(0.98);
+}
+
+.in-app-toast-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.in-app-toast-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1.5px solid var(--primary, #6366f1);
+}
+
+.in-app-toast-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.in-app-toast-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.in-app-toast-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary, #ffffff);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.in-app-toast-body {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.in-app-toast-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px;
+  margin-left: 4px;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.in-app-toast-close:hover {
+  opacity: 1;
+  color: var(--text-primary, #ffffff);
+}
+
+

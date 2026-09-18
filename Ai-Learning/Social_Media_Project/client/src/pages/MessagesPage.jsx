@@ -1294,9 +1294,10 @@ export default function MessagesPage({
         const exists = Boolean(matchedConv);
         const isConvMuted = Boolean(matchedConv?.is_muted);
 
-        // Trigger desktop notification if not muted and in background
+        // Trigger desktop notification ONLY if not muted and app is genuinely backgrounded
         if (!processedMsg.is_mine && !isConvMuted) {
-          if (document.hidden || !isCurrentChat) {
+          const isAppBackgrounded = typeof document !== 'undefined' && (document.hidden || !document.hasFocus());
+          if (isAppBackgrounded) {
             triggerDesktopNotification(
               processedMsg.sender_username || matchedConv?.partner_username || 'Contact',
               snippet,

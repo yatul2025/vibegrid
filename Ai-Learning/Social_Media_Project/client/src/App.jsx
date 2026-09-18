@@ -176,6 +176,29 @@ function AppContent() {
   const lastBackPressTimeRef = useRef(0);
   const [showExitToast, setShowExitToast] = useState(false);
   const exitToastTimeoutRef = useRef(null);
+  const [inAppToast, setInAppToast] = useState(null);
+  const inAppToastTimerRef = useRef(null);
+  const recentNotificationIdsRef = useRef(new Set());
+
+  const triggerInAppToast = (toast) => {
+    if (!toast || !toast.id) return;
+    const toastIdStr = String(toast.id);
+    if (recentNotificationIdsRef.current.has(toastIdStr)) {
+      return; // Prevent duplicate toast for the same event
+    }
+    recentNotificationIdsRef.current.add(toastIdStr);
+    setTimeout(() => {
+      recentNotificationIdsRef.current.delete(toastIdStr);
+    }, 12000);
+
+    if (inAppToastTimerRef.current) {
+      clearTimeout(inAppToastTimerRef.current);
+    }
+    setInAppToast(toast);
+    inAppToastTimerRef.current = setTimeout(() => {
+      setInAppToast(null);
+    }, 4500);
+  };
 
   // Centralized Navigation with Browser History integration
   const navigateToTab = (newTab, options = {}) => {
@@ -669,7 +692,7 @@ function AppContent() {
       const notifTimer = setInterval(fetchUnreadCount, 20000);
       const msgTimer = setInterval(fetchUnreadMessagesCount, 15000);
 
-      // Global real-time message chime & unread badge updater
+      // Global real-time message chime & in-app notification toast
       const handleGlobalIncomingMessage = (msg) => {
         if (!msg) return;
         if (Number(msg.sender_id) !== Number(user.id)) {
@@ -678,20 +701,93 @@ function AppContent() {
             try {
               soundFx.play('receive');
             } catch {}
+
+            const senderName = msg.sender_username || msg.sender?.username || 'Contact';
+            const snippet = msg.text || (msg.media_type ? `Sent ${msg.media_type}` : 'New encrypted message');
+            triggerInAppToast({
+              id: msg.id || `msg-${Date.now()}`,
+              type: 'message',
+              title: `@${senderName}`,
+              body: snippet,
+              avatar: msg.sender_avatar_url || msg.sender?.avatar_url,
+              onClick: () => {
+                navigateToTab('messages', { targetDM: senderName });
+                setInAppToast(null);
+              }
+            });
           }
+        }
+      };
+
+      const handleGlobalNotification = (notif) => {
+        if (!notif) return;
+        setUnreadCount((prev) => prev + 1);
+        try {
+          soundFx.play('receive');
+        } catch {}
+
+        triggerInAppToast({
+          id: notif.id || `notif-${Date.now()}`,
+          type: 'notification',
+          title: notif.title || 'Activity Alert',
+          body: notif.body || notif.message || 'You have new activity on VibeGrid',
+          avatar: notif.sender_avatar_url,
+          onClick: () => {
+            openNotifications();
+            setInAppToast(null);
+          }
+        });
+      };
+
+      // Listen for Service Worker postMessage (fallback for push events suppressed in foreground)
+      const handleServiceWorkerMessage = (event) => {
+        if (event.data?.type === 'PUSH_NOTIFICATION_RECEIVED') {
+          const payload = event.data.payload || {};
+          const notifType = payload.data?.type || 'general';
+          if (notifType === 'call') return; // Handled by CallModal
+
+          const notifId = payload.data?.id || payload.tag || `sw-${Date.now()}`;
+          triggerInAppToast({
+            id: notifId,
+            type: notifType,
+            title: payload.title || 'VibeGrid',
+            body: payload.body || 'New notification',
+            avatar: payload.icon,
+            onClick: () => {
+              if (payload.data?.url?.includes('messages') || notifType === 'message') {
+                navigateToTab('messages');
+              } else {
+                openNotifications();
+              }
+              setInAppToast(null);
+            }
+          });
         }
       };
 
       try {
         socketService.on('message:receive', handleGlobalIncomingMessage);
+        socketService.on('notification:receive', handleGlobalNotification);
       } catch {}
+
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        try {
+          navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+        } catch {}
+      }
 
       return () => {
         clearInterval(notifTimer);
         clearInterval(msgTimer);
         try {
           socketService.off('message:receive', handleGlobalIncomingMessage);
+          socketService.off('notification:receive', handleGlobalNotification);
         } catch {}
+        if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+          try {
+            navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+          } catch {}
+        }
       };
     } else {
       try {
@@ -1406,6 +1502,46 @@ function AppContent() {
           }
         }}
       />
+
+      {/* In-App Real-Time Notification Toast Banner */}
+      {inAppToast && (
+        <div
+          className="in-app-notification-toast"
+          role="status"
+          aria-live="polite"
+          onClick={inAppToast.onClick}
+        >
+          <div className="in-app-toast-content">
+            {inAppToast.avatar ? (
+              <img
+                src={inAppToast.avatar}
+                alt=""
+                className="in-app-toast-avatar"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            ) : (
+              <div className="in-app-toast-icon">
+                {inAppToast.type === 'message' ? '💬' : '🔔'}
+              </div>
+            )}
+            <div className="in-app-toast-text">
+              <span className="in-app-toast-title">{inAppToast.title}</span>
+              <span className="in-app-toast-body">{inAppToast.body}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="in-app-toast-close"
+            aria-label="Dismiss notification"
+            onClick={(e) => {
+              e.stopPropagation();
+              setInAppToast(null);
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* PWA Double-Back Exit Toast */}
       {showExitToast && (

@@ -249,51 +249,134 @@ export default function CallModal() {
   const remoteAudioRef = useRef(null);
   const audioContextRef = useRef(null);
   const ringToneOscillatorRef = useRef(null);
+  const ringToneIntervalRef = useRef(null);
   const durationTimerRef = useRef(null);
 
+  // Unmount cleanup to guarantee zero audio or media leaks
+  useEffect(() => {
+    return () => {
+      stopAllMedia();
+    };
+  }, []);
+
   // ==========================================================================
-  // Web Audio Ringtone Generator (Synthetic Dual-Tone Chime)
+  // Web Audio Ringtone Generator (Phone-Style Cadence: Ring -> Pause -> Repeat)
   // ==========================================================================
-  const startRingtone = () => {
+  const playSingleRingBurst = (isOutgoing = false) => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      audioContextRef.current = ctx;
 
+      // Maintain a clean, active AudioContext
+      let ctx = audioContextRef.current;
+      if (!ctx || ctx.state === 'closed') {
+        ctx = new AudioCtx();
+        audioContextRef.current = ctx;
+      }
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      // Stop previous burst oscillators if still active
+      if (ringToneOscillatorRef.current) {
+        try {
+          const { osc1, osc2 } = ringToneOscillatorRef.current;
+          osc1?.stop();
+          osc2?.stop();
+        } catch {}
+        ringToneOscillatorRef.current = null;
+      }
+
+      const now = ctx.currentTime;
+      const burstDuration = isOutgoing ? 1.4 : 1.6; // 1.6s ring duration
+
+      // Phone dual-tone: 440Hz + 480Hz
       const osc1 = ctx.createOscillator();
       const osc2 = ctx.createOscillator();
       const gain = ctx.createGain();
 
       osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(440, ctx.currentTime); // A4
       osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(480, ctx.currentTime); // B4
+      osc1.frequency.setValueAtTime(440, now);
+      osc2.frequency.setValueAtTime(480, now);
 
-      gain.gain.setValueAtTime(0.05, ctx.currentTime);
+      // Smooth attack and decay envelope to eliminate harsh clicks and droning
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.06, now + 0.05);
+      gain.gain.setValueAtTime(0.06, now + burstDuration - 0.1);
+      gain.gain.linearRampToValueAtTime(0.0001, now + burstDuration);
 
       osc1.connect(gain);
       osc2.connect(gain);
       gain.connect(ctx.destination);
 
-      osc1.start();
-      osc2.start();
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + burstDuration);
+      osc2.stop(now + burstDuration);
+
       ringToneOscillatorRef.current = { osc1, osc2, gain, ctx };
+
+      // Synchronize phone vibration with ring burst on supported devices (1600ms vibrate, 1800ms silence)
+      if (!isOutgoing && typeof navigator !== 'undefined' && navigator.vibrate) {
+        try {
+          navigator.vibrate([1600, 1800]);
+        } catch {}
+      }
     } catch (err) {
-      // AudioContext autoplay restrictions may occur before first user gesture
+      // AudioContext autoplay restrictions before first user interaction
     }
   };
 
+  const startRingtone = (isOutgoing = false) => {
+    // 1. Unconditionally stop any previous ringtone instance and vibration
+    stopRingtone();
+
+    // 2. Play first burst immediately
+    playSingleRingBurst(isOutgoing);
+
+    // 3. Repeat cadence: Ring (1.6s) -> Pause (1.8s) -> Total Cycle: 3.4s
+    const cycleMs = isOutgoing ? 3500 : 3400;
+    ringToneIntervalRef.current = setInterval(() => {
+      playSingleRingBurst(isOutgoing);
+    }, cycleMs);
+  };
+
   const stopRingtone = () => {
+    // 1. Clear repeating ring interval
+    if (ringToneIntervalRef.current) {
+      clearInterval(ringToneIntervalRef.current);
+      ringToneIntervalRef.current = null;
+    }
+
+    // 2. Terminate active audio nodes & AudioContext
     try {
       if (ringToneOscillatorRef.current) {
-        const { osc1, osc2, ctx } = ringToneOscillatorRef.current;
-        osc1.stop();
-        osc2.stop();
-        ctx.close();
+        const { osc1, osc2, gain } = ringToneOscillatorRef.current;
+        if (gain && audioContextRef.current) {
+          try {
+            gain.gain.setValueAtTime(0.0001, audioContextRef.current.currentTime);
+          } catch {}
+        }
+        try { osc1?.stop(); } catch {}
+        try { osc2?.stop(); } catch {}
         ringToneOscillatorRef.current = null;
       }
     } catch {}
+
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      try {
+        audioContextRef.current.close().catch(() => {});
+      } catch {}
+      audioContextRef.current = null;
+    }
+
+    // 3. Immediately halt any active device vibration
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try {
+        navigator.vibrate(0);
+      } catch {}
+    }
   };
 
   const clearAllCallTimers = () => {
@@ -386,7 +469,7 @@ export default function CallModal() {
       });
       setCallState('incoming');
       setCallSubState('incoming');
-      startRingtone();
+      startRingtone(false);
 
       // Immediately send explicit delivery acknowledgement so caller transitions from Calling... to Ringing...
       if (data.callId && data.caller?.id) {
@@ -536,7 +619,7 @@ export default function CallModal() {
       setCallState('outgoing');
       setCallSubState('calling'); // Explicitly start at "Calling..."
       setConnectionStatus('connecting');
-      startRingtone();
+      startRingtone(true);
 
       // Ringing timeout (38s)
       ringTimeoutRef.current = setTimeout(() => {
@@ -701,6 +784,7 @@ export default function CallModal() {
       } else if (state === 'reconnecting') {
         setCallSubState('reconnecting');
       } else if (state === 'failed' || state === 'closed') {
+        stopRingtone();
         if (state === 'failed') {
           setCallSubState('failed');
           autoDismissTimerRef.current = setTimeout(() => {
