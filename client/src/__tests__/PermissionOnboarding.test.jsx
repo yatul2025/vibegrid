@@ -94,7 +94,7 @@ describe('Permission Onboarding & Live State Validation', () => {
       has_completed_onboarding: false
     };
 
-    it('renders step 1 with personalized greeting and feature highlights', () => {
+    it('renders step 1 directly for notifications with Accept and Reject buttons', () => {
       render(
         <PermissionOnboardingModal
           user={mockUser}
@@ -104,14 +104,118 @@ describe('Permission Onboarding & Live State Validation', () => {
         />
       );
 
-      expect(screen.getByText(/Welcome to VibeGrid, Alice Wonder!/i)).toBeInTheDocument();
-      expect(screen.getByText(/Real-Time Notifications/i)).toBeInTheDocument();
-      expect(screen.getByText(/Voice Calling & Audio Notes/i)).toBeInTheDocument();
-      expect(screen.getByText(/HD Video Calls/i)).toBeInTheDocument();
-      expect(screen.getByTestId('onboarding-start-btn')).toBeInTheDocument();
+      expect(screen.getByText(/Enable Notifications & Calls/i)).toBeInTheDocument();
+      expect(screen.getByTestId('onboarding-accept-btn')).toHaveTextContent(/Accept & Enable Notifications/i);
+      expect(screen.getByTestId('onboarding-reject-btn')).toHaveTextContent(/Reject \/ Skip for Now/i);
+      expect(screen.getByTestId('onboarding-skip-all-btn')).toBeInTheDocument();
     });
 
-    it('steps through notifications, microphone, camera, and completes onboarding', async () => {
+    it('steps through notifications, microphone, camera, media, and completes onboarding via Accept', async () => {
+      const onComplete = vi.fn();
+      const onClose = vi.fn();
+      vi.spyOn(permissionService, 'markOnboardingCompleted').mockResolvedValue(true);
+      vi.spyOn(permissionService, 'requestNotificationAndPush').mockResolvedValue({ granted: true });
+      vi.spyOn(permissionService, 'requestMicrophonePermission').mockResolvedValue({ granted: true });
+      vi.spyOn(permissionService, 'requestCameraPermission').mockResolvedValue({ granted: true });
+
+      render(
+        <PermissionOnboardingModal
+          user={mockUser}
+          isOpen={true}
+          onClose={onClose}
+          onComplete={onComplete}
+        />
+      );
+
+      // Step 1: Notifications
+      expect(screen.getByText(/Enable Notifications & Calls/i)).toBeInTheDocument();
+      const notifAcceptBtn = screen.getByTestId('onboarding-accept-btn');
+      fireEvent.click(notifAcceptBtn);
+
+      await waitFor(() => {
+        expect(permissionService.requestNotificationAndPush).toHaveBeenCalled();
+      });
+
+      // Advance to Step 2 (Microphone) after simulated timeout
+      await waitFor(() => {
+        expect(screen.getByText(/Allow Microphone Access/i)).toBeInTheDocument();
+      }, { timeout: 2000 });
+
+      // Step 2: Microphone
+      const micAcceptBtn = screen.getByTestId('onboarding-accept-btn');
+      fireEvent.click(micAcceptBtn);
+
+      await waitFor(() => {
+        expect(permissionService.requestMicrophonePermission).toHaveBeenCalled();
+      });
+
+      // Advance to Step 3 (Camera)
+      await waitFor(() => {
+        expect(screen.getByText(/Allow Camera for Video Calls/i)).toBeInTheDocument();
+      }, { timeout: 2000 });
+
+      // Step 3: Camera
+      const camAcceptBtn = screen.getByTestId('onboarding-accept-btn');
+      fireEvent.click(camAcceptBtn);
+
+      await waitFor(() => {
+        expect(permissionService.requestCameraPermission).toHaveBeenCalled();
+      });
+
+      // Advance to Step 4 (Photos & Media)
+      await waitFor(() => {
+        expect(screen.getByText(/Photos & Media Privacy/i)).toBeInTheDocument();
+      }, { timeout: 2000 });
+
+      // Step 4: Continue
+      fireEvent.click(screen.getByTestId('onboarding-accept-btn'));
+
+      // Step 5: Summary & Finish
+      expect(screen.getByText(/You're All Set, Alice Wonder!/i)).toBeInTheDocument();
+      const finishBtn = screen.getByTestId('onboarding-finish-btn');
+      expect(finishBtn).toBeInTheDocument();
+
+      fireEvent.click(finishBtn);
+
+      await waitFor(() => {
+        expect(permissionService.markOnboardingCompleted).toHaveBeenCalledWith(555);
+        expect(onComplete).toHaveBeenCalled();
+        expect(onClose).toHaveBeenCalled();
+      });
+    });
+
+    it('allows user to reject/skip each step without blocking progress', async () => {
+      render(
+        <PermissionOnboardingModal
+          user={mockUser}
+          isOpen={true}
+          onClose={vi.fn()}
+          onComplete={vi.fn()}
+        />
+      );
+
+      // Step 1: Notifications -> Reject
+      expect(screen.getByText(/Enable Notifications & Calls/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('onboarding-reject-btn'));
+
+      // Step 2: Microphone -> Reject
+      expect(screen.getByText(/Allow Microphone Access/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('onboarding-reject-btn'));
+
+      // Step 3: Camera -> Reject
+      expect(screen.getByText(/Allow Camera for Video Calls/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('onboarding-reject-btn'));
+
+      // Step 4: Media -> Skip
+      expect(screen.getByText(/Photos & Media Privacy/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('onboarding-reject-btn'));
+
+      // Step 5: Summary
+      expect(screen.getByText(/You're All Set, Alice Wonder!/i)).toBeInTheDocument();
+      expect(screen.getByTestId('onboarding-finish-btn')).toBeInTheDocument();
+    });
+
+    it('allows user to Skip All from the header immediately', async () => {
       const onComplete = vi.fn();
       const onClose = vi.fn();
       vi.spyOn(permissionService, 'markOnboardingCompleted').mockResolvedValue(true);
@@ -125,58 +229,15 @@ describe('Permission Onboarding & Live State Validation', () => {
         />
       );
 
-      // Step 1 -> Click Start Setup
-      fireEvent.click(screen.getByTestId('onboarding-start-btn'));
-
-      // Step 2: Notifications
-      expect(screen.getByText(/Push Notifications & Calls/i)).toBeInTheDocument();
-      expect(screen.getByTestId('onboarding-enable-notif-btn')).toBeInTheDocument();
-      fireEvent.click(screen.getByText('Not Now'));
-
-      // Step 3: Microphone
-      expect(screen.getByText(/Microphone Access/i)).toBeInTheDocument();
-      expect(screen.getByTestId('onboarding-enable-mic-btn')).toBeInTheDocument();
-      fireEvent.click(screen.getByText('Maybe Later'));
-
-      // Step 4: Camera
-      expect(screen.getByText(/Camera for Video Calling/i)).toBeInTheDocument();
-      expect(screen.getByTestId('onboarding-enable-cam-btn')).toBeInTheDocument();
-      fireEvent.click(screen.getByText('Maybe Later'));
-
-      // Step 5: Photos & Media
-      expect(screen.getByText(/Photos & Media Sharing/i)).toBeInTheDocument();
-      fireEvent.click(screen.getByText(/Got It, Continue →/i));
-
-      // Step 6: Summary & Finish
-      expect(screen.getByText(/You're All Set!/i)).toBeInTheDocument();
-      const finishBtn = screen.getByTestId('onboarding-finish-btn');
-      expect(finishBtn).toBeInTheDocument();
-
-      fireEvent.click(finishBtn);
+      const skipAllBtn = screen.getByTestId('onboarding-skip-all-btn');
+      expect(skipAllBtn).toBeInTheDocument();
+      fireEvent.click(skipAllBtn);
 
       await waitFor(() => {
         expect(permissionService.markOnboardingCompleted).toHaveBeenCalledWith(555);
         expect(onComplete).toHaveBeenCalled();
         expect(onClose).toHaveBeenCalled();
       });
-    });
-
-    it('gracefully handles skipping permissions without blocking', async () => {
-      const onComplete = vi.fn();
-
-      render(
-        <PermissionOnboardingModal
-          user={mockUser}
-          isOpen={true}
-          onClose={vi.fn()}
-          onComplete={onComplete}
-        />
-      );
-
-      fireEvent.click(screen.getByTestId('onboarding-start-btn'));
-      expect(screen.getByText('Not Now')).toBeInTheDocument();
-      fireEvent.click(screen.getByText('Not Now'));
-      expect(screen.getByText(/Microphone Access/i)).toBeInTheDocument();
     });
   });
 });

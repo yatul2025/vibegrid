@@ -13756,10 +13756,11 @@ select.form-input option,
 .permission-onboarding-card {
   max-width: 520px;
   width: 92vw;
+  max-height: 88vh;
   background: var(--bg-card, #12151c);
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
   border-radius: var(--radius-xl, 24px);
-  padding: 28px 24px;
+  padding: 24px 24px 20px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
   display: flex;
   flex-direction: column;
@@ -13776,8 +13777,8 @@ select.form-input option,
     border-left: none;
     border-right: none;
     border-bottom: none;
-    padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 16px));
-    max-height: 92vh;
+    padding: 20px 18px calc(16px + env(safe-area-inset-bottom, 16px));
+    max-height: 90vh;
   }
 }
 
@@ -13785,7 +13786,8 @@ select.form-input option,
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  flex-shrink: 0;
+  margin-bottom: 16px;
 }
 
 .onboarding-dots {
@@ -13812,12 +13814,44 @@ select.form-input option,
   background: var(--success-color, #10b981);
 }
 
+.onboarding-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.onboarding-skip-all-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.onboarding-skip-all-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary, #ffffff);
+}
+
 .onboarding-step-counter {
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--text-muted, #94a3b8);
   letter-spacing: 0.5px;
   text-transform: uppercase;
+}
+
+.onboarding-step-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
 }
 
 .onboarding-slide {
@@ -14091,11 +14125,14 @@ select.form-input option,
 }
 
 .onboarding-actions {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  margin-top: 8px;
 }
 
 .onboarding-main-btn {
