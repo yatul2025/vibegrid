@@ -104,14 +104,14 @@ export default function GroupSettingsModal({
     setScreenStack((prev) => [...prev, screen]);
   };
 
-  const goBack = useCallback(() => {
+  const goBack = useCallback((fromPopState = false) => {
     if (showAddDrawer) {
       setShowAddDrawer(false);
       return true;
     }
     if (screenStack.length > 1) {
       setScreenStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : ['overview']));
-      if (typeof window !== 'undefined' && window.history && window.history.state?.screen) {
+      if (!fromPopState && typeof window !== 'undefined' && window.history && window.history.state?.screen) {
         window.history.back();
       }
       return true;
@@ -527,7 +527,7 @@ export default function GroupSettingsModal({
             {currentScreen !== 'overview' ? (
               <button
                 type="button"
-                onClick={goBack}
+                onClick={() => goBack(false)}
                 className="group-settings-nav-btn"
                 title="Back"
               >

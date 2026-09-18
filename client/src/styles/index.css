@@ -1,3 +1,5 @@
+@import "../components/group-settings/GroupSettingsModal.css";
+
 /* ==========================================================================
    VibeGrid — Global Styles & Design Tokens
    ========================================================================== */
@@ -1885,6 +1887,39 @@ a.nav-tab-btn {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.2);
   transform: scale(1.1);
+}
+
+.profile-top-back-bar {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.profile-back-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  color: var(--text-primary, #ffffff);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.profile-back-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateX(-2px);
+}
+
+.profile-back-username {
+  font-weight: 600;
+  color: var(--primary, #00f0ff);
 }
 
 .profile-header {

@@ -18,7 +18,8 @@ import HashtagFeedModal from '../components/HashtagFeedModal';
 import HidePostModal from '../components/HidePostModal';
 import VibiEmptyState from '../components/VibiEmptyState';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
-import { Heart, MessageCircle, Bookmark } from 'lucide-react';
+import { Heart, MessageCircle, Bookmark, ArrowLeft } from 'lucide-react';
+import navigationService from '../services/navigationService';
 
 export default function ExplorePage({ onNavigateToProfile }) {
   const { user } = useAuth();
@@ -58,6 +59,43 @@ export default function ExplorePage({ onNavigateToProfile }) {
   const [activeCommentsPost, setActiveCommentsPost] = useState(null);
   const [moderatingId, setModeratingId] = useState(null);
   const [postToHide, setPostToHide] = useState(null);
+
+  // Back navigation interceptors for modals
+  useEffect(() => {
+    if (activeCommentsPost) {
+      return navigationService.registerBackInterceptor('explore_comments', () => {
+        setActiveCommentsPost(null);
+        return true;
+      }, 25);
+    }
+  }, [activeCommentsPost]);
+
+  useEffect(() => {
+    if (selectedPost) {
+      return navigationService.registerBackInterceptor('explore_selected_post', () => {
+        setSelectedPost(null);
+        return true;
+      }, 20);
+    }
+  }, [selectedPost]);
+
+  useEffect(() => {
+    if (activeHashtag) {
+      return navigationService.registerBackInterceptor('explore_hashtag', () => {
+        setActiveHashtag(null);
+        return true;
+      }, 20);
+    }
+  }, [activeHashtag]);
+
+  useEffect(() => {
+    if (postToHide) {
+      return navigationService.registerBackInterceptor('explore_post_hide', () => {
+        setPostToHide(null);
+        return true;
+      }, 20);
+    }
+  }, [postToHide]);
 
   // Fetch explore posts
   const fetchExplorePosts = async () => {
@@ -421,22 +459,43 @@ export default function ExplorePage({ onNavigateToProfile }) {
         <div className="modal-backdrop" onClick={() => setSelectedPost(null)}>
           <div className="modal-card post-detail-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <div
-                className="detail-modal-author"
-                onClick={() => {
-                  setSelectedPost(null);
-                  if (onNavigateToProfile) onNavigateToProfile(selectedPost.username);
-                }}
-                style={{ cursor: 'pointer' }}
-              >
-                {selectedPost.avatar_url ? (
-                  <img src={selectedPost.avatar_url} alt={selectedPost.username} className="nav-avatar-mini" />
-                ) : (
-                  <span className="nav-avatar-fallback-mini">
-                    {selectedPost.username?.charAt(0).toUpperCase()}
-                  </span>
-                )}
-                <strong>@{selectedPost.username}</strong>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="modal-back-btn"
+                  onClick={() => navigationService.goBack(() => setSelectedPost(null))}
+                  title="Back to Explore"
+                  aria-label="Back to Explore"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '6px',
+                    borderRadius: '8px'
+                  }}
+                >
+                  <ArrowLeft size={18} />
+                </button>
+                <div
+                  className="detail-modal-author"
+                  onClick={() => {
+                    setSelectedPost(null);
+                    if (onNavigateToProfile) onNavigateToProfile(selectedPost.username);
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {selectedPost.avatar_url ? (
+                    <img src={selectedPost.avatar_url} alt={selectedPost.username} className="nav-avatar-mini" />
+                  ) : (
+                    <span className="nav-avatar-fallback-mini">
+                      {selectedPost.username?.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <strong>@{selectedPost.username}</strong>
+                </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {user && ([1, 2, 3, 4].includes(Number(user.id)) || Number(user.test) === 1) && (
@@ -462,7 +521,7 @@ export default function ExplorePage({ onNavigateToProfile }) {
                 <button
                   type="button"
                   className="modal-close-btn"
-                  onClick={() => setSelectedPost(null)}
+                  onClick={() => navigationService.goBack(() => setSelectedPost(null))}
                   title="Close photo details"
                   aria-label="Close photo details"
                 >

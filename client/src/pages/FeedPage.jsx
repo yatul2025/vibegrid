@@ -26,6 +26,7 @@ import HidePostModal from '../components/HidePostModal';
 import { triggerCelebration } from '../components/AuroraCelebrationOverlay';
 import VibiEmptyState from '../components/VibiEmptyState';
 import soundFx from '../services/soundFxService';
+import navigationService from '../services/navigationService';
 import { formatCaptionWithHashtags } from '../utils/textFormatters';
 import {
   Heart,
@@ -125,6 +126,61 @@ export default function FeedPage({ onOpenCreatePost, onNavigateToProfile }) {
   const [newPostsAvailable, setNewPostsAvailable] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Back navigation interceptors for feed modals & overlays
+  useEffect(() => {
+    if (activeCommentPost) {
+      return navigationService.registerBackInterceptor('feed_comments', () => {
+        setActiveCommentPost(null);
+        return true;
+      }, 25);
+    }
+  }, [activeCommentPost]);
+
+  useEffect(() => {
+    if (isStoryViewerOpen) {
+      return navigationService.registerBackInterceptor('feed_story_viewer', () => {
+        setIsStoryViewerOpen(false);
+        return true;
+      }, 20);
+    }
+  }, [isStoryViewerOpen]);
+
+  useEffect(() => {
+    if (isCreateStoryOpen) {
+      return navigationService.registerBackInterceptor('feed_create_story', () => {
+        setIsCreateStoryOpen(false);
+        return true;
+      }, 20);
+    }
+  }, [isCreateStoryOpen]);
+
+  useEffect(() => {
+    if (activeHashtag) {
+      return navigationService.registerBackInterceptor('feed_hashtag', () => {
+        setActiveHashtag(null);
+        return true;
+      }, 20);
+    }
+  }, [activeHashtag]);
+
+  useEffect(() => {
+    if (postToDelete) {
+      return navigationService.registerBackInterceptor('feed_post_delete', () => {
+        setPostToDelete(null);
+        return true;
+      }, 20);
+    }
+  }, [postToDelete]);
+
+  useEffect(() => {
+    if (postToHide) {
+      return navigationService.registerBackInterceptor('feed_post_hide', () => {
+        setPostToHide(null);
+        return true;
+      }, 20);
+    }
+  }, [postToHide]);
 
   // Fetch active stories (combining real VibeGrid stories + external discovery stories)
   const fetchStories = async (forceRefresh = false) => {

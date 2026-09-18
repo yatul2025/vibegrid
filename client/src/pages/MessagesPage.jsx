@@ -41,6 +41,7 @@ import KeyBackupModal from '../components/KeyBackupModal';
 import senderKeysService from '../services/crypto/senderKeys';
 import VibiEmptyState from '../components/VibiEmptyState';
 import soundFx from '../services/soundFxService';
+import navigationService from '../services/navigationService';
 import {
   Phone,
   Video,
@@ -595,77 +596,77 @@ export default function MessagesPage({
       // 1. Close open chat modals/menus first if any are active
       if (isNewChatModalOpenRef.current) {
         setIsNewChatModalOpen(false);
-        return;
+        return true;
       }
       if (isSafetyModalOpenRef.current) {
         setIsSafetyModalOpen(false);
-        return;
+        return true;
       }
       if (isCallHistoryOpenRef.current) {
         setIsCallHistoryOpen(false);
-        return;
+        return true;
       }
       if (isKeyBackupOpenRef.current) {
         setIsKeyBackupOpen(false);
-        return;
+        return true;
       }
       if (isCreateGroupOpenRef.current) {
         setIsCreateGroupOpen(false);
-        return;
+        return true;
       }
       if (isGroupDetailsOpenRef.current) {
-        if (groupSettingsBackHandlerRef.current && groupSettingsBackHandlerRef.current()) {
-          return;
+        if (groupSettingsBackHandlerRef.current && groupSettingsBackHandlerRef.current(true)) {
+          return true;
         }
         setIsGroupDetailsOpen(false);
         setGroupDetailsInitialAction(null);
-        return;
+        return true;
       }
       if (isStarredModalOpenRef.current) {
         setIsStarredModalOpen(false);
-        return;
+        return true;
       }
       if (forwardModalTargetRef.current) {
         setForwardModalTarget(null);
-        return;
+        return true;
       }
       if (deleteModalTargetRef.current) {
         setDeleteModalTarget(null);
-        return;
+        return true;
       }
       if (messageInfoTargetRef.current) {
         setMessageInfoTarget(null);
-        return;
+        return true;
       }
       if (isMuteModalOpenRef.current) {
         setIsMuteModalOpen(false);
-        return;
+        return true;
       }
       if (isClearChatModalOpenRef.current) {
         setIsClearChatModalOpen(false);
-        return;
+        return true;
       }
       if (isReportModalOpenRef.current) {
         setIsReportModalOpen(false);
-        return;
+        return true;
       }
       if (isConvMenuOpenRef.current) {
         setIsConvMenuOpen(false);
-        return;
+        return true;
       }
       if (isEphemeralMenuOpenRef.current) {
         setIsEphemeralMenuOpen(false);
-        return;
+        return true;
       }
       if (isSelectionModeRef.current) {
         setIsSelectionMode(false);
         setSelectedMessageIds(new Set());
-        return;
+        return true;
       }
       if (isSearchInChatOpenRef.current) {
         setIsSearchInChatOpen(false);
         setChatSearchQuery('');
-        return;
+        return true;
       }
       if (isActionBarMoreOpenRef.current) {
         setIsActionBarMoreOpen(false);
@@ -673,20 +674,22 @@ export default function MessagesPage({
       if (selectedMessagesForActionRef.current && selectedMessagesForActionRef.current.length > 0) {
         setSelectedMessagesForAction([]);
         setIsActionBarMoreOpen(false);
-        return;
+        return true;
       }
 
       // 2. Active chat conversation
       if (activePartnerRef.current) {
-        // If the state no longer points to this chat partner, exit chat view to conversation list
-        if (!e.state || e.state.inChatWith !== activePartnerRef.current.username) {
+        // If back was pressed or popstate occurred, exit chat view to conversation list
+        if (!e?.state || e.state.inChatWith !== activePartnerRef.current.username) {
           setActivePartner(null);
+          return true;
         }
       }
+
+      return false;
     };
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    return navigationService.registerBackInterceptor('messages_page_back', handlePopState, 20);
   }, []);
 
   // Jump and highlight a quoted reply message
@@ -4018,13 +4021,7 @@ export default function MessagesPage({
                 <button
                   type="button"
                   className="btn-chat-back-mobile"
-                  onClick={() => {
-                    if (typeof window !== 'undefined' && window.history && window.history.state?.inChatWith) {
-                      window.history.back();
-                    } else {
-                      setActivePartner(null);
-                    }
-                  }}
+                  onClick={() => navigationService.goBack(() => setActivePartner(null))}
                   title="Back to conversations"
                   aria-label="Back to conversations"
                 >

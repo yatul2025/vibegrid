@@ -39,8 +39,10 @@ import {
   Camera,
   Upload,
   Lock,
-  Check
+  Check,
+  ArrowLeft
 } from 'lucide-react';
+import navigationService from '../services/navigationService';
 
 const DEMO_USERNAMES = ['sophia_wander', 'alex_design', 'elena_culinary', 'liam_visuals'];
 
@@ -61,10 +63,14 @@ export default function ProfilePage({
 
   // Determine which username to display (defaults to logged-in user)
   const usernameToFetch = targetUsername || currentUser?.username;
+  const isOwnUser = Boolean(
+    currentUser?.username &&
+    (!targetUsername || currentUser.username.toLowerCase() === targetUsername.toLowerCase())
+  );
 
   const [profile, setProfile] = useState(null);
   const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 });
-  const [isOwnProfile, setIsOwnProfile] = useState(false);
+  const [isOwnProfile, setIsOwnProfile] = useState(isOwnUser);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followModal, setFollowModal] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -315,6 +321,104 @@ export default function ProfilePage({
       fetchSavedPosts();
     }
   }, [usernameToFetch, currentUser?.username]);
+
+  // Back interceptors for modals & nested views
+  useEffect(() => {
+    if (commentsPost) {
+      return navigationService.registerBackInterceptor('profile_comments', () => {
+        setCommentsPost(null);
+        return true;
+      }, 25);
+    }
+  }, [commentsPost]);
+
+  useEffect(() => {
+    if (selectedPost) {
+      return navigationService.registerBackInterceptor('profile_selected_post', () => {
+        setSelectedPost(null);
+        return true;
+      }, 20);
+    }
+  }, [selectedPost]);
+
+  useEffect(() => {
+    if (followModal) {
+      return navigationService.registerBackInterceptor('profile_follow_modal', () => {
+        setFollowModal(null);
+        return true;
+      }, 20);
+    }
+  }, [followModal]);
+
+  useEffect(() => {
+    if (activeHashtag) {
+      return navigationService.registerBackInterceptor('profile_hashtag', () => {
+        setActiveHashtag(null);
+        return true;
+      }, 20);
+    }
+  }, [activeHashtag]);
+
+  useEffect(() => {
+    if (showAvatarModal) {
+      return navigationService.registerBackInterceptor('profile_avatar', () => {
+        setShowAvatarModal(false);
+        return true;
+      }, 20);
+    }
+  }, [showAvatarModal]);
+
+  useEffect(() => {
+    if (showDeactivateModal) {
+      return navigationService.registerBackInterceptor('profile_deactivate', () => {
+        setShowDeactivateModal(false);
+        return true;
+      }, 20);
+    }
+  }, [showDeactivateModal]);
+
+  useEffect(() => {
+    if (showDeleteModal) {
+      return navigationService.registerBackInterceptor('profile_delete', () => {
+        setShowDeleteModal(false);
+        return true;
+      }, 20);
+    }
+  }, [showDeleteModal]);
+
+  useEffect(() => {
+    if (confirmAction) {
+      return navigationService.registerBackInterceptor('profile_confirm_modal', () => {
+        setConfirmAction(null);
+        return true;
+      }, 20);
+    }
+  }, [confirmAction]);
+
+  useEffect(() => {
+    if (isEditing) {
+      return navigationService.registerBackInterceptor('profile_editing', () => {
+        setIsEditing(false);
+        return true;
+      }, 15);
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    if (targetUsername && !isOwnProfile && !isOwnUser) {
+      return navigationService.registerBackInterceptor('profile_target_user', (e) => {
+        // If the popstate specifically targets another tab, let it transition
+        if (e?.state?.tab && e.state.tab !== 'profile') {
+          return false;
+        }
+        if (onNavigateToProfile) {
+          onNavigateToProfile(null);
+          return true;
+        }
+        return false;
+      }, 10);
+    }
+  }, [targetUsername, isOwnProfile, isOwnUser, onNavigateToProfile]);
 
   // Handle post deletion from profile - Opens modern confirmation modal
   const handleDeletePost = (postId) => {
@@ -1232,6 +1336,19 @@ export default function ProfilePage({
   if (error || !profile) {
     return (
       <div className="profile-error-container">
+        {targetUsername && (
+          <div style={{ marginBottom: '16px' }}>
+            <button
+              type="button"
+              className="profile-back-nav-btn"
+              onClick={() => navigationService.goBack(() => onNavigateToProfile && onNavigateToProfile(null))}
+              title="Go back"
+            >
+              <ArrowLeft size={18} />
+              <span>Back</span>
+            </button>
+          </div>
+        )}
         <h2>User Not Found</h2>
         <p>{error || `User @${usernameToFetch} does not exist in the database.`}</p>
       </div>
@@ -1254,6 +1371,22 @@ export default function ProfilePage({
             title="Dismiss notification"
           >
             ✕
+          </button>
+        </div>
+      )}
+
+      {/* Target User Back Navigation Bar */}
+      {targetUsername && !isOwnProfile && (
+        <div className="profile-top-back-bar">
+          <button
+            type="button"
+            className="profile-back-nav-btn"
+            onClick={() => navigationService.goBack(() => onNavigateToProfile && onNavigateToProfile(null))}
+            title="Go back"
+            aria-label="Go back"
+          >
+            <ArrowLeft size={18} />
+            <span className="profile-back-username">@{profile.username}</span>
           </button>
         </div>
       )}

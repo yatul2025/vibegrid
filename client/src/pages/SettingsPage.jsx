@@ -26,6 +26,7 @@ import SpringToggle from '../components/SpringToggle';
 import pushNotificationService from '../services/pushNotificationService';
 import { THEMES, getThemeById } from '../constants/themes';
 import soundFx, { SOUND_PACKS } from '../services/soundFxService';
+import navigationService from '../services/navigationService';
 import {
   User,
   Mail,
@@ -359,27 +360,54 @@ export default function SettingsPage({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Synchronize with native back gestures and browser history for settings sub-sections
+  // Synchronize modal and sub-section state with global navigation coordinator
   useEffect(() => {
-    const handleSettingsPopState = (e) => {
-      if (mobileViewingSectionRef.current) {
-        if (!e.state || e.state.tab !== 'settings' || !e.state.subSection) {
-          setMobileViewingSection(false);
-          if (e.state?.section) {
-            setActiveSection(e.state.section);
-          }
-        } else if (e.state?.section) {
+    if (showDiagnosticsModal) {
+      return navigationService.registerBackInterceptor('settings_diagnostics_modal', () => {
+        setShowDiagnosticsModal(false);
+        return true;
+      }, 20);
+    }
+  }, [showDiagnosticsModal]);
+
+  useEffect(() => {
+    if (showDeactivateModal) {
+      return navigationService.registerBackInterceptor('settings_deactivate_modal', () => {
+        setShowDeactivateModal(false);
+        return true;
+      }, 20);
+    }
+  }, [showDeactivateModal]);
+
+  useEffect(() => {
+    if (showDeleteModal) {
+      return navigationService.registerBackInterceptor('settings_delete_modal', () => {
+        setShowDeleteModal(false);
+        return true;
+      }, 20);
+    }
+  }, [showDeleteModal]);
+
+  useEffect(() => {
+    if (confirmAction) {
+      return navigationService.registerBackInterceptor('settings_confirm_modal', () => {
+        setConfirmAction(null);
+        return true;
+      }, 20);
+    }
+  }, [confirmAction]);
+
+  useEffect(() => {
+    if (mobileViewingSection) {
+      return navigationService.registerBackInterceptor('settings_sub_section', (e) => {
+        setMobileViewingSection(false);
+        if (e?.state?.section) {
           setActiveSection(e.state.section);
         }
-      } else if (e.state && e.state.tab === 'settings' && e.state.subSection && e.state.section) {
-        setActiveSection(e.state.section);
-        setMobileViewingSection(true);
-      }
-    };
-
-    window.addEventListener('popstate', handleSettingsPopState);
-    return () => window.removeEventListener('popstate', handleSettingsPopState);
-  }, []);
+        return true;
+      }, 15);
+    }
+  }, [mobileViewingSection]);
 
   // Update section from props if provided
   useEffect(() => {
@@ -1133,11 +1161,7 @@ export default function SettingsPage({
   };
 
   const handleBackToMenu = () => {
-    if (typeof window !== 'undefined' && window.history && window.history.state?.tab === 'settings' && window.history.state?.subSection) {
-      window.history.back();
-    } else {
-      setMobileViewingSection(false);
-    }
+    navigationService.goBack(() => setMobileViewingSection(false));
   };
 
   if (loadingProfile && !profile) {
@@ -1157,13 +1181,23 @@ export default function SettingsPage({
         {/* Settings Header Bar */}
         <div className="settings-top-header">
           <div className="settings-top-header-left">
-            {isMobile && mobileViewingSection && (
+            {isMobile && mobileViewingSection ? (
               <button
                 type="button"
                 className="settings-back-btn"
                 onClick={handleBackToMenu}
                 title="Back to Settings menu"
                 aria-label="Back to Settings menu"
+              >
+                <ArrowLeft size={18} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="settings-back-btn"
+                onClick={() => navigationService.goBack(() => onNavigateToProfile && onNavigateToProfile(currentUser?.username))}
+                title="Back"
+                aria-label="Back"
               >
                 <ArrowLeft size={18} />
               </button>

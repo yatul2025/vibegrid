@@ -22,6 +22,8 @@ import ReturningUserWelcomeDrop from './components/ReturningUserWelcomeDrop';
 import AuroraCelebrationOverlay, { triggerCelebration } from './components/AuroraCelebrationOverlay';
 import NetworkStatusPill from './components/NetworkStatusPill';
 import soundFx from './services/soundFxService';
+import navigationService from './services/navigationService';
+import { NavigationProvider } from './context/NavigationContext';
 import {
   Home,
   Compass,
@@ -239,6 +241,34 @@ function AppContent() {
     }
   };
 
+  // Register App-level modal back interceptors
+  useEffect(() => {
+    if (isCreatePostOpen) {
+      return navigationService.registerBackInterceptor('app_create_post', () => {
+        setIsCreatePostOpen(false);
+        return true;
+      }, 50);
+    }
+  }, [isCreatePostOpen]);
+
+  useEffect(() => {
+    if (isNotificationsOpen) {
+      return navigationService.registerBackInterceptor('app_notifications', () => {
+        setIsNotificationsOpen(false);
+        return true;
+      }, 50);
+    }
+  }, [isNotificationsOpen]);
+
+  useEffect(() => {
+    if (isProfileMenuOpen) {
+      return navigationService.registerBackInterceptor('app_profile_menu', () => {
+        setIsProfileMenuOpen(false);
+        return true;
+      }, 40);
+    }
+  }, [isProfileMenuOpen]);
+
   // Initialize and handle browser back / popstate navigation
   useEffect(() => {
     if (typeof window === 'undefined' || !window.history) return;
@@ -250,31 +280,24 @@ function AppContent() {
       window.history.replaceState({ tab: initialTab, viewedUsername: initialUser, root: initialTab === 'feed' }, '');
     }
 
-    const handlePopState = (e) => {
-      // 1. Modals in App.jsx
-      if (isCreatePostOpen) {
-        setIsCreatePostOpen(false);
-        return;
-      }
-      if (isNotificationsOpen) {
-        setIsNotificationsOpen(false);
-        return;
-      }
-      if (isProfileMenuOpen) {
-        setIsProfileMenuOpen(false);
-        return;
-      }
-
-      // 2. Tab Navigation
-      if (e.state && e.state.tab) {
-        setCurrentTab(e.state.tab);
-        setViewedUsername(e.state.viewedUsername || null);
-        setDirectMessageTarget(e.state.targetDM || null);
-        if (e.state.section) {
-          setSettingsSection(e.state.section);
+    navigationService.setRouteListener((state) => {
+      if (state && state.tab) {
+        setCurrentTab(state.tab);
+        setViewedUsername(state.viewedUsername || null);
+        setDirectMessageTarget(state.targetDM || null);
+        if (state.section) {
+          setSettingsSection(state.section);
         }
       } else {
-        // If popped beyond recorded history, check if on feed or sub-tab
+        // Safe contextual fallback when popped to root or empty state
+        if (viewedUsername) {
+          setViewedUsername(null);
+          return;
+        }
+        if (currentTab === 'settings') {
+          setCurrentTab('profile');
+          return;
+        }
         if (currentTab !== 'feed') {
           setCurrentTab('feed');
           setViewedUsername(null);
@@ -284,17 +307,19 @@ function AppContent() {
           // On feed (root home screen), handle Android double-back exit gracefully
           const now = Date.now();
           if (now - lastBackPressTimeRef.current < 2000) {
-            // User swiped back twice rapidly on feed — allow normal exit
             return;
           }
           lastBackPressTimeRef.current = now;
-          // Re-insert root entry to prevent accidental immediate exit
           window.history.pushState({ tab: 'feed', viewedUsername: null }, '');
           setShowExitToast(true);
           if (exitToastTimeoutRef.current) clearTimeout(exitToastTimeoutRef.current);
           exitToastTimeoutRef.current = setTimeout(() => setShowExitToast(false), 2000);
         }
       }
+    });
+
+    const handlePopState = (e) => {
+      navigationService.handlePopState(e);
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -302,7 +327,7 @@ function AppContent() {
       window.removeEventListener('popstate', handlePopState);
       if (exitToastTimeoutRef.current) clearTimeout(exitToastTimeoutRef.current);
     };
-  }, [isCreatePostOpen, isNotificationsOpen, isProfileMenuOpen, currentTab]);
+  }, [currentTab, viewedUsername]);
 
   // Mobile/PWA Swipe Navigation (Feed <-> Explore <-> Messages <-> Activity <-> Profile)
   useEffect(() => {
@@ -780,7 +805,8 @@ function AppContent() {
   }
 
   return (
-    <div className={`app-viewport ${!user ? 'guest-viewport' : ''}`}>
+    <NavigationProvider navigateToTab={navigateToTab} currentTab={currentTab} viewedUsername={viewedUsername}>
+      <div className={`app-viewport ${!user ? 'guest-viewport' : ''}`}>
       {/* Dynamic Screen Reader Live Region for Announcements (WCAG 2.2 AA) */}
       <div 
         id="a11y-live-region"
@@ -1419,7 +1445,8 @@ function AppContent() {
 
       {/* Phase 5 Delight Feature: Aurora Radiance & Shimmer Celebration (Option 2) */}
       <AuroraCelebrationOverlay />
-    </div>
+      </div>
+    </NavigationProvider>
   );
 }
 
