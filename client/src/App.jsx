@@ -743,8 +743,9 @@ function AppContent() {
       const handleServiceWorkerMessage = (event) => {
         if (event.data?.type === 'PUSH_NOTIFICATION_RECEIVED') {
           const payload = event.data.payload || {};
-          const notifType = payload.data?.type || 'general';
-          if (notifType === 'call') return; // Handled by CallModal
+          const notifType = payload.data?.type || payload.type || (payload.data?.callId || payload.tag?.startsWith('call-') ? 'call' : 'general');
+          const isCall = notifType === 'call' || payload.type === 'call' || Boolean(payload.data?.callId) || Boolean(payload.tag?.startsWith('call-'));
+          if (isCall) return; // Handled exclusively by CallModal incoming call flow
 
           const notifId = payload.data?.id || payload.tag || `sw-${Date.now()}`;
           triggerInAppToast({

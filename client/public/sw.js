@@ -185,8 +185,8 @@ self.addEventListener('push', (event) => {
     };
   }
 
-  const notificationType = payload.data?.type || 'general';
-  const isCall = notificationType === 'call';
+  const notificationType = payload.data?.type || payload.type || (payload.data?.callId || payload.tag?.startsWith('call-') ? 'call' : 'general');
+  const isCall = notificationType === 'call' || payload.type === 'call' || Boolean(payload.data?.callId) || Boolean(payload.tag?.startsWith('call-'));
 
   const title = payload.title || (isCall ? '📞 Incoming Call' : 'VibeGrid Notification');
 
@@ -233,7 +233,7 @@ self.addEventListener('push', (event) => {
       if (isCall && ('actions' in Notification.prototype)) {
         try {
           richOptions.actions = [
-            { action: 'answer', title: '📞 Answer' },
+            { action: 'accept', title: '📞 Accept' },
             { action: 'decline', title: '✕ Decline' }
           ];
         } catch (e) {
@@ -260,10 +260,10 @@ self.addEventListener('notificationclick', (event) => {
 
   const notifData = event.notification.data || {};
   const action = event.action;
-  const isCall = notifData.type === 'call' || Boolean(notifData.callId);
+  const isCall = notifData.type === 'call' || Boolean(notifData.callId) || Boolean(event.notification.tag?.startsWith('call-'));
 
   // If user tapped "Decline" on an incoming call action button from lock screen/notification
-  if (action === 'decline' && notifData.callId) {
+  if ((action === 'decline' || action === 'reject') && notifData.callId) {
     event.waitUntil(
       fetch(`/api/calls/${notifData.callId}/reject`, {
         method: 'POST',
@@ -277,9 +277,9 @@ self.addEventListener('notificationclick', (event) => {
     return;
   }
 
-  // Determine call action: 'answer' if answer button tapped, 'open' if notification tapped
+  // Determine call action: 'accept' if accept/answer button tapped, 'open' if notification tapped
   const callAction = isCall
-    ? (action === 'answer' ? 'answer' : 'open')
+    ? (action === 'accept' || action === 'answer' ? 'accept' : 'open')
     : null;
 
   // Determine destination URL

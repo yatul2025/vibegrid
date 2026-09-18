@@ -20,6 +20,7 @@ router.post('/:id/reject', callController.rejectCall);
 router.post('/:id/end', callController.endCall);
 router.post('/:id/cancel', callController.cancelCall);
 router.post('/:id/signal', callController.sendSignal);
+router.get('/:id', callController.getCallById);
 router.get('/:id/signals', callController.getSignals);
 
 module.exports = router;

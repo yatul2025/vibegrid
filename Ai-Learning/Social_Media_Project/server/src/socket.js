@@ -412,11 +412,19 @@ function initSocket(httpServer) {
             type: 'call',
             data: {
               type: 'call',
-              url: `/#messages?callId=${callId}&partner=${user.username}`,
+              url: `/?callId=${callId}&callType=${callType}&callerId=${userId}&callerName=${encodeURIComponent(user.full_name || user.username)}&callerAvatar=${encodeURIComponent(user.avatar_url || '')}&partner=${encodeURIComponent(user.username)}`,
               callId,
               callType,
               callerId: userId,
-              username: user.username
+              callerName: user.full_name || user.username,
+              callerAvatar: user.avatar_url,
+              username: user.username,
+              caller: {
+                id: userId,
+                username: user.username,
+                full_name: user.full_name,
+                avatar_url: user.avatar_url
+              }
             }
           }).catch((err) => console.warn('[Push Notification Call Error]:', err.message));
         } catch (pushErr) {
@@ -494,8 +502,18 @@ function initSocket(httpServer) {
     // 2. Accept Call
     socket.on('call:accept', async ({ callId, callerId }) => {
       try {
-        activeUserCalls.set(userId, { callId, peerId: callerId });
-        activeUserCalls.set(callerId, { callId, peerId: userId });
+        let effectiveCallerId = callerId ? Number(callerId) : null;
+        if (!effectiveCallerId && callId) {
+          const callRow = await query('SELECT initiator_id FROM calls WHERE id = $1 LIMIT 1', [callId]);
+          if (callRow.rows.length > 0) {
+            effectiveCallerId = Number(callRow.rows[0].initiator_id);
+          }
+        }
+
+        activeUserCalls.set(userId, { callId, peerId: effectiveCallerId });
+        if (effectiveCallerId) {
+          activeUserCalls.set(effectiveCallerId, { callId, peerId: userId });
+        }
 
         await query(
           `UPDATE calls SET status = 'connected' WHERE id = $1`,
@@ -507,12 +525,14 @@ function initSocket(httpServer) {
         );
 
         // Notify caller that call was accepted
-        io.to(`user:${callerId}`).emit('call:accepted', {
-          callId,
-          calleeId: userId
-        });
+        if (effectiveCallerId) {
+          io.to(`user:${effectiveCallerId}`).emit('call:accepted', {
+            callId,
+            calleeId: userId
+          });
+        }
 
-        // Multi-device dismissal: dismiss incoming modal on recipient's other devices
+        // Multi-device dismissal: dismiss incoming modal on recipient's other devices only
         socket.to(`user:${userId}`).emit('call:answered_elsewhere', {
           callId,
           action: 'accepted'
@@ -639,7 +659,7 @@ function initSocket(httpServer) {
   });
 
     // 5. WebRTC Peer-to-Peer SDP Offer / Answer Relay
-    socket.on('signal:offer', ({ targetUserId, sdp, callId, callType, isIceRestart }) => {
+    socket.on('signal:offer', async ({ targetUserId, sdp, callId, callType, isIceRestart }) => {
       if (!targetUserId || !sdp) return;
       socket.to(`user:${targetUserId}`).emit('signal:offer', {
         callerId: userId,
@@ -648,9 +668,18 @@ function initSocket(httpServer) {
         callType,
         isIceRestart: Boolean(isIceRestart)
       });
+      if (callId) {
+        try {
+          await query(
+            `INSERT INTO call_signals (call_id, from_user_id, to_user_id, signal_type, payload)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [callId, userId, Number(targetUserId), 'offer', JSON.stringify({ sdp, callType, isIceRestart: Boolean(isIceRestart) })]
+          );
+        } catch (dbErr) {}
+      }
     });
 
-    socket.on('signal:answer', ({ targetUserId, sdp, callId, isIceRestart }) => {
+    socket.on('signal:answer', async ({ targetUserId, sdp, callId, isIceRestart }) => {
       if (!targetUserId || !sdp) return;
       socket.to(`user:${targetUserId}`).emit('signal:answer', {
         calleeId: userId,
@@ -658,16 +687,34 @@ function initSocket(httpServer) {
         callId,
         isIceRestart: Boolean(isIceRestart)
       });
+      if (callId) {
+        try {
+          await query(
+            `INSERT INTO call_signals (call_id, from_user_id, to_user_id, signal_type, payload)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [callId, userId, Number(targetUserId), 'answer', JSON.stringify({ sdp, isIceRestart: Boolean(isIceRestart) })]
+          );
+        } catch (dbErr) {}
+      }
     });
 
     // 6. WebRTC ICE Candidate Exchange
-    socket.on('signal:ice-candidate', ({ targetUserId, candidate, callId }) => {
+    socket.on('signal:ice-candidate', async ({ targetUserId, candidate, callId }) => {
       if (!targetUserId || !candidate) return;
       socket.to(`user:${targetUserId}`).emit('signal:ice-candidate', {
         fromUserId: userId,
         candidate,
         callId
       });
+      if (callId) {
+        try {
+          await query(
+            `INSERT INTO call_signals (call_id, from_user_id, to_user_id, signal_type, payload)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [callId, userId, Number(targetUserId), 'ice-candidate', JSON.stringify(candidate)]
+          );
+        } catch (dbErr) {}
+      }
     });
 
     // 7. Mid-Call Track State Synchronization (Mute / Camera Toggle)

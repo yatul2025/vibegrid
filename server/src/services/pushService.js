@@ -138,6 +138,7 @@ async function sendPushNotification(userId, notification) {
       icon: notification.icon || '/icons/icon-192.png',
       badge: notification.badge || '/icons/icon-192.png',
       tag: notification.tag || `vg-${type}-${Date.now()}`,
+      type: type,
       data: {
         url: notification.data?.url || '/',
         type: type,

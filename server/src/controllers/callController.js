@@ -249,6 +249,7 @@ const initiateCall = async (req, res, next) => {
     try {
       const pushService = require('../services/pushService');
       pushService.sendPushNotification(calleeId, {
+        senderId: userId,
         title: `📞 Incoming ${callType === 'video' ? 'Video' : 'Audio'} Call`,
         body: `${req.user.full_name || req.user.username} is calling you on VibeGrid...`,
         icon: req.user.avatar_url || '/icons/icon-192.png',
@@ -257,11 +258,19 @@ const initiateCall = async (req, res, next) => {
         type: 'call',
         data: {
           type: 'call',
-          url: `/#messages?callId=${callId}&partner=${req.user.username}`,
+          url: `/?callId=${callId}&callType=${callType}&callerId=${userId}&callerName=${encodeURIComponent(req.user.full_name || req.user.username)}&callerAvatar=${encodeURIComponent(req.user.avatar_url || '')}&partner=${encodeURIComponent(req.user.username)}`,
           callId,
           callType,
           callerId: userId,
-          username: req.user.username
+          callerName: req.user.full_name || req.user.username,
+          callerAvatar: req.user.avatar_url,
+          username: req.user.username,
+          caller: {
+            id: userId,
+            username: req.user.username,
+            full_name: req.user.full_name,
+            avatar_url: req.user.avatar_url
+          }
         }
       }).catch((err) => console.warn('[Push Notification Call Error (HTTP)]:', err.message));
     } catch (pushErr) {
@@ -376,8 +385,6 @@ const acceptCall = async (req, res, next) => {
       const io = req.app.get('io');
       if (io) {
         io.to(`user:${initiatorId}`).emit('call:accepted', { callId, calleeId: userId });
-        // Multi-device synchronization: dismiss ringing on callee's other devices
-        io.to(`user:${userId}`).emit('call:answered_elsewhere', { callId, action: 'accepted' });
       }
     }
 
@@ -421,8 +428,6 @@ const rejectCall = async (req, res, next) => {
       const io = req.app.get('io');
       if (io) {
         io.to(`user:${initiatorId}`).emit('call:rejected', { callId, reason });
-        // Multi-device synchronization: dismiss ringing on callee's other devices
-        io.to(`user:${userId}`).emit('call:answered_elsewhere', { callId, action: 'rejected' });
       }
     }
 
@@ -472,7 +477,6 @@ const endCall = async (req, res, next) => {
       const io = req.app.get('io');
       if (io) {
         io.to(`user:${peerId}`).emit('call:ended', { callId });
-        io.to(`user:${userId}`).emit('call:ended', { callId });
       }
     }
 
@@ -519,7 +523,6 @@ const cancelCall = async (req, res, next) => {
       const io = req.app.get('io');
       if (io) {
         io.to(`user:${targetUserId}`).emit('call:cancelled', { callId, callerId: userId });
-        io.to(`user:${userId}`).emit('call:cancelled', { callId, callerId: userId });
       }
     }
 
@@ -603,11 +606,64 @@ const getSignals = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Get specific call details by ID
+ * @route   GET /api/calls/:id
+ * @access  Private (Authenticated)
+ */
+const getCallById = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const callId = req.params.id;
+
+    const callRes = await query(`
+      SELECT 
+        c.id AS call_id,
+        c.conversation_id,
+        c.initiator_id,
+        c.call_type,
+        c.status AS call_status,
+        c.started_at,
+        u_init.username AS caller_username,
+        u_init.full_name AS caller_full_name,
+        u_init.avatar_url AS caller_avatar_url
+      FROM calls c
+      JOIN users u_init ON c.initiator_id = u_init.id
+      WHERE c.id = $1
+      LIMIT 1
+    `, [callId]);
+
+    if (callRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Call not found' });
+    }
+
+    const row = callRes.rows[0];
+    const call = {
+      callId: row.call_id,
+      conversationId: row.conversation_id,
+      callType: row.call_type,
+      callStatus: row.call_status,
+      isInitiator: row.initiator_id === userId,
+      caller: {
+        id: row.initiator_id,
+        username: row.caller_username,
+        full_name: row.caller_full_name,
+        avatar_url: row.caller_avatar_url
+      }
+    };
+
+    res.status(200).json({ success: true, data: { call } });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getCallHistory,
   getTurnCredentials,
   initiateCall,
   getActiveCall,
+  getCallById,
   acceptCall,
   rejectCall,
   endCall,

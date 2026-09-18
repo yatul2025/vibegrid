@@ -20,6 +20,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import socketService from '../services/socketService';
 import webrtcService from '../services/webrtcService';
+import apiClient from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
 // ============================================================================
@@ -299,14 +300,23 @@ export default function CallModal() {
         return;
       }
 
-      // Check with backend to confirm call is still active/ringing
+      // Check with backend to confirm call is still active/ringing/connected
       let activeCallData = null;
       try {
         const activeRes = await apiClient.get('/calls/active');
         if (activeRes.success && activeRes.data?.activeCall) {
           const ac = activeRes.data.activeCall;
-          if (String(ac.callId) === targetCallId && (ac.callStatus === 'initiated' || ac.callStatus === 'ringing')) {
+          if (String(ac.callId) === targetCallId && (ac.callStatus === 'initiated' || ac.callStatus === 'ringing' || ac.callStatus === 'connected')) {
             activeCallData = ac;
+          }
+        }
+        if (!activeCallData) {
+          const callRes = await apiClient.get(`/calls/${targetCallId}`);
+          if (callRes.success && callRes.data?.call) {
+            const c = callRes.data.call;
+            if (c.callStatus === 'initiated' || c.callStatus === 'ringing' || c.callStatus === 'connected') {
+              activeCallData = c;
+            }
           }
         }
       } catch (e) {
@@ -332,9 +342,10 @@ export default function CallModal() {
       setCallData(restoredCall);
       callDataRef.current = restoredCall;
 
-      if (action === 'answer') {
+      if (action === 'accept' || action === 'answer') {
         // One-tap Answer from notification
         console.log('📞 [CallModal] Auto-answering restored call as requested by notification action');
+        clearAllCallTimers();
         stopRingtone();
         setCallState('connected');
         setCallSubState('connecting');
@@ -347,6 +358,19 @@ export default function CallModal() {
           }
         } catch (e) {
           console.warn('Pre-acquiring callee media error:', e.message);
+        }
+
+        // Wait for socket connection if currently connecting
+        const s = socketService.getSocket();
+        if (s && !socketService.isConnected()) {
+          console.log('⏳ [CallModal] Waiting for socket connection before emitting call:accept...');
+          await new Promise((resolve) => {
+            const timer = setTimeout(resolve, 1200);
+            s.once('connect', () => {
+              clearTimeout(timer);
+              resolve();
+            });
+          });
         }
 
         socketService.emit('call:accept', {
@@ -633,6 +657,14 @@ export default function CallModal() {
     // 1. Incoming Call Event
     const handleIncomingCall = (data) => {
       console.log('📞 [Socket] Incoming call received:', data);
+      if (
+        callDataRef.current?.callId &&
+        String(callDataRef.current.callId) === String(data.callId) &&
+        (callState === 'connected' || callSubState === 'connecting')
+      ) {
+        console.log('📞 [CallModal] Ignoring incoming call event for already connected call');
+        return;
+      }
       clearAllCallTimers();
       setCallData({
         callId: data.callId,
@@ -682,6 +714,15 @@ export default function CallModal() {
     // 1.3 Callee answered or rejected on another device/tab
     const handleCallAnsweredElsewhere = (data) => {
       console.log('📱 [Socket] Call handled on another device:', data);
+      if (
+        data?.callId &&
+        callDataRef.current?.callId &&
+        String(data.callId) === String(callDataRef.current.callId) &&
+        (callState === 'connected' || callSubState === 'connecting')
+      ) {
+        console.log('📱 [CallModal] Ignoring answered_elsewhere because this device is currently the active endpoint');
+        return;
+      }
       stopAllMedia();
       setCallState(null);
       setCallData(null);
@@ -1077,9 +1118,11 @@ export default function CallModal() {
     callState === 'connected' &&
     (connectionStatus === 'connected' || connectionStatus === 'completed');
 
-  // Window unload / pagehide listeners to stop camera if tab is closed or navigated
+  // Window unload listener to stop camera if tab is closed or navigated
   useEffect(() => {
-    const handleUnload = () => {
+    const handleUnload = (event) => {
+      // Do not abort call during mobile backgrounding / pagehide / visibility transitions
+      if (document.visibilityState === 'hidden' && event?.type === 'pagehide') return;
       stopAllMedia();
       if (callData?.callId && callData?.peer?.id) {
         socketService.emit('call:end', {
@@ -1090,10 +1133,8 @@ export default function CallModal() {
     };
 
     window.addEventListener('beforeunload', handleUnload);
-    window.addEventListener('pagehide', handleUnload);
     return () => {
       window.removeEventListener('beforeunload', handleUnload);
-      window.removeEventListener('pagehide', handleUnload);
     };
   }, [callData]);
 
@@ -1241,8 +1282,10 @@ export default function CallModal() {
   // Action Handlers
   // ==========================================================================
   const handleAcceptCall = async () => {
+    clearAllCallTimers();
     stopRingtone();
     setCallState('connected');
+    setCallSubState('connecting');
 
     // Pre-acquire callee media so local camera/mic is active immediately
     try {
@@ -1255,9 +1298,20 @@ export default function CallModal() {
       console.warn('Pre-acquiring callee media error:', e.message);
     }
 
+    const s = socketService.getSocket();
+    if (s && !socketService.isConnected()) {
+      await new Promise((resolve) => {
+        const timer = setTimeout(resolve, 1000);
+        s.once('connect', () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+
     socketService.emit('call:accept', {
-      callId: callData.callId,
-      callerId: callData.peer.id
+      callId: callData?.callId,
+      callerId: callData?.peer?.id
     });
   };
 
