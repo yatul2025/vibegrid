@@ -266,6 +266,7 @@ export async function getPushDiagnostics() {
   let swScope = null;
   let activeSub = null;
   let backendStatus = null;
+  let cacheVersion = null;
 
   if (supported) {
     try {
@@ -279,12 +280,14 @@ export async function getPushDiagnostics() {
       console.warn('[Diagnostics] SW inspection error:', e);
     }
 
-    let cacheVersion = null;
     try {
-      if ('caches' in window) {
+      if (typeof window !== 'undefined' && 'caches' in window) {
         const cacheKeys = await caches.keys();
-        const pwaKey = cacheKeys.find((k) => k.startsWith('vibegrid-pwa-'));
-        if (pwaKey) cacheVersion = pwaKey;
+        const pwaKeys = cacheKeys.filter((k) => k.startsWith('vibegrid-pwa-'));
+        if (pwaKeys.length > 0) {
+          pwaKeys.sort();
+          cacheVersion = pwaKeys[pwaKeys.length - 1];
+        }
       }
     } catch (e) {}
 
