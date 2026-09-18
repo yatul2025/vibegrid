@@ -1651,6 +1651,25 @@ const deleteAccount = async (req, res, next) => {
   }
 };
 
+/**
+ * Mark first-login / permission onboarding complete
+ * Route: POST /api/users/onboarding-complete
+ */
+const completeOnboarding = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    await query('UPDATE users SET has_completed_onboarding = TRUE WHERE id = $1', [userId]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Onboarding completed successfully.'
+    });
+  } catch (error) {
+    console.error('[Complete Onboarding Error]', error);
+    next(error);
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
@@ -1673,5 +1692,6 @@ module.exports = {
   getNotificationSettings,
   updateNotificationSettings,
   deactivateAccount,
-  deleteAccount
+  deleteAccount,
+  completeOnboarding
 };

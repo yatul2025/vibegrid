@@ -193,6 +193,9 @@ const testConnection = async () => {
         ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_calls BOOLEAN DEFAULT TRUE;
         UPDATE users SET notif_calls = TRUE WHERE notif_calls IS NULL;
 
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS has_completed_onboarding BOOLEAN DEFAULT TRUE;
+        UPDATE users SET has_completed_onboarding = TRUE WHERE has_completed_onboarding IS NULL;
+
         ALTER TABLE users ADD COLUMN IF NOT EXISTS test INTEGER DEFAULT 0;
         UPDATE users SET test = 1 WHERE id IN (1, 2, 3, 4);
         UPDATE users SET test = 0 WHERE id NOT IN (1, 2, 3, 4);

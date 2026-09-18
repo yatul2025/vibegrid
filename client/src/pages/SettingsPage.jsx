@@ -3058,6 +3058,18 @@ export default function SettingsPage({
                       >
                         {loadingDiagnostics ? 'Inspecting...' : '🔍 Push Diagnostics & Setup'}
                       </button>
+
+                      <button
+                        type="button"
+                        className="btn-secondary btn-sm pwa-recheck-permissions-btn"
+                        onClick={() => {
+                          window.dispatchEvent(new CustomEvent('vibegrid:open-permission-setup'));
+                        }}
+                        data-testid="recheck-permissions-btn"
+                        title="Review or re-run permission and push subscription setup"
+                      >
+                        🛡️ Re-check & Setup Permissions
+                      </button>
                     </div>
                   </div>
 

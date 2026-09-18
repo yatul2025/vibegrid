@@ -21,8 +21,10 @@ import VibiMascotGreeting from './components/VibiMascotGreeting';
 import ReturningUserWelcomeDrop from './components/ReturningUserWelcomeDrop';
 import AuroraCelebrationOverlay, { triggerCelebration } from './components/AuroraCelebrationOverlay';
 import NetworkStatusPill from './components/NetworkStatusPill';
+import PermissionOnboardingModal from './components/PermissionOnboardingModal';
 import soundFx from './services/soundFxService';
 import navigationService from './services/navigationService';
+import permissionService from './services/permissionService';
 import { NavigationProvider } from './context/NavigationContext';
 import {
   Home,
@@ -44,9 +46,11 @@ import {
 } from 'lucide-react';
 
 function AppContent() {
-  const { user, loading, logout, isDemoMode, authModalState, closeAuthModal, guardDemoAction } = useAuth();
+  const { user, loading, logout, isDemoMode, authModalState, closeAuthModal, guardDemoAction, completeOnboarding } = useAuth();
   const { isInstallable, isInstalled, isOffline, hasUpdate, promptInstall, applyUpdate } = usePWA();
   const [authPageTab, setAuthPageTab] = useState('login');
+  const [showPermissionOnboarding, setShowPermissionOnboarding] = useState(false);
+  const [isManualOnboardingRecheck, setIsManualOnboardingRecheck] = useState(false);
   const [currentTab, setCurrentTab] = useState(() => {
     return sessionStorage.getItem('vibegrid_active_tab') || 'feed';
   });
@@ -291,6 +295,51 @@ function AppContent() {
       }, 40);
     }
   }, [isProfileMenuOpen]);
+
+  // Live Permission Onboarding & Cleared-Data Validation
+  useEffect(() => {
+    let isMounted = true;
+    if (user && user.id && !isDemoMode) {
+      permissionService.shouldShowPermissionOnboarding(user).then((shouldShow) => {
+        if (isMounted && shouldShow) {
+          setShowPermissionOnboarding(true);
+          setIsManualOnboardingRecheck(false);
+        }
+      });
+    } else {
+      setShowPermissionOnboarding(false);
+    }
+    return () => { isMounted = false; };
+  }, [user?.id, user?.has_completed_onboarding, isDemoMode]);
+
+  // Listen for manual permission re-check trigger from Settings
+  useEffect(() => {
+    const handleOpenPermissionSetup = () => {
+      setIsManualOnboardingRecheck(true);
+      setShowPermissionOnboarding(true);
+    };
+    window.addEventListener('vibegrid:open-permission-setup', handleOpenPermissionSetup);
+    return () => {
+      window.removeEventListener('vibegrid:open-permission-setup', handleOpenPermissionSetup);
+    };
+  }, []);
+
+  // Back interceptor for permission onboarding modal
+  useEffect(() => {
+    if (showPermissionOnboarding) {
+      return navigationService.registerBackInterceptor('permission_onboarding', () => {
+        if (isManualOnboardingRecheck) {
+          setShowPermissionOnboarding(false);
+          return true;
+        }
+        if (user?.id) {
+          permissionService.dismissOnboardingForSession(user.id);
+        }
+        setShowPermissionOnboarding(false);
+        return true;
+      }, 25);
+    }
+  }, [showPermissionOnboarding, isManualOnboardingRecheck, user?.id]);
 
   // Initialize and handle browser back / popstate navigation
   useEffect(() => {
@@ -1585,6 +1634,23 @@ function AppContent() {
 
       {/* Phase 5 Delight Feature: Aurora Radiance & Shimmer Celebration (Option 2) */}
       <AuroraCelebrationOverlay />
+
+      {/* New User & Cleared-Data Permission Onboarding Modal */}
+      {showPermissionOnboarding && user && (
+        <PermissionOnboardingModal
+          user={user}
+          isOpen={true}
+          isManualRecheck={isManualOnboardingRecheck}
+          onClose={() => {
+            if (user?.id) permissionService.dismissOnboardingForSession(user.id);
+            setShowPermissionOnboarding(false);
+          }}
+          onComplete={() => {
+            if (completeOnboarding) completeOnboarding();
+            setShowPermissionOnboarding(false);
+          }}
+        />
+      )}
       </div>
     </NavigationProvider>
   );

@@ -32,7 +32,8 @@ const {
   getNotificationSettings,
   updateNotificationSettings,
   deactivateAccount,
-  deleteAccount
+  deleteAccount,
+  completeOnboarding
 } = require('../controllers/userController');
 const { toggleFollow, getFollowers, getFollowing } = require('../controllers/followController');
 const { protect, optionalAuth } = require('../middlewares/authMiddleware');
@@ -193,6 +194,9 @@ router.post('/deactivate', protect, deactivationLimiter, validateDeactivateAccou
 
 // DELETE /api/users/account — Permanently delete user account and all data
 router.delete('/account', protect, accountDeletionLimiter, validateDeleteAccount, deleteAccount);
+
+// POST /api/users/onboarding-complete — Mark permission onboarding complete (Protected)
+router.post('/onboarding-complete', protect, completeOnboarding);
 
 // GET /api/users/:username — Get public profile and counts (Optional Auth for follow state)
 router.get('/:username', optionalAuth, getProfile);

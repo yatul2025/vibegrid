@@ -65,7 +65,7 @@ const protect = async (req, res, next) => {
       const userResult = await query(
         `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
                 date_of_birth, gender, is_email_verified, is_phone_verified, is_private, is_deactivated, 
-                COALESCE(test, 0) AS test, created_at 
+                COALESCE(test, 0) AS test, COALESCE(has_completed_onboarding, TRUE) AS has_completed_onboarding, created_at 
          FROM users 
          WHERE id = $1 
          LIMIT 1`,
@@ -97,7 +97,7 @@ const protect = async (req, res, next) => {
     const userResult = await query(
       `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
               date_of_birth, gender, is_email_verified, is_phone_verified, is_private, is_deactivated, 
-              COALESCE(test, 0) AS test, token_version, created_at 
+              COALESCE(test, 0) AS test, COALESCE(has_completed_onboarding, TRUE) AS has_completed_onboarding, token_version, created_at 
        FROM users 
        WHERE id = $1 
        LIMIT 1`,

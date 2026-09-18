@@ -175,11 +175,11 @@ const verifyRegisterOtp = async (req, res, next) => {
       });
     }
 
-    // Insert verified user into database with gender and date of birth
+    // Insert verified user into database with gender, date of birth, and has_completed_onboarding = FALSE
     const insertQuery = `
-      INSERT INTO users (username, email, password_hash, full_name, date_of_birth, gender, avatar_url, is_email_verified)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
-      RETURNING id, username, email, full_name, bio, avatar_url, gender, date_of_birth, COALESCE(test, 0) AS test, token_version, created_at
+      INSERT INTO users (username, email, password_hash, full_name, date_of_birth, gender, avatar_url, is_email_verified, has_completed_onboarding)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, FALSE)
+      RETURNING id, username, email, full_name, bio, avatar_url, gender, date_of_birth, COALESCE(test, 0) AS test, COALESCE(has_completed_onboarding, FALSE) AS has_completed_onboarding, token_version, created_at
     `;
     const result = await query(insertQuery, [
       username,
@@ -212,7 +212,8 @@ const verifyRegisterOtp = async (req, res, next) => {
       success: true,
       message: 'Email verified and account created successfully!',
       data: {
-        user: newUser
+        user: newUser,
+        isNewUser: true
       }
     });
   } catch (error) {
@@ -307,7 +308,7 @@ const login = async (req, res, next) => {
 
     // 1. Fetch user by either username OR email (including token_version and is_deactivated)
     const userQuery = `
-      SELECT id, username, email, password_hash, full_name, bio, avatar_url, COALESCE(test, 0) AS test, token_version, is_deactivated, created_at
+      SELECT id, username, email, password_hash, full_name, bio, avatar_url, COALESCE(test, 0) AS test, COALESCE(has_completed_onboarding, TRUE) AS has_completed_onboarding, token_version, is_deactivated, created_at
       FROM users
       WHERE username = $1 OR email = $1
       LIMIT 1
@@ -513,7 +514,7 @@ const verifyLoginOtp = async (req, res, next) => {
     const userRes = await query(
       `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
               date_of_birth, gender, is_email_verified, is_phone_verified, is_private, is_deactivated, 
-              COALESCE(test, 0) AS test, token_version, created_at 
+              COALESCE(test, 0) AS test, COALESCE(has_completed_onboarding, TRUE) AS has_completed_onboarding, token_version, created_at 
        FROM users 
        WHERE id = $1 
        LIMIT 1`,
@@ -713,7 +714,7 @@ const createDemoSession = async (req, res, next) => {
     const userRes = await query(
       `SELECT id, username, email, full_name, bio, avatar_url, website, location, 
               date_of_birth, gender, is_email_verified, is_phone_verified, is_private, 
-              COALESCE(test, 0) AS test, created_at 
+              COALESCE(test, 0) AS test, COALESCE(has_completed_onboarding, TRUE) AS has_completed_onboarding, created_at 
        FROM users 
        WHERE LOWER(username) = LOWER($1) 
        LIMIT 1`,

@@ -11,6 +11,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import apiClient from '../api/client';
 import pushNotificationService from '../services/pushNotificationService';
+import permissionService from '../services/permissionService';
 
 const AuthContext = createContext(null);
 
@@ -360,6 +361,15 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
+  // Complete permission onboarding for current user
+  const completeOnboarding = async () => {
+    if (!user || !user.id) return;
+    try {
+      await permissionService.markOnboardingCompleted(user.id);
+    } catch {}
+    updateUser({ has_completed_onboarding: true });
+  };
+
   const value = {
     user,
     loading,
@@ -379,7 +389,8 @@ export const AuthProvider = ({ children }) => {
     resendRegisterOtp,
     logout,
     checkAuth,
-    updateUser
+    updateUser,
+    completeOnboarding
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
