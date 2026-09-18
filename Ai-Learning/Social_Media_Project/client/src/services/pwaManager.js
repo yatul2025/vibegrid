@@ -86,15 +86,17 @@ export function registerServiceWorker(onUpdateAvailable) {
     // Auto-refresh when new service worker activates so users immediately get UI updates
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       console.log('⚡ [PWA] New service worker took control — checking before refresh');
-      // Never reload if user is answering an incoming call or if call session is active
+      // Never reload if user is answering an incoming call, if call session is active, or if modal is open
       const isCallInProgress =
         (typeof window !== 'undefined' && window.__vg_call_active) ||
         (typeof window !== 'undefined' && window.location.search.includes('callId=')) ||
         (typeof window !== 'undefined' && window.location.hash.includes('callId=')) ||
         (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('vg_active_call'));
 
-      if (isCallInProgress) {
-        console.log('⚡ [PWA] Service worker updated, but call is in progress/restoring — skipping page reload');
+      const isModalOpen = typeof window !== 'undefined' && window.__vg_modal_open;
+
+      if (isCallInProgress || isModalOpen) {
+        console.log('⚡ [PWA] Service worker updated, but call/modal is active — skipping automatic reload');
         return;
       }
 

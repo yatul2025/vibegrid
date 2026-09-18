@@ -695,6 +695,9 @@ function AppContent() {
       // Global real-time message chime & in-app notification toast
       const handleGlobalIncomingMessage = (msg) => {
         if (!msg) return;
+        // Do not display generic unread message toasts or play message chimes for call logs (missed calls, call logs)
+        if (msg.message_type === 'call_log') return;
+
         if (Number(msg.sender_id) !== Number(user.id)) {
           setUnreadMessagesCount((prev) => prev + 1);
           if (currentTabRef.current !== 'messages') {

@@ -318,6 +318,7 @@ export default function SettingsPage({
   const [pushDiagnostics, setPushDiagnostics] = useState(null);
   const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
   const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
+  const modalOpenedAtRef = useRef(0);
 
   // Sound FX Preferences States (Phase 9 Option 6)
   const [soundEnabled, setSoundEnabled] = useState(() => soundFx.isEnabled());
@@ -363,12 +364,18 @@ export default function SettingsPage({
   // Synchronize modal and sub-section state with global navigation coordinator
   useEffect(() => {
     if (showDiagnosticsModal) {
+      if (typeof window !== 'undefined') window.__vg_modal_open = true;
       return navigationService.registerBackInterceptor('settings_diagnostics_modal', () => {
+        if (typeof window !== 'undefined') window.__vg_modal_open = false;
         setShowDiagnosticsModal(false);
         return true;
       }, 20);
+    } else {
+      if (typeof window !== 'undefined' && !showDeactivateModal && !showDeleteModal && !confirmAction) {
+        window.__vg_modal_open = false;
+      }
     }
-  }, [showDiagnosticsModal]);
+  }, [showDiagnosticsModal, showDeactivateModal, showDeleteModal, confirmAction]);
 
   useEffect(() => {
     if (showDeactivateModal) {
@@ -1066,17 +1073,35 @@ export default function SettingsPage({
     }
   };
 
-  const handleLoadDiagnostics = async () => {
+  const handleLoadDiagnostics = async (e) => {
+    if (e) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
     try {
       setLoadingDiagnostics(true);
       const diag = await pushNotificationService.getPushDiagnostics();
       setPushDiagnostics(diag);
+      modalOpenedAtRef.current = Date.now();
+      if (typeof window !== 'undefined') window.__vg_modal_open = true;
       setShowDiagnosticsModal(true);
     } catch (err) {
       alert('Failed to load push diagnostics: ' + err.message);
     } finally {
       setLoadingDiagnostics(false);
     }
+  };
+
+  const handleCloseDiagnosticsModal = (e) => {
+    if (e) {
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
+    // Ignore clicks that fire within 400ms of opening to eliminate mobile ghost clicks
+    if (Date.now() - modalOpenedAtRef.current < 400) {
+      return;
+    }
+    if (typeof window !== 'undefined') window.__vg_modal_open = false;
+    setShowDiagnosticsModal(false);
   };
 
   // 7. Deactivation & Deletion Handlers
@@ -3445,11 +3470,31 @@ export default function SettingsPage({
 
       {/* Web Push Diagnostics Modal */}
       {showDiagnosticsModal && pushDiagnostics && (
-        <div className="modal-backdrop" onClick={() => setShowDiagnosticsModal(false)}>
-          <div className="diagnostics-modal-card" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="modal-backdrop diagnostics-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCloseDiagnosticsModal(e);
+            }
+          }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="modal-card diagnostics-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
             <div className="modal-header">
               <h3>🔍 Web Push Diagnostics & Setup</h3>
-              <button type="button" className="modal-close-btn" onClick={() => setShowDiagnosticsModal(false)}>✕</button>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={handleCloseDiagnosticsModal}
+                aria-label="Close Diagnostics"
+              >
+                ✕
+              </button>
             </div>
             <div className="diagnostics-list">
               <div className="diagnostics-row">
@@ -3482,7 +3527,9 @@ export default function SettingsPage({
               </div>
               <div className="diagnostics-row">
                 <span className="diagnostics-label">PWA Cache Version:</span>
-                <span className="diagnostics-value">vibegrid-pwa-v52</span>
+                <span className="diagnostics-value">
+                  {pushDiagnostics.serviceWorker?.cacheVersion || 'vibegrid-pwa-v57'}
+                </span>
               </div>
               <div className="diagnostics-row">
                 <span className="diagnostics-label">Platform Notes</span>
@@ -3508,7 +3555,13 @@ export default function SettingsPage({
               >
                 {testPushLoading ? 'Sending...' : '🚀 Send Test Notification'}
               </button>
-              <button type="button" className="btn-secondary btn-sm" onClick={() => setShowDiagnosticsModal(false)}>Close</button>
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={handleCloseDiagnosticsModal}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

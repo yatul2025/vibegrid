@@ -254,6 +254,22 @@ export default function CallModal() {
   const durationTimerRef = useRef(null);
   const callDataRef = useRef(callData);
   callDataRef.current = callData;
+  const callStateRef = useRef(callState);
+  callStateRef.current = callState;
+  const callSubStateRef = useRef(callSubState);
+  callSubStateRef.current = callSubState;
+
+  // Track active call state on global window object for PWA lifecycle coordination
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.__vg_call_active = Boolean(callState);
+      if (callState) {
+        try { sessionStorage.setItem('vg_active_call', '1'); } catch {}
+      } else {
+        try { sessionStorage.removeItem('vg_active_call'); } catch {}
+      }
+    }
+  }, [callState]);
 
   // Unmount cleanup to guarantee zero audio or media leaks
   useEffect(() => {
@@ -660,7 +676,7 @@ export default function CallModal() {
       if (
         callDataRef.current?.callId &&
         String(callDataRef.current.callId) === String(data.callId) &&
-        (callState === 'connected' || callSubState === 'connecting')
+        (callStateRef.current === 'connected' || callSubStateRef.current === 'connecting' || callSubStateRef.current === 'connected')
       ) {
         console.log('📞 [CallModal] Ignoring incoming call event for already connected call');
         return;
@@ -681,8 +697,9 @@ export default function CallModal() {
         socketService.sendCallRinging(data.callId, data.caller.id);
       }
 
-      // Auto dismiss after 40 seconds if unhandled
+      // Auto dismiss if caller hangs up or recipient does not answer within 40s
       incomingTimeoutRef.current = setTimeout(() => {
+        console.log('⏰ [CallModal] Incoming call timed out (40s). Declining with timeout.');
         stopAllMedia();
         if (data.callId) {
           socketService.emit('call:reject', {
@@ -696,9 +713,9 @@ export default function CallModal() {
       }, 40000);
     };
 
-    // 1.1 Device Acknowledgement: Callee device signals ringing
-    const handleCallRinging = () => {
-      console.log('🔔 [Socket] Callee device is ringing...');
+    // 1.1 Recipient device delivery acknowledgement
+    const handleCallRinging = (data) => {
+      console.log('🔔 [Socket] Delivery confirmed by callee device, status -> Ringing:', data);
       setCallSubState('ringing');
     };
 
@@ -717,7 +734,7 @@ export default function CallModal() {
         data?.callId &&
         callDataRef.current?.callId &&
         String(data.callId) === String(callDataRef.current.callId) &&
-        (callState === 'connected' || callSubState === 'connecting')
+        (callStateRef.current === 'connected' || callSubStateRef.current === 'connecting' || callSubStateRef.current === 'connected')
       ) {
         console.log('📱 [CallModal] Ignoring answered_elsewhere because this device is currently the active endpoint');
         return;
@@ -1014,6 +1031,12 @@ export default function CallModal() {
           autoDismissTimerRef.current = setTimeout(() => {
             handleEndCall();
           }, 2500);
+          return;
+        }
+        // If peer connection was closed but call is still connecting / waiting for offer/answer,
+        // do not abruptly drop the session if an active call session exists
+        if (callSubStateRef.current === 'connecting' || callSubStateRef.current === 'ringing') {
+          console.warn('⚠️ [CallModal] WebRTC closed during negotiation; waiting for active connection setup');
           return;
         }
         handleEndCall();

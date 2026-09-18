@@ -282,9 +282,15 @@ class WebRTCService {
     this.seenCandidates.clear();
     this.candidateQueue = [];
 
-    // Safely teardown previous peer connection if one exists
+    // Safely teardown previous peer connection if one exists without firing synthetic 'closed' events to UI
     if (this.peerConnection) {
-      try { this.peerConnection.close(); } catch {}
+      try {
+        this.peerConnection.onconnectionstatechange = null;
+        this.peerConnection.oniceconnectionstatechange = null;
+        this.peerConnection.onicecandidate = null;
+        this.peerConnection.ontrack = null;
+        this.peerConnection.close();
+      } catch {}
       this.peerConnection = null;
     }
 

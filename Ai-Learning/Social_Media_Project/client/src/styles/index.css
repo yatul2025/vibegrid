@@ -11562,6 +11562,20 @@ select.form-input option,
   flex-direction: column;
 }
 
+@media (max-width: 600px) {
+  .diagnostics-modal-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    max-height: 88vh;
+    padding: 20px 16px env(safe-area-inset-bottom, 20px);
+  }
+}
+
 .diagnostics-list {
   display: flex;
   flex-direction: column;
