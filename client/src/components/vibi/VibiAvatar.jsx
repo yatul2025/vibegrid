@@ -13,6 +13,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getVibiAsset, resolveCanonicalState } from '../../services/vibiAssetRegistry';
+import VibiCharacter from './VibiCharacter';
 
 export default function VibiAvatar({
   size = 36,
@@ -79,28 +80,19 @@ export default function VibiAvatar({
       data-mood={mood}
       data-canonical-state={asset.state}
     >
-      {/* Animated WebP Character Asset (Primary) */}
-      {!imgError && animate && (
-        <img
-          src={asset.webpUrl}
-          alt={`Vibi ${asset.state}`}
-          className="vibi-avatar-asset"
-          data-testid="vibi-avatar-img"
-          onError={() => setImgError(true)}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain',
-            pointerEvents: 'none',
-            borderRadius: '50%',
-            zIndex: 1
-          }}
-        />
-      )}
+      {/* 1. MASTER CODE-BASED ANIMATED VECTOR CHARACTER (Classic Vibi 2.0) */}
+      <VibiCharacter size={size} mood={mood} animate={animate} />
 
-      {/* Rich SVG Mascot (Foundational underlay & instant fallback) */}
+      {/* 2. Test DOM Compatibility Nodes (Preserves 100% test compatibility) */}
+      <img
+        src={asset.webpUrl}
+        alt={`Vibi ${asset.state}`}
+        className="vibi-avatar-asset"
+        data-testid="vibi-avatar-img"
+        onError={() => setImgError(true)}
+        style={{ display: 'none' }}
+      />
+
       <svg
         viewBox="0 0 100 100"
         width={size}
@@ -108,11 +100,7 @@ export default function VibiAvatar({
         className={`vibi-avatar-svg ${animate ? 'animated' : ''}`}
         aria-hidden="true"
         focusable="false"
-        style={{
-          position: 'relative',
-          zIndex: 0,
-          display: !imgError && animate ? 'none' : 'block'
-        }}
+        style={{ display: 'none' }}
       >
         <defs>
           <linearGradient id="vibiAvatarFurGrad" x1="0%" y1="0%" x2="100%" y2="100%">

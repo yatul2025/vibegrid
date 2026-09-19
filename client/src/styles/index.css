@@ -14624,49 +14624,181 @@ select.form-input option,
 }
 
 .vibi-launcher-fab {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  background: var(--bg-card, #1e293b);
-  border: 1px solid rgba(249, 115, 22, 0.35);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 0 16px rgba(249, 115, 22, 0.25);
-  border-radius: 9999px;
-  padding: 6px 14px 6px 8px;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
   cursor: grab;
-  color: var(--text-primary, #ffffff);
-  font-size: 0.85rem;
-  font-weight: 600;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  color: inherit;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), filter 0.22s ease;
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.35));
   animation: vibiGentleFloat 4s infinite ease-in-out;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vibi-launcher-fab:focus-visible {
+  filter: drop-shadow(0 0 14px rgba(249, 115, 22, 0.8));
 }
 
 .vibi-launcher-fab.elevated {
   cursor: grabbing;
   animation: none !important;
-  transform: scale(1.08) translateY(-4px) !important;
-  border-color: #f97316;
-  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.45), 0 0 28px rgba(249, 115, 22, 0.6);
+  transform: scale(1.12) translateY(-6px) !important;
+  filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 20px rgba(249, 115, 22, 0.6)) !important;
 }
 
 .vibi-launcher-fab:hover:not(.elevated) {
-  transform: translateY(-2px) scale(1.02);
-  border-color: #f97316;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32), 0 0 22px rgba(249, 115, 22, 0.4);
+  transform: translateY(-4px) scale(1.06);
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.42)) drop-shadow(0 0 14px rgba(249, 115, 22, 0.45));
 }
 
 .vibi-launcher-fab:active:not(.elevated) {
-  transform: scale(0.95);
+  transform: scale(0.96);
 }
 
-.vibi-fab-label {
-  letter-spacing: -0.01em;
+/* Master Character Layer Animations */
+.tail-swish {
+  animation: vibiTailSwish 3.5s infinite ease-in-out;
+  transform-origin: 85px 96px;
 }
 
-.vibi-fab-sparkle {
-  font-size: 0.8rem;
-  margin-left: 2px;
+.tail-wag {
+  animation: vibiTailWag 0.55s infinite ease-in-out;
+  transform-origin: 85px 96px;
+}
+
+.body-breathing {
+  animation: vibiBodyBreathing 4s infinite ease-in-out;
+  transform-origin: 70px 114px;
+}
+
+.body-sleeping {
+  animation: vibiBodySleeping 6s infinite ease-in-out;
+  transform-origin: 70px 114px;
+}
+
+.v-emblem-pulse {
+  animation: vibiVEmblemPulse 1.2s infinite ease-in-out;
+}
+
+.head-tilt {
+  animation: vibiHeadTilt 2.2s infinite ease-in-out;
+  transform-origin: 70px 74px;
+}
+
+.head-perk {
+  animation: vibiHeadPerk 2.5s infinite ease-in-out;
+  transform-origin: 70px 74px;
+}
+
+.mouth-talking {
+  animation: vibiMouthTalking 0.38s infinite ease-in-out alternate;
+  transform-origin: 70px 62px;
+}
+
+.paws-up {
+  animation: vibiPawsUp 0.8s infinite ease-in-out alternate;
+  transform-origin: 70px 110px;
+}
+
+@keyframes vibiTailSwish {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-6deg);
+  }
+}
+
+@keyframes vibiTailWag {
+  0%, 100% {
+    transform: rotate(-8deg);
+  }
+  50% {
+    transform: rotate(10deg);
+  }
+}
+
+@keyframes vibiBodyBreathing {
+  0%, 100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(1.025);
+  }
+}
+
+@keyframes vibiBodySleeping {
+  0%, 100% {
+    transform: scaleY(1) translateY(0);
+  }
+  50% {
+    transform: scaleY(1.03) translateY(-1px);
+  }
+}
+
+@keyframes vibiVEmblemPulse {
+  0%, 100% {
+    opacity: 0.8;
+    filter: drop-shadow(0 0 2px rgba(249, 115, 22, 0.4));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.95));
+  }
+}
+
+@keyframes vibiHeadTilt {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-4.5deg);
+  }
+}
+
+@keyframes vibiHeadPerk {
+  0%, 100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  50% {
+    transform: rotate(2deg) translateY(-2px);
+  }
+}
+
+@keyframes vibiMouthTalking {
+  0% {
+    transform: scaleY(0.7);
+  }
+  100% {
+    transform: scaleY(1.3);
+  }
+}
+
+@keyframes vibiPawsUp {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-4px);
+  }
+}
+
+.vibi-badge-floating-sleep,
+.vibi-badge-floating-think,
+.vibi-badge-floating-star {
+  position: absolute;
+  top: -4px;
+  right: -2px;
+  font-size: 1rem;
+  font-weight: 700;
+  pointer-events: none;
+  animation: vibiSleepFloat 2.4s infinite ease-in-out;
+  z-index: 5;
 }
 
 /* Character Personality Keyframes */

@@ -235,15 +235,12 @@ export default function VibiLauncher() {
         style={{ pointerEvents: isDragging ? 'none' : 'auto' }}
       >
         <VibiAvatar
-          size={isMinimized ? 32 : 38}
+          size={isMinimized ? 44 : 64}
           mood={activeMood}
           withStatusDot={false}
           isOnline={true}
         />
-        <span className="vibi-fab-label">{getActionLabel()}</span>
-        <span className="vibi-fab-sparkle" aria-hidden="true">
-          {getSparkleIcon()}
-        </span>
+        <span className="sr-only vibi-fab-label">{getActionLabel()}</span>
       </button>
     </aside>
   );
