@@ -56,6 +56,13 @@ export default function VibiLauncher() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // React with curious emotion when proactive suggestion appears
+  useEffect(() => {
+    if (activeSuggestion && !isOpen && !isDragging) {
+      vibiCharacterService.curious({ preferences });
+    }
+  }, [activeSuggestion?.id, isOpen, isDragging]);
+
   // Hide if master switch is OFF or floating button option is OFF
   if (!isEnabled || !preferences.floatingButton) {
     return null;
@@ -219,8 +226,14 @@ export default function VibiLauncher() {
       {!isOpen && activeSuggestion && !isDragging && (
         <VibiProactiveHint
           suggestion={activeSuggestion}
-          onAction={acceptSuggestion}
-          onDismiss={dismissSuggestion}
+          onAction={(sug) => {
+            vibiCharacterService.happy({ preferences });
+            acceptSuggestion(sug);
+          }}
+          onDismiss={(id) => {
+            vibiCharacterService.idle();
+            dismissSuggestion(id);
+          }}
         />
       )}
 

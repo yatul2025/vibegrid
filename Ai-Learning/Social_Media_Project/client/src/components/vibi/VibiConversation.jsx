@@ -112,7 +112,7 @@ export default function VibiConversation() {
       status: 'complete'
     });
 
-    vibiCharacterService.listen({ preferences });
+    vibiCharacterService.think({ preferences });
     if (setIsTyping) setIsTyping(true);
 
     if (responseTimerRef.current) {
@@ -135,6 +135,8 @@ export default function VibiConversation() {
           });
           if (isMountedRef.current && setIsTyping) setIsTyping(false);
 
+          vibiCharacterService.responding({ preferences });
+
           vibiIntentEngine.executeIntent(
             intent,
             context,
@@ -143,7 +145,7 @@ export default function VibiConversation() {
             },
             user?.username
           ).then((res) => {
-            vibiCharacterService.celebrate({ preferences });
+            vibiCharacterService.proud({ preferences });
             if (res && isMountedRef.current && typeof updateMessage === 'function') {
               updateMessage(msgObj.id, { actionResult: res });
             }
@@ -154,6 +156,8 @@ export default function VibiConversation() {
           return;
         } else {
           // Complex / Conversational query: Route to AI Engine
+          vibiCharacterService.responding({ preferences });
+
           const aiResult = await vibiAiClient.sendChatMessage(prompt, {
             ...context,
             user
@@ -174,7 +178,16 @@ export default function VibiConversation() {
           }
 
           if (!isMountedRef.current) return;
-          vibiCharacterService.happy({ preferences });
+          
+          // Detect if AI gave an unsure / unhandled answer
+          const replyLower = (aiResult.replyText || '').toLowerCase();
+          const isUnsure = replyLower.includes("i'm not sure") || replyLower.includes("don't understand") || replyLower.includes("couldn't find");
+          if (isUnsure) {
+            vibiCharacterService.confused({ preferences });
+          } else {
+            vibiCharacterService.happy({ preferences });
+          }
+
           addMessage({
             sender: 'vibi',
             text: aiResult.replyText,

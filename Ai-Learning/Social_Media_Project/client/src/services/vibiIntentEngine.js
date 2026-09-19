@@ -13,6 +13,7 @@
 import vibiActionRegistry from './vibiActionRegistry';
 import vibiOutputValidator from './vibiOutputValidator';
 import vibiAuditLog from './vibiAuditLog';
+import vibiCharacterService from './vibiCharacterService';
 
 export class VibiIntentEngine {
   /**
@@ -405,6 +406,12 @@ export class VibiIntentEngine {
         username
       });
 
+      if (result.success) {
+        vibiCharacterService.success();
+      } else {
+        vibiCharacterService.error();
+      }
+
       return {
         success: Boolean(result.success),
         message: replyText || result.message,
@@ -413,6 +420,8 @@ export class VibiIntentEngine {
         replyText: result.explanation ? `${replyText}\n\n${result.explanation}` : (replyText || result.summary || result.message)
       };
     } catch (err) {
+      vibiCharacterService.error();
+
       vibiAuditLog.logAction({
         actionId,
         category: action.category,
