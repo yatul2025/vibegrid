@@ -237,7 +237,7 @@ export default function VibiLauncher() {
         <VibiAvatar
           size={isMinimized ? 32 : 38}
           mood={activeMood}
-          withStatusDot={true}
+          withStatusDot={false}
           isOnline={true}
         />
         <span className="vibi-fab-label">{getActionLabel()}</span>

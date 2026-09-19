@@ -111,8 +111,7 @@ export default function VibiAvatar({
         style={{
           position: 'relative',
           zIndex: 0,
-          opacity: !imgError && animate ? 0.05 : 1, // stays in DOM for tests and layout stability
-          transition: 'opacity 0.2s ease'
+          display: !imgError && animate ? 'none' : 'block'
         }}
       >
         <defs>
