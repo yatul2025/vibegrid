@@ -11,6 +11,7 @@
  */
 
 import apiClient from '../api/client';
+import { PWA_CACHE_VERSION } from '../constants/appVersion';
 
 /**
  * Converts a base64 URL-safe VAPID key to a Uint8Array required by pushManager.subscribe()
@@ -319,7 +320,7 @@ export async function getPushDiagnostics() {
     serviceWorker: {
       registered: swRegistered,
       scope: swScope,
-      cacheVersion: cacheVersion || 'vibegrid-pwa-v59'
+      cacheVersion: cacheVersion || PWA_CACHE_VERSION
     },
     subscription: activeSub ? {
       endpoint: activeSub.endpoint,

@@ -29,6 +29,7 @@ import soundFx, { SOUND_PACKS } from '../services/soundFxService';
 import navigationService from '../services/navigationService';
 import { useVibiAssistant } from '../context/VibiAssistantContext';
 import { SettingsSkeleton, SkeletonLine, SkeletonCircle, SkeletonPill } from '../components/common/Skeleton';
+import { APP_VERSION, PWA_CACHE_VERSION } from '../constants/appVersion';
 import {
   User,
   Mail,
@@ -1376,6 +1377,20 @@ export default function SettingsPage({
                   <span>🚪</span>
                   <span>Log Out</span>
                 </button>
+                <div
+                  className="settings-app-version-badge"
+                  data-testid="settings-app-version"
+                  style={{
+                    fontSize: '0.74rem',
+                    color: 'var(--text-secondary, #94a3b8)',
+                    marginTop: '10px',
+                    textAlign: 'center',
+                    fontWeight: 500,
+                    opacity: 0.85
+                  }}
+                >
+                  VibeGrid {APP_VERSION} ({PWA_CACHE_VERSION})
+                </div>
               </div>
             </aside>
           )}
@@ -3770,7 +3785,7 @@ export default function SettingsPage({
               <div className="diagnostics-row">
                 <span className="diagnostics-label">PWA Cache Version:</span>
                 <span className="diagnostics-value">
-                  {pushDiagnostics.serviceWorker?.cacheVersion || 'vibegrid-pwa-v59'}
+                  {pushDiagnostics.serviceWorker?.cacheVersion || PWA_CACHE_VERSION}
                 </span>
               </div>
               <div className="diagnostics-row">
