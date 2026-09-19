@@ -12,7 +12,7 @@ import { useVibiAssistant } from '../../context/VibiAssistantContext';
 import VibiAvatar from './VibiAvatar';
 
 export default function VibiHeaderEntry({ isMobile = false, className = '' }) {
-  const { isEnabled, isOpen, toggleAssistant } = useVibiAssistant();
+  const { isEnabled, isOpen, toggleAssistant, characterState = 'idle' } = useVibiAssistant();
 
   if (!isEnabled) {
     return null;
@@ -28,7 +28,7 @@ export default function VibiHeaderEntry({ isMobile = false, className = '' }) {
       data-testid="vibi-header-entry"
     >
       <div className="vibi-header-icon-wrapper">
-        <VibiAvatar size={isMobile ? 24 : 26} withStatusDot={false} />
+        <VibiAvatar size={isMobile ? 24 : 26} mood={characterState} withStatusDot={false} />
         <span className="vibi-sparkle-pip" aria-hidden="true">✨</span>
       </div>
       {!isMobile && <span className="vibi-header-label">Vibi</span>}

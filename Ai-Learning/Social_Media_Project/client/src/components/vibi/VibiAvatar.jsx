@@ -52,12 +52,95 @@ export default function VibiAvatar({
   }, [animate, mood]);
 
   // Normalize mood state
-  const isHappy = mood === 'happy' || mood === 'celebrate' || mood === 'success' || mood === 'celebrating' || mood === 'happy_response';
-  const isThinking = mood === 'thinking' || mood === 'typing_processing';
-  const isListening = mood === 'listening' || mood === 'listening_speaking';
-  const isSleepy = mood === 'sleepy' || mood === 'sleeping' || mood === 'sleeping_alt';
-  const isConcerned = mood === 'error' || mood === 'question';
-  const isWaving = mood === 'welcome' || mood === 'wake_up' || mood === 'peek_and_wave';
+  const moodNormalized = String(mood || 'idle').toLowerCase().trim();
+  const isHappy = ['happy', 'celebrate', 'celebrating', 'success', 'happy_response'].includes(moodNormalized);
+  const isExcited = ['excited'].includes(moodNormalized);
+  const isThinking = ['thinking', 'typing', 'typing_processing'].includes(moodNormalized);
+  const isListening = ['listening', 'listening_speaking'].includes(moodNormalized);
+  const isResponding = ['responding', 'responding_talking'].includes(moodNormalized);
+  const isSleepy = ['sleepy', 'sleeping', 'sleeping_alt'].includes(moodNormalized);
+  const isConcerned = ['concerned', 'question'].includes(moodNormalized);
+  const isCurious = ['curious', 'head_tilt'].includes(moodNormalized);
+  const isConfused = moodNormalized === 'confused';
+  const isSurprised = moodNormalized === 'surprised';
+  const isSad = moodNormalized === 'sad';
+  const isFrustrated = moodNormalized === 'frustrated';
+  const isProud = moodNormalized === 'proud';
+  const isWaving = ['welcome', 'wake_up', 'wake_up_alt', 'peek_and_wave'].includes(moodNormalized);
+  const isAttentive = ['attentive', 'focused', 'new_message', 'missed_call', 'look_around'].includes(moodNormalized);
+  const isPlayful = ['playful', 'gentle_bounce', 'bounce', 'tail_wag'].includes(moodNormalized);
+  const isError = moodNormalized === 'error';
+
+  // Determine floating emotion badge
+  let emotionBadge = null;
+  let badgeColor = '#FFA000';
+  let badgeAnim = 'vibiFloatSpin 2s infinite ease-in-out';
+
+  if (isThinking) {
+    emotionBadge = '💡';
+    badgeColor = '#00E5FF';
+    badgeAnim = 'vibiThinkingPulse 2s infinite ease-in-out';
+  } else if (isListening) {
+    emotionBadge = '🎧';
+    badgeColor = '#00E5FF';
+    badgeAnim = 'vibiListeningTilt 2s infinite ease-in-out';
+  } else if (isResponding) {
+    emotionBadge = '💬';
+    badgeColor = '#00E5FF';
+    badgeAnim = 'vibiRespondingNod 1.2s infinite ease-in-out';
+  } else if (isExcited) {
+    emotionBadge = '🎉';
+    badgeColor = '#FBBF24';
+    badgeAnim = 'vibiStarBounce 1.2s infinite ease-in-out';
+  } else if (isHappy) {
+    emotionBadge = '✨';
+    badgeColor = '#FBBF24';
+    badgeAnim = 'vibiStarBounce 1.2s infinite ease-in-out';
+  } else if (isCurious || isConfused) {
+    emotionBadge = '❓';
+    badgeColor = '#818CF8';
+    badgeAnim = 'vibiCuriousTilt 2.2s infinite ease-in-out';
+  } else if (isSurprised) {
+    emotionBadge = '❗';
+    badgeColor = '#FBBF24';
+    badgeAnim = 'vibiSurprisedPop 0.8s infinite ease-in-out';
+  } else if (isConcerned) {
+    emotionBadge = '💧';
+    badgeColor = '#F59E0B';
+    badgeAnim = 'vibiConcernedLean 2.6s infinite ease-in-out';
+  } else if (isSad) {
+    emotionBadge = '🌧️';
+    badgeColor = '#F59E0B';
+    badgeAnim = 'vibiSadDroop 3s infinite ease-in-out';
+  } else if (isFrustrated) {
+    emotionBadge = '💢';
+    badgeColor = '#EF4444';
+    badgeAnim = 'vibiFrustratedShake 1.2s infinite ease-in-out';
+  } else if (isProud) {
+    emotionBadge = '⭐';
+    badgeColor = '#FBBF24';
+    badgeAnim = 'vibiProudChest 2s infinite ease-in-out';
+  } else if (isSleepy) {
+    emotionBadge = 'zZ';
+    badgeColor = '#C084FC';
+    badgeAnim = 'vibiSleepFloat 2.5s infinite ease-in-out';
+  } else if (isWaving) {
+    emotionBadge = '👋';
+    badgeColor = '#FFA000';
+    badgeAnim = 'vibiWelcomeWave 1.6s infinite ease-in-out';
+  } else if (isAttentive) {
+    emotionBadge = '👀';
+    badgeColor = '#00E5FF';
+    badgeAnim = 'vibiAttentiveFocus 1.8s infinite ease-in-out';
+  } else if (isPlayful) {
+    emotionBadge = '🌸';
+    badgeColor = '#FFA000';
+    badgeAnim = 'vibiPlayfulPerk 1.4s infinite ease-in-out';
+  } else if (isError) {
+    emotionBadge = '⚠️';
+    badgeColor = '#EF4444';
+    badgeAnim = 'vibiErrorShiver 0.6s infinite ease-in-out';
+  }
 
   // Resolve WebP asset from registry
   const asset = getVibiAsset(mood);
@@ -228,62 +311,32 @@ export default function VibiAvatar({
         </g>
       </svg>
 
-      {/* Thought Sparkle when Thinking */}
-      {isThinking && (
+      {/* Universal Floating Emotion Badge for all 20 Core Emotions */}
+      {emotionBadge && (
         <span
-          className="vibi-floating-thought-badge"
+          className={`vibi-floating-emotion-badge ${isThinking ? 'vibi-floating-thought-badge' : ''} ${isHappy ? 'vibi-floating-star-badge' : ''} ${isSleepy ? 'vibi-floating-sleep-badge' : ''}`}
           style={{
             position: 'absolute',
-            top: -6,
-            right: -2,
-            fontSize: Math.max(10, Math.round(size * 0.35)),
-            animation: 'vibiFloatSpin 2s infinite ease-in-out',
+            top: -Math.max(8, Math.round(size * 0.16)),
+            right: -Math.max(4, Math.round(size * 0.1)),
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: Math.max(13, Math.round(size * 0.36)),
+            lineHeight: 1,
+            padding: '2px 4px',
+            borderRadius: '9999px',
+            backgroundColor: 'rgba(15, 23, 42, 0.92)',
+            border: `1.5px solid ${badgeColor}`,
+            boxShadow: `0 3px 10px rgba(0, 0, 0, 0.4), 0 0 8px ${badgeColor}66`,
+            animation: animate ? badgeAnim : 'none',
             pointerEvents: 'none',
-            zIndex: 2
+            userSelect: 'none',
+            zIndex: 10
           }}
           aria-hidden="true"
         >
-          💡
-        </span>
-      )}
-
-      {/* Sparkle Star on Celebration / Happy */}
-      {isHappy && (
-        <span
-          className="vibi-floating-star-badge"
-          style={{
-            position: 'absolute',
-            top: -6,
-            right: -3,
-            fontSize: Math.max(10, Math.round(size * 0.35)),
-            animation: 'vibiStarBounce 1.2s infinite ease-in-out',
-            pointerEvents: 'none',
-            zIndex: 2
-          }}
-          aria-hidden="true"
-        >
-          ✨
-        </span>
-      )}
-
-      {/* Floating 'z z' when Sleepy */}
-      {isSleepy && (
-        <span
-          className="vibi-floating-sleep-badge"
-          style={{
-            position: 'absolute',
-            top: -8,
-            right: -2,
-            fontSize: Math.max(9, Math.round(size * 0.3)),
-            fontWeight: 700,
-            color: '#a855f7',
-            animation: 'vibiSleepFloat 2.5s infinite ease-in-out',
-            pointerEvents: 'none',
-            zIndex: 2
-          }}
-          aria-hidden="true"
-        >
-          zZ
+          {emotionBadge}
         </span>
       )}
 

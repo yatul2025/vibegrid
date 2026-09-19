@@ -265,7 +265,7 @@ export default function VibiConversation() {
                   className={`vibi-message-row ${isUser ? 'user-row' : 'vibi-row'}`}
                   data-testid={`vibi-message-${msg.id}`}
                 >
-                  {!isUser && <VibiAvatar size={28} className="vibi-msg-avatar" />}
+                  {!isUser && <VibiAvatar size={28} mood={msg.mood || 'happy'} className="vibi-msg-avatar" />}
                   <div className={`vibi-bubble ${isUser ? 'user-bubble' : 'vibi-bubble'}`}>
                     <p className="vibi-bubble-content">
                       {msg.text}
@@ -273,6 +273,24 @@ export default function VibiConversation() {
                         <span className="vibi-streaming-cursor" aria-hidden="true">▍</span>
                       )}
                     </p>
+
+                    {/* Quick Interactive Actions */}
+                    {msg.actions && msg.actions.length > 0 && (
+                      <VibiActionList
+                        actions={msg.actions}
+                        onAction={(action) => {
+                          handleExecuteAction(action);
+                          vibiCharacterService.proud({ durationMs: 2000, preferences });
+                        }}
+                        onActionComplete={(res) => {
+                          addMessage({
+                            sender: 'vibi',
+                            text: res.message || 'Action executed successfully! 🦊'
+                          });
+                        }}
+                      />
+                    )}
+
                     {msg.action?.id === 'run_diagnostics' && (
                       <VibiTroubleshootingCard
                         diagnosticData={msg.actionResult}
@@ -295,7 +313,7 @@ export default function VibiConversation() {
             {/* Shimmer Skeleton Loading State when isTyping */}
             {isTyping && (
               <div className="vibi-message-row vibi-row loading-row" data-testid="vibi-loading-state">
-                <VibiAvatar size={28} className="vibi-msg-avatar" />
+                <VibiAvatar size={28} mood="thinking" className="vibi-msg-avatar" />
                 <div className="vibi-bubble vibi-bubble vibi-loading-bubble">
                   <div className="vg-skeleton-line shimmer" style={{ width: '140px', height: '12px', marginBottom: '6px' }} />
                   <div className="vg-skeleton-line shimmer" style={{ width: '90px', height: '12px' }} />

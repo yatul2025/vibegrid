@@ -22,7 +22,8 @@ export default function VibiPanel() {
     isOpen,
     isMinimized,
     closeAssistant,
-    minimizeAssistant
+    minimizeAssistant,
+    characterState = 'idle'
   } = useVibiAssistant();
 
   const panelRef = useRef(null);
@@ -84,7 +85,7 @@ export default function VibiPanel() {
         {/* Panel Header */}
         <div className="vibi-panel-header">
           <div className="vibi-panel-header-left">
-            <VibiAvatar size={34} withStatusDot={true} isOnline={true} />
+            <VibiAvatar size={34} mood={characterState} withStatusDot={true} isOnline={true} />
             <div className="vibi-panel-header-info">
               <div className="vibi-panel-title-row">
                 <h2 className="vibi-panel-title">Vibi Assistant</h2>
