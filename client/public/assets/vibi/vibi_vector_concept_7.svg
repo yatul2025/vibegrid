@@ -1,0 +1,17 @@
+<svg viewBox="0 0 200 200" class="w-36 h-36 drop-shadow-xl" xmlns="http://www.w3.org/2000/svg">
+  <path d="M125 130 C160 135 170 95 145 80 C135 95 125 110 120 120 Z" fill="#FF5E00"/>
+  <path d="M145 80 C155 85 160 95 150 100 Z" fill="#F8FAFC"/>
+  <path d="M80 120 Q100 115 120 120 Q125 165 100 168 Q75 165 80 120 Z" fill="#FF5E00"/>
+  <path d="M90 125 Q100 120 110 125 Q115 155 100 160 Q85 155 90 125 Z" fill="#F8FAFC"/>
+  <circle cx="100" cy="75" r="38" fill="#FF5E00"/>
+  <path d="M66 85 C66 98 82 104 100 104 C118 104 134 98 134 85 C125 78 115 85 100 85 C85 85 75 78 66 85 Z" fill="#F8FAFC"/>
+  <path d="M68 60 L45 22 Q58 20 78 45 Z" fill="#FF5E00"/>
+  <path d="M52 24 L45 22 L50 32 Z" fill="#0F172A"/>
+  <path d="M132 60 L155 22 Q142 20 122 45 Z" fill="#FF5E00"/>
+  <path d="M148 24 L155 22 L150 32 Z" fill="#0F172A"/>
+  <circle cx="82" cy="70" r="4" fill="#0F172A"/>
+  <circle cx="118" cy="70" r="4" fill="#0F172A"/>
+  <circle cx="100" cy="88" r="2.5" fill="#0F172A"/>
+  <rect x="85" y="112" width="30" height="6" rx="3" fill="#0F172A"/>
+  <circle cx="100" cy="115" r="2" fill="#FF5E00"/>
+</svg>

@@ -1,0 +1,17 @@
+<svg viewBox="0 0 200 200" class="w-36 h-36 drop-shadow-xl" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="c10-orb" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="40%" stop-color="#FF7B00"/><stop offset="100%" stop-color="#7B1FA2"/></linearGradient>
+    <filter id="c10-glow"><feGaussianBlur stdDeviation="4" result="g"/><feComposite in="SourceGraphic" in2="g" operator="over"/></filter>
+  </defs>
+  <ellipse cx="100" cy="100" rx="65" ry="20" fill="none" stroke="#00F0FF" stroke-width="2" transform="rotate(-25 100 100)" opacity="0.7"/>
+  <ellipse cx="100" cy="100" rx="55" ry="16" fill="none" stroke="#FF5400" stroke-width="1.5" transform="rotate(35 100 100)" opacity="0.6"/>
+  <polygon points="65,65 42,20 80,45" fill="#FF5400" filter="url(#c10-glow)"/>
+  <polygon points="56,35 48,22 62,32" fill="#00F0FF"/>
+  <polygon points="135,65 158,20 120,45" fill="#FF5400" filter="url(#c10-glow)"/>
+  <polygon points="144,35 152,22 138,32" fill="#00F0FF"/>
+  <circle cx="100" cy="100" r="46" fill="url(#c10-orb)"/>
+  <rect x="70" y="82" width="60" height="34" rx="17" fill="#0B0F19" stroke="#1E293B" stroke-width="2"/>
+  <path d="M78 98 Q86 88 94 98" stroke="#00F0FF" stroke-width="3.5" fill="none" stroke-linecap="round" filter="url(#c10-glow)"/>
+  <path d="M106 98 Q114 88 122 98" stroke="#00F0FF" stroke-width="3.5" fill="none" stroke-linecap="round" filter="url(#c10-glow)"/>
+  <polygon points="98,105 102,105 100,108" fill="#FF7B00"/>
+</svg>

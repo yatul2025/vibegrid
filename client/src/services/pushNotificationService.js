@@ -319,7 +319,7 @@ export async function getPushDiagnostics() {
     serviceWorker: {
       registered: swRegistered,
       scope: swScope,
-      cacheVersion: cacheVersion || 'vibegrid-pwa-v58'
+      cacheVersion: cacheVersion || 'vibegrid-pwa-v59'
     },
     subscription: activeSub ? {
       endpoint: activeSub.endpoint,
