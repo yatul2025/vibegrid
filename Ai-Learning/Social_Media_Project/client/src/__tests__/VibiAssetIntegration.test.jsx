@@ -85,10 +85,10 @@ describe('Vibi Antigravity Asset Pack Integration Suite', () => {
   // 2. VibiCharacterService Real Events
   // ==========================================
   describe('2. VibiCharacterService Real Event Handling', () => {
-    it('reacts to window vibegrid:new-message event and respects cooldown', () => {
+    it('reacts to window vibegrid:new-message event and auto-reverts to idle', () => {
       const cleanup = vibiCharacterService.initActivityWatchers({ animations: true });
 
-      // First new message: transitions to new_message
+      // Incoming new message triggers NEW_MESSAGE state
       window.dispatchEvent(new CustomEvent('vibegrid:new-message'));
       expect(vibiCharacterService.getState()).toBe(VIBI_STATES.NEW_MESSAGE);
 
@@ -97,18 +97,6 @@ describe('Vibi Antigravity Asset Pack Integration Suite', () => {
         vi.advanceTimersByTime(4000);
       });
       expect(vibiCharacterService.getState()).toBe(VIBI_STATES.IDLE);
-
-      // Immediate second event within 15s cooldown: should be suppressed
-      window.dispatchEvent(new CustomEvent('vibegrid:new-message'));
-      expect(vibiCharacterService.getState()).toBe(VIBI_STATES.IDLE);
-
-      // Advance past 15s cooldown
-      act(() => {
-        vi.advanceTimersByTime(16000);
-      });
-
-      window.dispatchEvent(new CustomEvent('vibegrid:new-message'));
-      expect(vibiCharacterService.getState()).toBe(VIBI_STATES.NEW_MESSAGE);
 
       cleanup();
     });

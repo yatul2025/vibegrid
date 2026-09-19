@@ -243,7 +243,7 @@ class VibiCharacterService {
   newMessage(options = {}) {
     return this.setState(VIBI_STATES.NEW_MESSAGE, {
       durationMs: 3500,
-      force: false, // Respects 15s cooldown
+      force: true,
       ...options
     });
   }
@@ -259,7 +259,7 @@ class VibiCharacterService {
   groupInvitation(options = {}) {
     return this.setState(VIBI_STATES.GROUP_INVITATION, {
       durationMs: 3500,
-      force: false,
+      force: true,
       ...options
     });
   }
@@ -267,7 +267,7 @@ class VibiCharacterService {
   joinRequest(options = {}) {
     return this.setState(VIBI_STATES.JOIN_REQUEST, {
       durationMs: 3500,
-      force: false,
+      force: true,
       ...options
     });
   }
