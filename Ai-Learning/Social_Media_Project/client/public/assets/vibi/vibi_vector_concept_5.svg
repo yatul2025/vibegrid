@@ -1,0 +1,15 @@
+<svg viewBox="0 0 200 200" class="w-36 h-36 drop-shadow-xl" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="c5-space" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#7928CA"/><stop offset="100%" stop-color="#0F0C20"/></radialGradient>
+    <filter id="c5-neon"><feGaussianBlur stdDeviation="3" result="g"/><feComposite in="SourceGraphic" in2="g" operator="over"/></filter>
+  </defs>
+  <circle cx="100" cy="100" r="85" fill="url(#c5-space)" stroke="#FF0080" stroke-width="2"/>
+  <path d="M50 40 L40 15 L70 30 L90 55 C95 53 105 53 110 55 L130 30 L160 15 L150 40 C165 65 165 95 150 110 L155 140 L180 110 L170 85 L145 105 C135 130 115 145 100 145 C85 145 65 130 55 105 C40 90 35 60 50 40 Z" fill="#180C34" stroke="#FF5400" stroke-width="3" filter="url(#c5-neon)"/>
+  <circle cx="80" cy="75" r="3" fill="#00FFFF" filter="url(#c5-neon)"/>
+  <circle cx="120" cy="75" r="3" fill="#00FFFF" filter="url(#c5-neon)"/>
+  <circle cx="100" cy="95" r="2.5" fill="#FF0080"/>
+  <circle cx="100" cy="125" r="4" fill="#00FFFF" filter="url(#c5-neon)"/>
+  <line x1="80" y1="75" x2="100" y2="95" stroke="#00FFFF" stroke-width="1" opacity="0.6"/>
+  <line x1="120" y1="75" x2="100" y2="95" stroke="#00FFFF" stroke-width="1" opacity="0.6"/>
+  <line x1="100" y1="95" x2="100" y2="125" stroke="#FF0080" stroke-width="1.5"/>
+</svg>

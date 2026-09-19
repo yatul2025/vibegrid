@@ -1,0 +1,25 @@
+<svg viewBox="0 0 200 200" class="w-36 h-36 drop-shadow-xl" xmlns="http://www.w3.org/2000/svg">
+  <!-- Low Poly Geometric Faces -->
+  <polygon points="100,30 65,70 100,80" fill="#FF5E00"/>
+  <polygon points="100,30 135,70 100,80" fill="#FF7700"/>
+  <polygon points="65,70 100,80 100,105 60,95" fill="#E65100"/>
+  <polygon points="135,70 100,80 100,105 140,95" fill="#F57C00"/>
+  <polygon points="100,80 85,95 100,105" fill="#FFF3E0"/>
+  <polygon points="100,80 115,95 100,105" fill="#FFE0B2"/>
+  <polygon points="100,105 95,115 105,115" fill="#212121"/>
+  <!-- Ears Poly -->
+  <polygon points="65,70 35,25 65,45" fill="#BF360C"/>
+  <polygon points="65,45 35,25 55,20" fill="#212121"/>
+  <polygon points="65,45 65,70 80,60" fill="#FF6D00"/>
+  <polygon points="135,70 165,25 135,45" fill="#E64A19"/>
+  <polygon points="135,45 165,25 145,20" fill="#212121"/>
+  <polygon points="135,45 135,70 120,60" fill="#FF7043"/>
+  <!-- Eyes -->
+  <polygon points="75,75 88,77 82,85" fill="#00E5FF"/>
+  <polygon points="125,75 112,77 118,85" fill="#00E5FF"/>
+  <!-- Body -->
+  <polygon points="85,115 115,115 125,160 75,160" fill="#FF5722"/>
+  <polygon points="90,125 110,125 105,150 95,150" fill="#FFF8E1"/>
+  <polygon points="125,140 165,120 150,90" fill="#E64A19"/>
+  <polygon points="165,120 180,100 150,90" fill="#FFF"/>
+</svg>

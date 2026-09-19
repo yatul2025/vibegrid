@@ -14870,6 +14870,39 @@ select.form-input option,
   }
 }
 
+@keyframes collarPulse {
+  0%, 100% {
+    opacity: 0.7;
+    filter: drop-shadow(0 0 3px #FF7700);
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 10px #FFAA00) drop-shadow(0 0 18px #FF5500);
+  }
+}
+
+.vibi-idle-float {
+  animation: vibiGentleFloat 3.8s ease-in-out infinite;
+}
+
+.vibi-dragging-tilt {
+  transform: rotate(8deg) scale(1.08) !important;
+  transition: transform 0.15s ease !important;
+}
+
+.vibi-celebrate-bounce {
+  animation: vibiCelebrateDance 1.2s ease-in-out infinite !important;
+}
+
+.vibi-thinking-pulse {
+  animation: vibiThinkingPulse 2.4s ease-in-out infinite !important;
+}
+
+.vibi-sleepy-dim {
+  filter: brightness(0.85) contrast(0.95);
+  animation: vibiGentleFloat 6s ease-in-out infinite;
+}
+
 /* Personality State Overrides on Launcher */
 .vibi-state-celebrate .vibi-launcher-fab {
   animation: vibiCelebrateDance 1.2s infinite ease-in-out !important;

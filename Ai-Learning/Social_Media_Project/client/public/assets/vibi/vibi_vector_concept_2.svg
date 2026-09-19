@@ -1,0 +1,29 @@
+<svg viewBox="0 0 200 200" class="w-36 h-36 drop-shadow-xl" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="c2-metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#F1F5F9"/><stop offset="50%" stop-color="#94A3B8"/><stop offset="100%" stop-color="#475569"/></linearGradient>
+    <linearGradient id="c2-orange" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FF5400"/><stop offset="100%" stop-color="#CC3700"/></linearGradient>
+    <filter id="c2-cyan-glow"><feGaussianBlur stdDeviation="3" result="b"/><feComposite in="SourceGraphic" in2="b" operator="over"/></filter>
+  </defs>
+  <!-- Cyber Tail -->
+  <path d="M135 140 L170 120 L160 90 L140 100 L125 130 Z" fill="url(#c2-orange)" stroke="#00F0FF" stroke-width="1.5"/>
+  <polygon points="155,100 175,85 160,80" fill="#00F0FF" opacity="0.8"/>
+  <!-- Mecha Body -->
+  <path d="M75 125 L100 115 L125 125 L120 170 L80 170 Z" fill="url(#c2-metal)" stroke="#334155" stroke-width="2"/>
+  <polygon points="90,130 110,130 105,150 95,150" fill="#1E293B"/>
+  <circle cx="100" cy="140" r="5" fill="#00F0FF" filter="url(#c2-cyan-glow)"/>
+  <!-- Robotic Feet -->
+  <rect x="74" y="168" width="16" height="10" rx="3" fill="#1E293B" stroke="#00F0FF" stroke-width="1"/>
+  <rect x="110" y="168" width="16" height="10" rx="3" fill="#1E293B" stroke="#00F0FF" stroke-width="1"/>
+  <!-- Head Plating -->
+  <polygon points="65,45 40,15 70,30 85,55" fill="url(#c2-orange)"/>
+  <polygon points="135,45 160,15 130,30 115,55" fill="url(#c2-orange)"/>
+  <polygon points="55,55 100,40 145,55 140,95 100,110 60,95" fill="url(#c2-metal)" stroke="#64748B" stroke-width="2"/>
+  <!-- Visor / HUD Eyes -->
+  <path d="M68 68 L100 72 L132 68 L128 80 L100 84 L72 80 Z" fill="#0F172A" stroke="#00F0FF" stroke-width="1.5"/>
+  <path d="M72 74 L95 76 M105 76 L128 74" stroke="#00F0FF" stroke-width="3" stroke-linecap="round" filter="url(#c2-cyan-glow)"/>
+  <!-- Antennas -->
+  <line x1="50" y1="20" x2="45" y2="10" stroke="#00F0FF" stroke-width="2"/>
+  <circle cx="45" cy="10" r="2" fill="#00F0FF"/>
+  <line x1="150" y1="20" x2="155" y2="10" stroke="#00F0FF" stroke-width="2"/>
+  <circle cx="155" cy="10" r="2" fill="#00F0FF"/>
+</svg>

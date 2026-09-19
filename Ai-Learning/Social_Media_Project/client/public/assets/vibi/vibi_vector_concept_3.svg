@@ -1,0 +1,32 @@
+<svg viewBox="0 0 200 200" class="w-36 h-36 drop-shadow-xl" xmlns="http://www.w3.org/2000/svg">
+  <!-- Big Fluffy Body -->
+  <ellipse cx="145" cy="135" rx="30" ry="25" fill="#FF9E00" transform="rotate(-20 145 135)"/>
+  <circle cx="165" cy="120" r="14" fill="#FFF"/>
+  <circle cx="100" cy="140" r="32" fill="#FF8500"/>
+  <ellipse cx="100" cy="145" rx="18" ry="20" fill="#FFF"/>
+  <circle cx="85" cy="168" r="8" fill="#FF6D00"/>
+  <circle cx="115" cy="168" r="8" fill="#FF6D00"/>
+  <!-- Giant Cute Head -->
+  <circle cx="100" cy="85" r="46" fill="#FF8500"/>
+  <!-- Ears -->
+  <polygon points="60,60 40,15 75,35" fill="#FF6D00"/>
+  <polygon points="58,52 46,24 70,36" fill="#FFCCD5"/>
+  <polygon points="140,60 160,15 125,35" fill="#FF6D00"/>
+  <polygon points="142,52 154,24 130,36" fill="#FFCCD5"/>
+  <!-- Cheeks -->
+  <ellipse cx="70" cy="95" rx="14" ry="10" fill="#FFF"/>
+  <ellipse cx="130" cy="95" rx="14" ry="10" fill="#FFF"/>
+  <circle cx="68" cy="95" r="5" fill="#FFB4A2" opacity="0.7"/>
+  <circle cx="132" cy="95" r="5" fill="#FFB4A2" opacity="0.7"/>
+  <!-- Anime Sparkle Eyes -->
+  <ellipse cx="80" cy="82" rx="10" ry="14" fill="#0A0908"/>
+  <ellipse cx="120" cy="82" rx="10" ry="14" fill="#0A0908"/>
+  <circle cx="78" cy="77" r="5" fill="#FFF"/>
+  <circle cx="118" cy="77" r="5" fill="#FFF"/>
+  <polygon points="84,88 86,85 88,88 86,91" fill="#FFF"/>
+  <polygon points="124,88 126,85 128,88 126,91" fill="#FFF"/>
+  <ellipse cx="100" cy="92" rx="3" ry="2" fill="#0A0908"/>
+  <path d="M96 97 Q100 101 104 97" stroke="#0A0908" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Star Pendant -->
+  <polygon points="100,122 103,128 110,129 105,134 106,140 100,137 94,140 95,134 90,129 97,128" fill="#FFD000"/>
+</svg>

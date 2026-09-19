@@ -1,0 +1,20 @@
+<svg viewBox="0 0 200 200" class="w-36 h-36 drop-shadow-xl" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="c8-flame" x1="0" y1="1" x2="0" y2="0"><stop offset="0%" stop-color="#E5383B"/><stop offset="50%" stop-color="#F77F00"/><stop offset="100%" stop-color="#FCBF49"/></linearGradient>
+  </defs>
+  <path d="M125 135 Q170 140 175 100 Q160 85 145 95 Q140 120 120 130 Z" fill="url(#c8-flame)"/>
+  <path d="M130 145 Q185 155 190 120 Q170 110 155 115 Z" fill="url(#c8-flame)" opacity="0.8"/>
+  <path d="M75 120 Q100 110 125 120 Q125 170 100 172 Q75 170 75 120 Z" fill="#BA181B"/>
+  <path d="M85 125 Q100 120 115 125 Q115 160 100 162 Q85 160 85 125 Z" fill="#FFFDF0"/>
+  <ellipse cx="100" cy="76" rx="42" ry="38" fill="#BA181B"/>
+  <path d="M100 50 Q105 60 100 68 Q95 60 100 50 Z" fill="#FFD166"/>
+  <path d="M62 82 Q70 104 100 104 Q130 104 138 82 Q120 80 100 82 Q80 80 62 82 Z" fill="#FFFDF0"/>
+  <path d="M68 68 Q78 64 88 70 Q76 74 68 68 Z" fill="#E5383B"/>
+  <path d="M132 68 Q122 64 112 70 Q124 74 132 68 Z" fill="#E5383B"/>
+  <circle cx="80" cy="69" r="4" fill="#FFD166"/>
+  <circle cx="120" cy="69" r="4" fill="#FFD166"/>
+  <path d="M65 60 Q35 15 50 5 Q70 25 80 45 Z" fill="url(#c8-flame)"/>
+  <path d="M135 60 Q165 15 150 5 Q130 25 120 45 Z" fill="url(#c8-flame)"/>
+  <circle cx="40" cy="90" r="6" fill="#FFD166" opacity="0.8"/>
+  <circle cx="160" cy="70" r="5" fill="#FFD166" opacity="0.8"/>
+</svg>

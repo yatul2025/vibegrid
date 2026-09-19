@@ -1,0 +1,278 @@
+<svg viewBox="0 0 500 620" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Fur Gradients -->
+    <radialGradient id="vibi-head-grad" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#FF7A18"/>
+      <stop offset="60%" stop-color="#F25805"/>
+      <stop offset="100%" stop-color="#CC4000"/>
+    </radialGradient>
+    
+    <linearGradient id="vibi-body-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FF720B"/>
+      <stop offset="70%" stop-color="#E64A00"/>
+      <stop offset="100%" stop-color="#A83200"/>
+    </linearGradient>
+
+    <linearGradient id="vibi-chest-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="60%" stop-color="#FFF5EC"/>
+      <stop offset="100%" stop-color="#F5DFCF"/>
+    </linearGradient>
+
+    <!-- Eye Gradient (Glossy Amber) -->
+    <radialGradient id="vibi-eye-grad" cx="45%" cy="60%" r="55%">
+      <stop offset="0%" stop-color="#FFBF34"/>
+      <stop offset="35%" stop-color="#FF8A00"/>
+      <stop offset="70%" stop-color="#B24700"/>
+      <stop offset="95%" stop-color="#3D1700"/>
+      <stop offset="100%" stop-color="#140700"/>
+    </radialGradient>
+
+    <!-- Ear Gradients -->
+    <linearGradient id="vibi-ear-inner" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#FFEBE1"/>
+      <stop offset="60%" stop-color="#FFCFC0"/>
+      <stop offset="100%" stop-color="#E89B85"/>
+    </linearGradient>
+
+    <!-- Collar & Glowing V -->
+    <linearGradient id="vibi-collar-band" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1E232A"/>
+      <stop offset="50%" stop-color="#323B46"/>
+      <stop offset="100%" stop-color="#181C22"/>
+    </linearGradient>
+
+    <filter id="neon-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <style>
+    @keyframes subtleBreathe {
+      0%, 100% { transform: scale(1) translateY(0); }
+      50% { transform: scale(1.015, 0.99) translateY(-4px); }
+    }
+    @keyframes eyeShine {
+      0%, 90%, 100% { opacity: 0.95; }
+      95% { opacity: 0.2; }
+    }
+    @keyframes collarPulse {
+      0%, 100% { filter: drop-shadow(0 0 3px #FF7700) drop-shadow(0 0 8px #FF4400); }
+      50% { filter: drop-shadow(0 0 6px #FFAA00) drop-shadow(0 0 16px #FF5500); }
+    }
+    .vibi-root { transform-origin: 250px 480px; animation: subtleBreathe 4s ease-in-out infinite; }
+    .vibi-collar-light { animation: collarPulse 2.5s ease-in-out infinite; }
+    .vibi-eyes-gloss { animation: eyeShine 5s infinite; }
+  </style>
+
+  <g class="vibi-root">
+    <!-- Ground Shadow -->
+    <ellipse cx="250" cy="580" rx="140" ry="16" fill="#000000" opacity="0.45" filter="url(#soft-shadow)"/>
+
+    <!-- ==================== TAIL ==================== -->
+    <g id="tail">
+      <!-- Tail Base (Orange) -->
+      <path d="M 210 450 C 130 430 70 470 65 520 C 60 555 105 570 145 560 C 180 550 220 510 225 470 Z" 
+            fill="#E64A00"/>
+      <!-- Tail Fluff Mid -->
+      <path d="M 170 400 C 110 370 60 410 50 470 C 45 510 65 545 105 555 C 135 520 165 470 185 425 Z" 
+            fill="#FF6D0B"/>
+      <!-- Tail White Tip -->
+      <path d="M 125 365 C 95 360 65 385 52 425 C 45 450 48 480 55 500 C 68 490 85 480 100 485 C 105 465 125 455 135 440 C 145 420 155 415 168 405 C 155 385 140 370 125 365 Z" 
+            fill="#FFFFFF"/>
+      <path d="M 90 410 C 95 435 110 445 125 435 C 115 415 105 405 90 410 Z" fill="#FFF2E8"/>
+    </g>
+
+    <!-- ==================== BODY & LEGS ==================== -->
+    <g id="body-and-legs">
+      <!-- Back Legs / Thighs -->
+      <path d="M 140 470 C 130 500 135 545 165 560 C 185 570 205 550 205 530 C 205 490 170 460 140 470 Z" fill="#D94300"/>
+      <path d="M 360 470 C 370 500 365 545 335 560 C 315 570 295 550 295 530 C 295 490 330 460 360 470 Z" fill="#D94300"/>
+
+      <!-- Torso Core -->
+      <ellipse cx="250" cy="465" rx="72" ry="80" fill="url(#vibi-body-grad)"/>
+
+      <!-- White Fluffy Chest -->
+      <path d="M 215 380 C 200 405 190 440 195 480 C 200 515 220 540 250 550 C 280 540 300 515 305 480 C 310 440 300 405 285 380 Z" 
+            fill="url(#vibi-chest-grad)"/>
+      <!-- Chest Fur Tuft Overlays -->
+      <path d="M 225 440 C 235 465 245 480 250 495 C 255 480 265 465 275 440 C 265 445 250 445 225 440 Z" fill="#FFFFFF"/>
+      <path d="M 235 480 C 242 505 250 518 250 525 C 250 518 258 505 265 480 C 258 483 242 483 235 480 Z" fill="#FFFFFF"/>
+
+      <!-- Front Arms (Orange) -->
+      <path d="M 195 425 C 185 455 180 495 185 535 C 190 550 215 550 220 535 C 225 495 225 455 220 425 Z" fill="#FF6A00"/>
+      <path d="M 305 425 C 315 455 320 495 315 535 C 310 550 285 550 280 535 C 275 495 275 455 280 425 Z" fill="#FF6A00"/>
+
+      <!-- Front Paws (Dark Charcoal with Toes) -->
+      <!-- Left Paw -->
+      <g id="left-paw">
+        <path d="M 182 530 C 175 545 178 568 195 572 C 210 575 225 572 228 555 C 230 540 220 528 210 525 Z" fill="#20252D"/>
+        <!-- Individual Toe Dividers -->
+        <ellipse cx="188" cy="564" rx="5" ry="6" fill="#15191F"/>
+        <ellipse cx="199" cy="567" rx="5.5" ry="6" fill="#181D24"/>
+        <ellipse cx="211" cy="567" rx="5.5" ry="6" fill="#181D24"/>
+        <ellipse cx="222" cy="564" rx="5" ry="6" fill="#15191F"/>
+      </g>
+      <!-- Right Paw -->
+      <g id="right-paw">
+        <path d="M 318 530 C 325 545 322 568 305 572 C 290 575 275 572 272 555 C 270 540 280 528 290 525 Z" fill="#20252D"/>
+        <!-- Individual Toe Dividers -->
+        <ellipse cx="312" cy="564" rx="5" ry="6" fill="#15191F"/>
+        <ellipse cx="301" cy="567" rx="5.5" ry="6" fill="#181D24"/>
+        <ellipse cx="289" cy="567" rx="5.5" ry="6" fill="#181D24"/>
+        <ellipse cx="278" cy="564" rx="5" ry="6" fill="#15191F"/>
+      </g>
+    </g>
+
+    <!-- ==================== FUTURISTIC COLLAR ==================== -->
+    <g id="cyber-collar">
+      <!-- Collar Band (Dark Matte Technical Material) -->
+      <path d="M 190 380 C 220 405 280 405 310 380 C 315 392 312 405 295 415 C 265 428 235 428 205 415 C 188 405 185 392 190 380 Z" 
+            fill="url(#vibi-collar-band)" stroke="#111418" stroke-width="2"/>
+      
+      <!-- Glowing Orange Piping Along Collar Edge -->
+      <path d="M 194 384 C 220 402 280 402 306 384" 
+            stroke="#FF7B00" stroke-width="3" fill="none" stroke-linecap="round" class="vibi-collar-light"/>
+      <path d="M 206 414 C 235 425 265 425 294 414" 
+            stroke="#FF5500" stroke-width="2.5" fill="none" stroke-linecap="round" class="vibi-collar-light"/>
+
+      <!-- Collar Shield / Center Pendant -->
+      <path d="M 234 402 L 266 402 L 260 442 L 250 452 L 240 442 Z" 
+            fill="#1E232B" stroke="#0F1217" stroke-width="2"/>
+      
+      <!-- Shield Outer Neon Border -->
+      <path d="M 238 405 L 262 405 L 257 438 L 250 446 L 243 438 Z" 
+            fill="none" stroke="#FF7700" stroke-width="2" class="vibi-collar-light"/>
+
+      <!-- Illuminated Glowing Orange "V" Emblem -->
+      <path d="M 243 416 L 250 428 L 257 416" 
+            stroke="#FFB400" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="vibi-collar-light" filter="url(#neon-glow)"/>
+      <path d="M 244.5 417 L 250 426 L 255.5 417" 
+            stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- ==================== EARS ==================== -->
+    <g id="ears">
+      <!-- Left Ear -->
+      <!-- Black Outer / Tip -->
+      <path d="M 115 210 C 95 160 90 90 108 55 C 115 42 128 45 145 65 C 175 100 195 150 205 185 Z" fill="#181B22"/>
+      <!-- Main Orange Ear Shell -->
+      <path d="M 125 205 C 108 165 106 100 120 72 C 126 62 136 68 150 85 C 175 118 190 155 200 185 Z" fill="#FF6D0B"/>
+      <!-- Pink Inner Ear -->
+      <path d="M 132 195 C 122 165 122 115 130 92 C 135 85 142 90 150 105 C 168 132 178 160 185 185 Z" fill="url(#vibi-ear-inner)"/>
+      <!-- White Fluffy Inner Ear Tufts -->
+      <path d="M 140 185 C 132 160 135 135 145 120 C 150 138 160 148 175 155 C 160 168 152 180 148 192 Z" fill="#FFFFFF"/>
+      <path d="M 155 180 C 148 165 155 145 165 138 C 168 152 175 160 185 165 C 175 175 168 180 162 188 Z" fill="#FFF2E8"/>
+
+      <!-- Right Ear -->
+      <!-- Black Outer / Tip -->
+      <path d="M 385 210 C 405 160 410 90 392 55 C 385 42 372 45 355 65 C 325 100 305 150 295 185 Z" fill="#181B22"/>
+      <!-- Main Orange Ear Shell -->
+      <path d="M 375 205 C 392 165 394 100 380 72 C 374 62 364 68 350 85 C 325 118 310 155 300 185 Z" fill="#FF6D0B"/>
+      <!-- Pink Inner Ear -->
+      <path d="M 368 195 C 378 165 378 115 370 92 C 365 85 358 90 350 105 C 332 132 322 160 315 185 Z" fill="url(#vibi-ear-inner)"/>
+      <!-- White Fluffy Inner Ear Tufts -->
+      <path d="M 360 185 C 368 160 365 135 355 120 C 350 138 340 148 325 155 C 340 168 348 180 352 192 Z" fill="#FFFFFF"/>
+      <path d="M 345 180 C 352 165 345 145 335 138 C 332 152 325 160 315 165 C 325 175 332 180 338 188 Z" fill="#FFF2E8"/>
+    </g>
+
+    <!-- ==================== HEAD ==================== -->
+    <g id="head">
+      <!-- Head Base (Orange Dome) -->
+      <ellipse cx="250" cy="245" rx="145" ry="125" fill="url(#vibi-head-grad)"/>
+
+      <!-- Forehead Fluff Highlights -->
+      <path d="M 235 125 C 245 120 255 120 265 125 C 260 130 250 132 235 125 Z" fill="#FFA54A"/>
+
+      <!-- Wide Fluffy Cheeks (Cream/White) -->
+      <!-- Left Cheek Puff -->
+      <path d="M 125 255 C 90 280 85 320 120 355 C 155 385 210 375 250 375 C 215 350 180 320 165 285 C 150 255 135 245 125 255 Z" 
+            fill="url(#vibi-chest-grad)"/>
+      <path d="M 95 305 C 80 325 95 348 125 350 C 105 340 100 325 95 305 Z" fill="#FFFFFF"/>
+      
+      <!-- Right Cheek Puff -->
+      <path d="M 375 255 C 410 280 415 320 380 355 C 345 385 290 375 250 375 C 285 350 320 320 335 285 C 350 255 365 245 375 255 Z" 
+            fill="url(#vibi-chest-grad)"/>
+      <path d="M 405 305 C 420 325 405 348 375 350 C 395 340 400 325 405 305 Z" fill="#FFFFFF"/>
+
+      <!-- Center Muzzle Blend -->
+      <path d="M 155 295 C 150 350 200 380 250 380 C 300 380 350 350 345 295 C 330 255 285 240 250 240 C 215 240 170 255 155 295 Z" 
+            fill="url(#vibi-chest-grad)"/>
+
+      <!-- White Eyebrow Tuft Dots -->
+      <ellipse cx="198" cy="188" rx="14" ry="9" transform="rotate(-15 198 188)" fill="#FFFFFF" opacity="0.95"/>
+      <ellipse cx="302" cy="188" rx="14" ry="9" transform="rotate(15 302 188)" fill="#FFFFFF" opacity="0.95"/>
+
+      <!-- ==================== EYES ==================== -->
+      <!-- Left Eye -->
+      <g id="left-eye">
+        <!-- Eyeliner & Socket -->
+        <ellipse cx="196" cy="254" rx="34" ry="38" fill="#140A06"/>
+        <!-- Glossy Iris -->
+        <ellipse cx="196" cy="255" rx="31" ry="35" fill="url(#vibi-eye-grad)"/>
+        <!-- Pupil -->
+        <ellipse cx="195" cy="255" rx="20" ry="24" fill="#0A0401"/>
+        <!-- Iris Glowing Amber Crescent Reflection -->
+        <path d="M 175 268 C 182 284 208 284 216 268 C 210 274 190 274 175 268 Z" fill="#FFC83B" opacity="0.85"/>
+        <!-- Primary Catchlight Shine -->
+        <ellipse cx="184" cy="238" rx="9" ry="12" transform="rotate(-20 184 238)" fill="#FFFFFF" class="vibi-eyes-gloss"/>
+        <!-- Secondary Micro Sparkle -->
+        <circle cx="212" cy="268" r="4" fill="#FFFFFF" class="vibi-eyes-gloss"/>
+        <circle cx="186" cy="268" r="2.5" fill="#FFFFFF" opacity="0.8"/>
+      </g>
+
+      <!-- Right Eye -->
+      <g id="right-eye">
+        <!-- Eyeliner & Socket -->
+        <ellipse cx="304" cy="254" rx="34" ry="38" fill="#140A06"/>
+        <!-- Glossy Iris -->
+        <ellipse cx="304" cy="255" rx="31" ry="35" fill="url(#vibi-eye-grad)"/>
+        <!-- Pupil -->
+        <ellipse cx="305" cy="255" rx="20" ry="24" fill="#0A0401"/>
+        <!-- Iris Glowing Amber Crescent Reflection -->
+        <path d="M 284 268 C 292 284 318 284 325 268 C 319 274 300 274 284 268 Z" fill="#FFC83B" opacity="0.85"/>
+        <!-- Primary Catchlight Shine -->
+        <ellipse cx="293" cy="238" rx="9" ry="12" transform="rotate(-20 293 238)" fill="#FFFFFF" class="vibi-eyes-gloss"/>
+        <!-- Secondary Micro Sparkle -->
+        <circle cx="320" cy="268" r="4" fill="#FFFFFF" class="vibi-eyes-gloss"/>
+        <circle cx="295" cy="268" r="2.5" fill="#FFFFFF" opacity="0.8"/>
+      </g>
+
+      <!-- ==================== NOSE & HAPPY MOUTH ==================== -->
+      <!-- Black Button Nose -->
+      <g id="nose">
+        <path d="M 236 280 C 236 273 242 268 250 268 C 258 268 264 273 264 280 C 264 288 256 295 250 295 C 244 295 236 288 236 280 Z" 
+              fill="#1A1C22"/>
+        <!-- Nostril Indents -->
+        <ellipse cx="244" cy="285" rx="2.5" ry="1.5" fill="#0C0D10"/>
+        <ellipse cx="256" cy="285" rx="2.5" ry="1.5" fill="#0C0D10"/>
+        <!-- Nose Bridge Highlight -->
+        <ellipse cx="249" cy="273" rx="5" ry="2.5" fill="#586070" opacity="0.6"/>
+      </g>
+
+      <!-- Open Smiling Mouth with Tongue -->
+      <g id="mouth">
+        <!-- Lip Curve -->
+        <path d="M 226 298 Q 238 306 250 300 Q 262 306 274 298" 
+              stroke="#1C1E24" stroke-width="3" fill="none" stroke-linecap="round"/>
+        
+        <!-- Open Mouth Cavity -->
+        <path d="M 233 303 C 235 328 265 328 267 303 Z" fill="#420D15"/>
+        
+        <!-- Pink Cute Tongue -->
+        <path d="M 237 314 C 242 327 258 327 263 314 C 258 310 242 310 237 314 Z" fill="#FF5E7E"/>
+        <ellipse cx="250" cy="318" rx="5" ry="2" fill="#FFA4B6" opacity="0.8"/>
+      </g>
+    </g>
+  </g>
+</svg>
