@@ -16,6 +16,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import navigationService from '../services/navigationService';
 import vibiContextService from '../services/vibiContextService';
 import vibiProactiveService from '../services/vibiProactiveService';
+import vibiCharacterService, { VIBI_STATES } from '../services/vibiCharacterService';
 
 export const VIBI_PREFERENCES_STORAGE_KEY = 'vibegrid_vibi_preferences';
 
@@ -54,11 +55,41 @@ export function VibiAssistantProvider({ children }) {
   const [isTyping, setIsTyping] = useState(false);
   const [activeAction, setActiveAction] = useState(null);
   const [activeSuggestion, setActiveSuggestion] = useState(null);
+  const [characterState, setCharacterState] = useState(() => vibiCharacterService.getState());
 
   const preferencesRef = useRef(preferences);
   useEffect(() => {
     preferencesRef.current = preferences;
   }, [preferences]);
+
+  // Sync character state updates from character service
+  useEffect(() => {
+    const unsub = vibiCharacterService.subscribe((state) => {
+      setCharacterState(state);
+    });
+    return unsub;
+  }, []);
+
+  // Initialize ambient character activity watchers and system event listeners
+  useEffect(() => {
+    if (!preferences.enabled || preferences.animations === false) {
+      vibiCharacterService.idle();
+      return;
+    }
+    const cleanup = vibiCharacterService.initActivityWatchers(preferences);
+    return cleanup;
+  }, [preferences.enabled, preferences.animations, preferences.welcome]);
+
+  // Transition character state automatically when AI is typing
+  const prevTypingRef = useRef(isTyping);
+  useEffect(() => {
+    if (isTyping) {
+      vibiCharacterService.think({ preferences: preferencesRef.current });
+    } else if (prevTypingRef.current && !isTyping) {
+      vibiCharacterService.happy({ durationMs: 1600, preferences: preferencesRef.current });
+    }
+    prevTypingRef.current = isTyping;
+  }, [isTyping]);
 
   // Sync preference updates across browser tabs/windows
   useEffect(() => {
@@ -84,6 +115,7 @@ export function VibiAssistantProvider({ children }) {
       setIsTyping(false);
       setActiveAction(null);
       setActiveSuggestion(null);
+      vibiCharacterService.idle();
     } else if (!preferences.smartSuggestions) {
       setActiveSuggestion(null);
     }
@@ -112,11 +144,20 @@ export function VibiAssistantProvider({ children }) {
     setPreferences(DEFAULT_VIBI_PREFERENCES);
   }, []);
 
+  // Trigger character reaction helper
+  const triggerReaction = useCallback((state, options = {}) => {
+    return vibiCharacterService.setState(state, {
+      preferences: preferencesRef.current,
+      ...options
+    });
+  }, []);
+
   // Close assistant
   const closeAssistant = useCallback(() => {
     setIsOpen(false);
     setIsMinimized(false);
     setActiveAction(null);
+    vibiCharacterService.idle();
   }, []);
 
   // Open assistant
@@ -129,6 +170,10 @@ export function VibiAssistantProvider({ children }) {
     setIsMinimized(false);
     setIsOpen(true);
     setActiveSuggestion(null);
+
+    if (preferencesRef.current.animations !== false) {
+      vibiCharacterService.welcome({ force: true, preferences: preferencesRef.current });
+    }
 
     if (initialPrompt && typeof initialPrompt === 'string' && initialPrompt.trim()) {
       setMessages((prev) => [
@@ -289,6 +334,7 @@ export function VibiAssistantProvider({ children }) {
     isTyping,
     activeAction,
     activeSuggestion,
+    characterState,
 
     // Actions & Handlers
     openAssistant,
@@ -309,7 +355,9 @@ export function VibiAssistantProvider({ children }) {
     dismissSuggestion,
     acceptSuggestion,
     triggerSuggestion,
-    evaluateSuggestions
+    evaluateSuggestions,
+    triggerReaction,
+    setCharacterState
   }), [
     preferences,
     isOpen,
@@ -319,6 +367,7 @@ export function VibiAssistantProvider({ children }) {
     isTyping,
     activeAction,
     activeSuggestion,
+    characterState,
     openAssistant,
     closeAssistant,
     minimizeAssistant,
@@ -333,7 +382,8 @@ export function VibiAssistantProvider({ children }) {
     dismissSuggestion,
     acceptSuggestion,
     triggerSuggestion,
-    evaluateSuggestions
+    evaluateSuggestions,
+    triggerReaction
   ]);
 
   return (
@@ -357,6 +407,7 @@ export function useVibiAssistant() {
       isTyping: false,
       activeAction: null,
       activeSuggestion: null,
+      characterState: 'idle',
       openAssistant: () => false,
       closeAssistant: () => {},
       minimizeAssistant: () => {},
@@ -375,7 +426,9 @@ export function useVibiAssistant() {
       dismissSuggestion: () => {},
       acceptSuggestion: () => {},
       triggerSuggestion: () => false,
-      evaluateSuggestions: () => null
+      evaluateSuggestions: () => null,
+      triggerReaction: () => false,
+      setCharacterState: () => {}
     };
   }
   return context;

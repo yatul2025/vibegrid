@@ -20,6 +20,7 @@ import vibiAiClient from '../../services/vibiAiClient';
 import vibiActionRegistry from '../../services/vibiActionRegistry';
 import vibiProactiveService from '../../services/vibiProactiveService';
 import vibiSecurityGuard from '../../services/vibiSecurityGuard';
+import vibiCharacterService from '../../services/vibiCharacterService';
 import VibiAvatar from './VibiAvatar';
 import VibiTroubleshootingCard from './VibiTroubleshootingCard';
 import { Send, RefreshCw, Trash2, Sparkles, AlertCircle } from 'lucide-react';
@@ -36,7 +37,8 @@ export default function VibiConversation() {
     updateMessage,
     clearConversation,
     preferences,
-    getContext
+    getContext,
+    characterState = 'idle'
   } = useVibiAssistant();
 
   const [inputVal, setInputVal] = useState('');
@@ -110,6 +112,7 @@ export default function VibiConversation() {
       status: 'complete'
     });
 
+    vibiCharacterService.listen({ preferences });
     if (setIsTyping) setIsTyping(true);
 
     if (responseTimerRef.current) {
@@ -140,10 +143,12 @@ export default function VibiConversation() {
             },
             user?.username
           ).then((res) => {
+            vibiCharacterService.celebrate({ preferences });
             if (res && isMountedRef.current && typeof updateMessage === 'function') {
               updateMessage(msgObj.id, { actionResult: res });
             }
           }).catch((err) => {
+            vibiCharacterService.concerned({ preferences });
             console.error('[Vibi] Failed executing matched action:', err);
           });
           return;
@@ -169,6 +174,7 @@ export default function VibiConversation() {
           }
 
           if (!isMountedRef.current) return;
+          vibiCharacterService.happy({ preferences });
           addMessage({
             sender: 'vibi',
             text: aiResult.replyText,
@@ -176,6 +182,7 @@ export default function VibiConversation() {
           });
         }
       } catch (err) {
+        vibiCharacterService.concerned({ preferences });
         if (isMountedRef.current) {
           setErrorMessage(err.message || 'Something went wrong processing your request.');
           addMessage({
@@ -213,7 +220,7 @@ export default function VibiConversation() {
       <div className="vibi-messages-viewport" role="log" aria-live="polite">
         {messages.length === 0 ? (
           <div className="vibi-empty-thread" data-testid="vibi-empty-thread">
-            <VibiAvatar size={64} withStatusDot={true} />
+            <VibiAvatar size={64} mood={characterState} withStatusDot={true} />
             <h3 className="vibi-empty-thread-title">Hi, I'm Vibi! 🦊</h3>
             <p className="vibi-empty-thread-subtitle">
               Your native VibeGrid AI companion. Ask me questions, navigate anywhere, or explore features!
