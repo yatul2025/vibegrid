@@ -14660,25 +14660,25 @@ select.form-input option,
   transform: scale(0.96);
 }
 
-/* Master Character Layer Animations */
+/* Master Character Layer Animations (Calibrated for 850x1024 Canvas) */
 .tail-swish {
   animation: vibiTailSwish 3.5s infinite ease-in-out;
-  transform-origin: 85px 96px;
+  transform-origin: 580px 820px;
 }
 
 .tail-wag {
-  animation: vibiTailWag 0.55s infinite ease-in-out;
-  transform-origin: 85px 96px;
+  animation: vibiTailWag 0.5s infinite ease-in-out;
+  transform-origin: 580px 820px;
 }
 
 .body-breathing {
   animation: vibiBodyBreathing 4s infinite ease-in-out;
-  transform-origin: 70px 114px;
+  transform-origin: 425px 820px;
 }
 
 .body-sleeping {
   animation: vibiBodySleeping 6s infinite ease-in-out;
-  transform-origin: 70px 114px;
+  transform-origin: 425px 820px;
 }
 
 .v-emblem-pulse {
@@ -14687,22 +14687,37 @@ select.form-input option,
 
 .head-tilt {
   animation: vibiHeadTilt 2.2s infinite ease-in-out;
-  transform-origin: 70px 74px;
+  transform-origin: 425px 630px;
 }
 
 .head-perk {
   animation: vibiHeadPerk 2.5s infinite ease-in-out;
-  transform-origin: 70px 74px;
+  transform-origin: 425px 630px;
+}
+
+.head-nod {
+  animation: vibiHeadNod 1.2s infinite ease-in-out;
+  transform-origin: 425px 630px;
+}
+
+.head-playful {
+  animation: vibiHeadPlayful 1.4s infinite ease-in-out;
+  transform-origin: 425px 630px;
+}
+
+.vibi-hand-waving {
+  animation: vibiHandWave 0.65s infinite ease-in-out !important;
+  transform-origin: 530px 720px;
 }
 
 .mouth-talking {
   animation: vibiMouthTalking 0.38s infinite ease-in-out alternate;
-  transform-origin: 70px 62px;
+  transform-origin: 443px 528px;
 }
 
 .paws-up {
   animation: vibiPawsUp 0.8s infinite ease-in-out alternate;
-  transform-origin: 70px 110px;
+  transform-origin: 425px 720px;
 }
 
 @keyframes vibiTailSwish {
@@ -14710,16 +14725,16 @@ select.form-input option,
     transform: rotate(0deg);
   }
   50% {
-    transform: rotate(-6deg);
+    transform: rotate(-10deg);
   }
 }
 
 @keyframes vibiTailWag {
   0%, 100% {
-    transform: rotate(-8deg);
+    transform: rotate(-14deg);
   }
   50% {
-    transform: rotate(10deg);
+    transform: rotate(14deg);
   }
 }
 
@@ -14737,7 +14752,7 @@ select.form-input option,
     transform: scaleY(1) translateY(0);
   }
   50% {
-    transform: scaleY(1.03) translateY(-1px);
+    transform: scaleY(1.03) translateY(-2px);
   }
 }
 
@@ -14756,8 +14771,11 @@ select.form-input option,
   0%, 100% {
     transform: rotate(0deg);
   }
-  50% {
-    transform: rotate(-4.5deg);
+  40% {
+    transform: rotate(-9deg);
+  }
+  80% {
+    transform: rotate(5deg);
   }
 }
 
@@ -14766,7 +14784,43 @@ select.form-input option,
     transform: rotate(0deg) translateY(0);
   }
   50% {
-    transform: rotate(2deg) translateY(-2px);
+    transform: rotate(4deg) translateY(-8px);
+  }
+}
+
+@keyframes vibiHeadNod {
+  0%, 100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  40% {
+    transform: rotate(-2deg) translateY(6px);
+  }
+  75% {
+    transform: rotate(1deg) translateY(-3px);
+  }
+}
+
+@keyframes vibiHeadPlayful {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-7deg) translateY(-6px);
+  }
+  75% {
+    transform: rotate(7deg) translateY(-4px);
+  }
+}
+
+@keyframes vibiHandWave {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-24deg) translate(-6px, -10px);
+  }
+  75% {
+    transform: rotate(16deg) translate(6px, -4px);
   }
 }
 
@@ -14784,7 +14838,7 @@ select.form-input option,
     transform: translateY(0);
   }
   100% {
-    transform: translateY(-4px);
+    transform: translateY(-12px);
   }
 }
 

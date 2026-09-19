@@ -239,7 +239,7 @@ export default function VibiLauncher() {
 
       <button
         type="button"
-        className={`vibi-launcher-fab ${isDragging ? 'elevated' : ''} ${characterState}`}
+        className={`vibi-launcher-fab ${isDragging ? 'elevated' : ''} ${characterState} vibi-mood-${activeMood} vibi-state-${characterState}`}
         onClick={handleClick}
         aria-label={isMinimized ? 'Restore Vibi Assistant' : 'Open Vibi Assistant'}
         title="Chat with Vibi"

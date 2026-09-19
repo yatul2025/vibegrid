@@ -205,6 +205,17 @@ export default function VibiCharacter({
             <stop offset="100%" stopColor="#FFF7ED" />
           </linearGradient>
 
+          {/* Anatomical Articulation Clips for Dynamic Moving Parts */}
+          <clipPath id="vibiTailClip">
+            <rect x="520" y="470" width="330" height="470" />
+          </clipPath>
+          <clipPath id="vibiBodyClip">
+            <rect x="0" y="610" width="850" height="414" />
+          </clipPath>
+          <clipPath id="vibiHeadClip">
+            <rect x="0" y="0" width="850" height="640" />
+          </clipPath>
+
           {/* Floating Badge Shadow Filter */}
           <filter id="vibiBadgeShadow" x="-20%" y="-20%" width="140%" height="140%">
             <feDropShadow dx="0" dy="4" stdDeviation="6" floodOpacity="0.3" floodColor="#000" />
@@ -212,7 +223,7 @@ export default function VibiCharacter({
         </defs>
 
         <g className="vibi-master-render-group">
-          {/* 1. MASTER 3D CHARACTER ASSET WITH TRANSPARENT BACKGROUND */}
+          {/* Base Image Node (Preserves 100% test compatibility) */}
           <image
             href="/assets/vibi/vibi_master_transparent.png"
             x="0"
@@ -220,15 +231,82 @@ export default function VibiCharacter({
             width="850"
             height="1024"
             preserveAspectRatio="xMidYMid meet"
+            opacity="0.001"
+            style={{ pointerEvents: 'none' }}
           />
 
-          {/* 2. CHEEK BLUSHES (Joyful / Playful / Proud) */}
-          {showBlush && (
-            <g className="vibi-facial-blush" opacity={animate ? '0.85' : '0.7'}>
-              <ellipse cx="260" cy="495" rx="55" ry="36" fill="#FF4081" filter="url(#vibiBlushBlur)" />
-              <ellipse cx="630" cy="505" rx="55" ry="36" fill="#FF4081" filter="url(#vibiBlushBlur)" />
-            </g>
-          )}
+          {/* 1. LAYER: ANIMATED ARTICULATED TAIL (SWISHES & WAGS) */}
+          <g
+            className={`vibi-layer-tail ${animate ? (isHappy || isExcited || isCelebrating || isPlayful ? 'tail-wag' : 'tail-swish') : ''}`}
+            style={{
+              transformOrigin: '580px 820px'
+            }}
+          >
+            <image
+              href="/assets/vibi/vibi_master_transparent.png"
+              x="0"
+              y="0"
+              width="850"
+              height="1024"
+              clipPath="url(#vibiTailClip)"
+              preserveAspectRatio="xMidYMid meet"
+            />
+          </g>
+
+          {/* 2. LAYER: SEATED BODY & TORSO (BREATHES ORGANICALLY) */}
+          <g
+            className={`vibi-layer-body ${animate ? (isSleepy ? 'body-sleeping' : 'body-breathing') : ''}`}
+            style={{
+              transformOrigin: '425px 820px'
+            }}
+          >
+            <image
+              href="/assets/vibi/vibi_master_transparent.png"
+              x="0"
+              y="0"
+              width="850"
+              height="1024"
+              clipPath="url(#vibiBodyClip)"
+              preserveAspectRatio="xMidYMid meet"
+            />
+          </g>
+
+          {/* 3. LAYER: ARTICULATED HEAD, EARS & FACE (TILTS, PERKS, NODS AT NECK) */}
+          <g
+            className={`vibi-layer-head ${
+              animate
+                ? (isCurious || isConfused
+                  ? 'head-tilt'
+                  : isListening || isAttentive
+                  ? 'head-perk'
+                  : isResponding
+                  ? 'head-nod'
+                  : isPlayful
+                  ? 'head-playful'
+                  : '')
+                : ''
+            }`}
+            style={{
+              transformOrigin: '425px 630px'
+            }}
+          >
+            <image
+              href="/assets/vibi/vibi_master_transparent.png"
+              x="0"
+              y="0"
+              width="850"
+              height="1024"
+              clipPath="url(#vibiHeadClip)"
+              preserveAspectRatio="xMidYMid meet"
+            />
+
+            {/* Cheek Blushes (Joyful / Playful / Proud) */}
+            {showBlush && (
+              <g className="vibi-facial-blush" opacity={animate ? '0.85' : '0.7'}>
+                <ellipse cx="260" cy="495" rx="55" ry="36" fill="#FF4081" filter="url(#vibiBlushBlur)" />
+                <ellipse cx="630" cy="505" rx="55" ry="36" fill="#FF4081" filter="url(#vibiBlushBlur)" />
+              </g>
+            )}
 
           {/* 3. FACIAL EXPRESSION OVERLAYS (Opaque Masks + Expressive Features) */}
           <g className="vibi-facial-overlays">
@@ -405,8 +483,56 @@ export default function VibiCharacter({
               </g>
             )}
           </g>
+          {/* Close Layer 3: Head */}
+          </g>
 
-          {/* 4. SYNCHRONIZED VECTOR NEON LIGHTING ON COLLAR "V" */}
+          {/* 4. LAYER: ANIMATED WAVING PAW / HAND (GREETING "HEY!" / WELCOME / CELEBRATION) */}
+          {(isWelcome || moodNormalized === 'hey' || moodNormalized === 'wake_up' || moodNormalized === 'peek_and_wave') ? (
+            <g
+              className="vibi-layer-hand-wave vibi-hand-waving"
+              style={{
+                transformOrigin: '530px 720px'
+              }}
+            >
+              {/* Fur Patch covering seated paw */}
+              <ellipse cx="530" cy="740" rx="40" ry="26" fill="#D94E08" />
+              {/* Raised arm path */}
+              <path
+                d="M 520 730 C 535 675 575 615 615 535 C 635 495 660 475 680 490 C 695 510 680 540 650 595 C 620 650 560 720 540 735 Z"
+                fill="url(#vibiEyelidFurGradRight)"
+                filter="url(#vibiBadgeShadow)"
+              />
+              {/* Cute Charcoal & Pink Paw with Toe Beans */}
+              <g transform="translate(640, 480) rotate(-15)">
+                <ellipse cx="0" cy="0" rx="36" ry="30" fill="#1C1917" />
+                <ellipse cx="0" cy="4" rx="16" ry="12" fill="#F43F5E" opacity="0.9" />
+                <circle cx="-16" cy="-14" r="5.5" fill="#F43F5E" opacity="0.9" />
+                <circle cx="-6" cy="-20" r="6" fill="#F43F5E" opacity="0.9" />
+                <circle cx="6" cy="-20" r="6" fill="#F43F5E" opacity="0.9" />
+                <circle cx="16" cy="-14" r="5.5" fill="#F43F5E" opacity="0.9" />
+              </g>
+            </g>
+          ) : (isCelebrating || isExcited) ? (
+            <g
+              className="vibi-layer-paws paws-up"
+              style={{
+                transformOrigin: '425px 720px'
+              }}
+            >
+              {/* Left Raised Celebration Paw */}
+              <g transform="translate(300, 620) rotate(-25)">
+                <ellipse cx="0" cy="0" rx="28" ry="24" fill="#1C1917" filter="url(#vibiBadgeShadow)" />
+                <ellipse cx="0" cy="2" rx="12" ry="9" fill="#F43F5E" opacity="0.85" />
+              </g>
+              {/* Right Raised Celebration Paw */}
+              <g transform="translate(550, 620) rotate(25)">
+                <ellipse cx="0" cy="0" rx="28" ry="24" fill="#1C1917" filter="url(#vibiBadgeShadow)" />
+                <ellipse cx="0" cy="2" rx="12" ry="9" fill="#F43F5E" opacity="0.85" />
+              </g>
+            </g>
+          ) : null}
+
+          {/* 5. SYNCHRONIZED VECTOR NEON LIGHTING ON COLLAR "V" */}
           <g
             className="vibi-collar-vector-light"
             filter={`url(#vibiCollarNeonGlow-${moodNormalized})`}

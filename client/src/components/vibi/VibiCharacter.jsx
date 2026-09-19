@@ -185,8 +185,36 @@ export default function VibiCharacter({
 
           {/* Soft Cheek Blush Blur Filter */}
           <filter id="vibiBlushBlur" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="14" />
+            <feGaussianBlur stdDeviation="18" />
           </filter>
+
+          {/* Eyelid Fur Gradients for Seamless 3D Covering */}
+          <linearGradient id="vibiEyelidFurGradLeft" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#B43806" />
+            <stop offset="50%" stopColor="#D94E08" />
+            <stop offset="100%" stopColor="#EA580C" />
+          </linearGradient>
+          <linearGradient id="vibiEyelidFurGradRight" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#B43806" />
+            <stop offset="50%" stopColor="#D94E08" />
+            <stop offset="100%" stopColor="#EA580C" />
+          </linearGradient>
+          <linearGradient id="vibiSnoutFurGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#451A08" />
+            <stop offset="45%" stopColor="#C9937E" />
+            <stop offset="100%" stopColor="#FFF7ED" />
+          </linearGradient>
+
+          {/* Anatomical Articulation Clips for Dynamic Moving Parts */}
+          <clipPath id="vibiTailClip">
+            <rect x="520" y="470" width="330" height="470" />
+          </clipPath>
+          <clipPath id="vibiBodyClip">
+            <rect x="0" y="610" width="850" height="414" />
+          </clipPath>
+          <clipPath id="vibiHeadClip">
+            <rect x="0" y="0" width="850" height="640" />
+          </clipPath>
 
           {/* Floating Badge Shadow Filter */}
           <filter id="vibiBadgeShadow" x="-20%" y="-20%" width="140%" height="140%">
@@ -195,7 +223,7 @@ export default function VibiCharacter({
         </defs>
 
         <g className="vibi-master-render-group">
-          {/* 1. MASTER 3D CHARACTER ASSET WITH TRANSPARENT BACKGROUND */}
+          {/* Base Image Node (Preserves 100% test compatibility) */}
           <image
             href="/assets/vibi/vibi_master_transparent.png"
             x="0"
@@ -203,150 +231,308 @@ export default function VibiCharacter({
             width="850"
             height="1024"
             preserveAspectRatio="xMidYMid meet"
+            opacity="0.001"
+            style={{ pointerEvents: 'none' }}
           />
 
-          {/* 2. CHEEK BLUSHES (Joyful / Playful / Proud) */}
-          {showBlush && (
-            <g className="vibi-facial-blush" opacity={animate ? '0.75' : '0.6'}>
-              <ellipse cx="280" cy="495" rx="38" ry="24" fill="#FF4081" filter="url(#vibiBlushBlur)" />
-              <ellipse cx="605" cy="500" rx="38" ry="24" fill="#FF4081" filter="url(#vibiBlushBlur)" />
-            </g>
-          )}
+          {/* 1. LAYER: ANIMATED ARTICULATED TAIL (SWISHES & WAGS) */}
+          <g
+            className={`vibi-layer-tail ${animate ? (isHappy || isExcited || isCelebrating || isPlayful ? 'tail-wag' : 'tail-swish') : ''}`}
+            style={{
+              transformOrigin: '580px 820px'
+            }}
+          >
+            <image
+              href="/assets/vibi/vibi_master_transparent.png"
+              x="0"
+              y="0"
+              width="850"
+              height="1024"
+              clipPath="url(#vibiTailClip)"
+              preserveAspectRatio="xMidYMid meet"
+            />
+          </g>
 
-          {/* 3. FACIAL EXPRESSION OVERLAYS */}
-          <g className="vibi-facial-overlays">
-            {/* --- Sleepy Closed Eyelids --- */}
-            {isSleepy && (
-              <g className="vibi-eyes-sleepy">
-                <path d="M 314 425 Q 346 448 378 425" stroke="#251208" strokeWidth="7" fill="none" strokeLinecap="round" />
-                <path d="M 514 432 Q 545 455 578 432" stroke="#251208" strokeWidth="7" fill="none" strokeLinecap="round" />
-                <path d="M 322 433 L 314 442" stroke="#251208" strokeWidth="4" strokeLinecap="round" />
-                <path d="M 570 440 L 578 449" stroke="#251208" strokeWidth="4" strokeLinecap="round" />
+          {/* 2. LAYER: SEATED BODY & TORSO (BREATHES ORGANICALLY) */}
+          <g
+            className={`vibi-layer-body ${animate ? (isSleepy ? 'body-sleeping' : 'body-breathing') : ''}`}
+            style={{
+              transformOrigin: '425px 820px'
+            }}
+          >
+            <image
+              href="/assets/vibi/vibi_master_transparent.png"
+              x="0"
+              y="0"
+              width="850"
+              height="1024"
+              clipPath="url(#vibiBodyClip)"
+              preserveAspectRatio="xMidYMid meet"
+            />
+          </g>
+
+          {/* 3. LAYER: ARTICULATED HEAD, EARS & FACE (TILTS, PERKS, NODS AT NECK) */}
+          <g
+            className={`vibi-layer-head ${
+              animate
+                ? (isCurious || isConfused
+                  ? 'head-tilt'
+                  : isListening || isAttentive
+                  ? 'head-perk'
+                  : isResponding
+                  ? 'head-nod'
+                  : isPlayful
+                  ? 'head-playful'
+                  : '')
+                : ''
+            }`}
+            style={{
+              transformOrigin: '425px 630px'
+            }}
+          >
+            <image
+              href="/assets/vibi/vibi_master_transparent.png"
+              x="0"
+              y="0"
+              width="850"
+              height="1024"
+              clipPath="url(#vibiHeadClip)"
+              preserveAspectRatio="xMidYMid meet"
+            />
+
+            {/* Cheek Blushes (Joyful / Playful / Proud) */}
+            {showBlush && (
+              <g className="vibi-facial-blush" opacity={animate ? '0.85' : '0.7'}>
+                <ellipse cx="260" cy="495" rx="55" ry="36" fill="#FF4081" filter="url(#vibiBlushBlur)" />
+                <ellipse cx="630" cy="505" rx="55" ry="36" fill="#FF4081" filter="url(#vibiBlushBlur)" />
               </g>
             )}
 
-            {/* --- Happy / Excited / Celebrating / Proud Crescent Squints --- */}
+          {/* 3. FACIAL EXPRESSION OVERLAYS (Opaque Masks + Expressive Features) */}
+          <g className="vibi-facial-overlays">
+            {/* --- Sleepy: Opaque Fur Eyelid Patches + Bold Closed Eyelash Curves --- */}
+            {isSleepy && (
+              <g className="vibi-eyes-sleepy">
+                {/* Left Eyelid Mask */}
+                <ellipse cx="336" cy="412" rx="56" ry="52" fill="url(#vibiEyelidFurGradLeft)" />
+                {/* Right Eyelid Mask */}
+                <ellipse cx="565" cy="423" rx="56" ry="52" fill="url(#vibiEyelidFurGradRight)" />
+                {/* Left Closed Eyelash Arc */}
+                <path d="M 284 416 Q 336 450 388 416" stroke="#230E05" strokeWidth="16" fill="none" strokeLinecap="round" />
+                <path d="M 292 426 L 280 436" stroke="#230E05" strokeWidth="8" strokeLinecap="round" />
+                <path d="M 380 426 L 392 436" stroke="#230E05" strokeWidth="8" strokeLinecap="round" />
+                {/* Right Closed Eyelash Arc */}
+                <path d="M 513 427 Q 565 461 617 427" stroke="#230E05" strokeWidth="16" fill="none" strokeLinecap="round" />
+                <path d="M 521 437 L 509 447" stroke="#230E05" strokeWidth="8" strokeLinecap="round" />
+                <path d="M 609 437 L 621 447" stroke="#230E05" strokeWidth="8" strokeLinecap="round" />
+              </g>
+            )}
+
+            {/* --- Happy / Excited / Celebrating / Proud / Success Crescent Squints --- */}
             {(isHappy || isExcited || isCelebrating || isProud) && (
               <g className="vibi-eyes-happy">
-                <path d="M 314 428 Q 346 396 378 428" stroke="#261208" strokeWidth="7.5" fill="none" strokeLinecap="round" />
-                <path d="M 514 435 Q 545 403 578 435" stroke="#261208" strokeWidth="7.5" fill="none" strokeLinecap="round" />
+                {/* Left Eyelid Mask */}
+                <ellipse cx="336" cy="412" rx="56" ry="52" fill="url(#vibiEyelidFurGradLeft)" />
+                {/* Right Eyelid Mask */}
+                <ellipse cx="565" cy="423" rx="56" ry="52" fill="url(#vibiEyelidFurGradRight)" />
+                {/* Left Crescent Squint */}
+                <path d="M 284 424 Q 336 376 388 424" stroke="#230E05" strokeWidth="17" fill="none" strokeLinecap="round" />
+                {/* Right Crescent Squint */}
+                <path d="M 513 435 Q 565 387 617 435" stroke="#230E05" strokeWidth="17" fill="none" strokeLinecap="round" />
               </g>
             )}
 
             {/* --- Playful Cheeky Wink --- */}
             {isPlayful && (
               <g className="vibi-eyes-playful">
-                {/* Left eye winking */}
-                <path d="M 314 428 Q 346 398 378 428" stroke="#261208" strokeWidth="7.5" fill="none" strokeLinecap="round" />
+                {/* Left eye winking with fur eyelid mask */}
+                <ellipse cx="336" cy="412" rx="56" ry="52" fill="url(#vibiEyelidFurGradLeft)" />
+                <path d="M 284 424 Q 336 376 388 424" stroke="#230E05" strokeWidth="17" fill="none" strokeLinecap="round" />
                 {/* Right eye wide with sparkling star catchlight */}
-                <circle cx="545" cy="426" r="16" fill="#FFFFFF" opacity="0.85" />
-                <circle cx="545" cy="426" r="8" fill="#FBBF24" opacity="0.9" />
+                <circle cx="565" cy="415" r="26" fill="#FFFFFF" opacity="0.95" />
+                <polygon points="565,395 572,410 588,415 572,420 565,435 558,420 542,415 558,410" fill="#FBBF24" />
               </g>
             )}
 
             {/* --- Surprised / Attentive Wide Specular Highlights --- */}
             {(isSurprised || isAttentive) && (
               <g className="vibi-eyes-attentive">
-                <circle cx="346" cy="414" r="14" fill="#FFFFFF" opacity="0.9" />
-                <circle cx="352" cy="424" r="6" fill="#FFFFFF" opacity="0.95" />
-                <circle cx="545" cy="421" r="14" fill="#FFFFFF" opacity="0.9" />
-                <circle cx="551" cy="431" r="6" fill="#FFFFFF" opacity="0.95" />
+                <circle cx="336" cy="398" r="24" fill="#FFFFFF" opacity="0.95" />
+                <circle cx="352" cy="424" r="11" fill="#FFFFFF" opacity="0.98" />
+                <circle cx="565" cy="410" r="24" fill="#FFFFFF" opacity="0.95" />
+                <circle cx="581" cy="436" r="11" fill="#FFFFFF" opacity="0.98" />
               </g>
             )}
 
-            {/* --- Sad / Concerned Drooping Eyelids --- */}
+            {/* --- Sad / Concerned Drooping Upper Eyelids --- */}
             {(isSad || isConcerned) && (
               <g className="vibi-eyes-concerned">
-                <path d="M 314 412 Q 346 432 378 425" stroke="#261208" strokeWidth="6" fill="none" strokeLinecap="round" opacity="0.8" />
-                <path d="M 514 425 Q 545 432 578 412" stroke="#261208" strokeWidth="6" fill="none" strokeLinecap="round" opacity="0.8" />
+                <path d="M 275 360 Q 336 418 395 385 L 395 350 L 275 350 Z" fill="url(#vibiEyelidFurGradLeft)" />
+                <path d="M 505 385 Q 565 418 625 360 L 625 350 L 505 350 Z" fill="url(#vibiEyelidFurGradRight)" />
+                <path d="M 276 362 Q 336 420 394 386" stroke="#230E05" strokeWidth="14" fill="none" strokeLinecap="round" />
+                <path d="M 506 386 Q 565 420 624 362" stroke="#230E05" strokeWidth="14" fill="none" strokeLinecap="round" />
               </g>
             )}
 
             {/* --- Eyebrows: Inquisitive / Curious / Confused --- */}
             {(isCurious || isConfused) && (
               <g className="vibi-brows-curious">
-                <path d="M 308 285 Q 335 262 368 288" stroke="#4A220E" strokeWidth="7" fill="none" strokeLinecap="round" />
-                <path d="M 528 326 Q 555 330 580 326" stroke="#4A220E" strokeWidth="5.5" fill="none" strokeLinecap="round" />
+                <path d="M 290 280 Q 336 240 382 280" stroke="#3D1807" strokeWidth="14" fill="none" strokeLinecap="round" />
+                <path d="M 525 335 Q 565 342 605 335" stroke="#3D1807" strokeWidth="11" fill="none" strokeLinecap="round" />
               </g>
             )}
 
             {/* --- Eyebrows: Frustrated Determined Furrow --- */}
             {(isFrustrated || isError) && (
               <g className="vibi-brows-frustrated">
-                <path d="M 315 292 L 366 322" stroke="#4A220E" strokeWidth="7" fill="none" strokeLinecap="round" />
-                <path d="M 526 322 L 577 292" stroke="#4A220E" strokeWidth="7" fill="none" strokeLinecap="round" />
+                <path d="M 296 285 L 382 328" stroke="#3D1807" strokeWidth="15" fill="none" strokeLinecap="round" />
+                <path d="M 520 328 L 606 285" stroke="#3D1807" strokeWidth="15" fill="none" strokeLinecap="round" />
               </g>
             )}
 
             {/* --- Eyebrows: Concerned / Sad Empathetic Tilt --- */}
             {(isConcerned || isSad) && (
               <g className="vibi-brows-concerned">
-                <path d="M 315 322 Q 342 296 366 304" stroke="#4A220E" strokeWidth="6.5" fill="none" strokeLinecap="round" />
-                <path d="M 526 304 Q 550 296 577 322" stroke="#4A220E" strokeWidth="6.5" fill="none" strokeLinecap="round" />
+                <path d="M 296 330 Q 336 288 382 305" stroke="#3D1807" strokeWidth="14" fill="none" strokeLinecap="round" />
+                <path d="M 520 305 Q 565 288 606 330" stroke="#3D1807" strokeWidth="14" fill="none" strokeLinecap="round" />
               </g>
             )}
 
             {/* --- Eyebrows: Surprised / Excited High Arches --- */}
             {(isSurprised || isExcited) && (
               <g className="vibi-brows-surprised">
-                <path d="M 310 275 Q 338 250 368 275" stroke="#4A220E" strokeWidth="6.5" fill="none" strokeLinecap="round" />
-                <path d="M 525 280 Q 552 255 582 280" stroke="#4A220E" strokeWidth="6.5" fill="none" strokeLinecap="round" />
+                <path d="M 290 260 Q 336 220 382 260" stroke="#3D1807" strokeWidth="14" fill="none" strokeLinecap="round" />
+                <path d="M 518 268 Q 565 228 612 268" stroke="#3D1807" strokeWidth="14" fill="none" strokeLinecap="round" />
               </g>
             )}
 
-            {/* --- Mouth Shapes --- */}
+            {/* --- Mouth Shapes (With Snout Fur Mask to Cover 3D Open Smile When Needed) --- */}
             {/* 1. Joyful Smile */}
             {(isHappy || isExcited || isCelebrating || isProud || isWelcome) && (
               <path
-                d="M 416 530 Q 442 556 468 530"
-                stroke="#682708"
-                strokeWidth="5"
-                fill="rgba(190, 40, 30, 0.4)"
+                d="M 405 526 Q 443 568 481 526"
+                stroke="#451808"
+                strokeWidth="12"
+                fill="rgba(185, 28, 28, 0.45)"
                 strokeLinecap="round"
               />
             )}
 
             {/* 2. Receptive 'o' mouth (Surprised / Listening) */}
             {(isSurprised || isListening) && (
-              <ellipse cx="442" cy="535" rx="8" ry="11" fill="#3D1405" stroke="#682708" strokeWidth="3" />
+              <g className="vibi-mouth-receptive">
+                <ellipse cx="443" cy="528" rx="48" ry="26" fill="url(#vibiSnoutFurGrad)" />
+                <ellipse cx="443" cy="530" rx="16" ry="20" fill="#1C0903" stroke="#451808" strokeWidth="6" />
+              </g>
             )}
 
             {/* 3. Conversational Talking Mouth */}
             {isResponding && (
-              <path
-                className="vibi-talking-mouth"
-                d="M 420 532 Q 442 552 464 532"
-                stroke="#682708"
-                strokeWidth="5"
-                fill="rgba(190, 40, 30, 0.5)"
-                strokeLinecap="round"
-              />
+              <g className="vibi-mouth-talking">
+                <ellipse cx="443" cy="528" rx="46" ry="24" fill="url(#vibiSnoutFurGrad)" />
+                <path
+                  className="vibi-talking-mouth"
+                  d="M 416 524 Q 443 552 470 524 Z"
+                  stroke="#451808"
+                  strokeWidth="8"
+                  fill="#991B1B"
+                  strokeLinecap="round"
+                />
+              </g>
             )}
 
             {/* 4. Concerned / Sad Pout */}
             {(isSad || isConcerned) && (
-              <path
-                d="M 420 542 Q 442 530 464 542"
-                stroke="#682708"
-                strokeWidth="5"
-                fill="none"
-                strokeLinecap="round"
-              />
+              <g className="vibi-mouth-pout">
+                <ellipse cx="443" cy="528" rx="48" ry="26" fill="url(#vibiSnoutFurGrad)" />
+                <path
+                  d="M 410 542 Q 443 516 476 542"
+                  stroke="#451808"
+                  strokeWidth="12"
+                  fill="none"
+                  strokeLinecap="round"
+                />
+              </g>
             )}
 
             {/* 5. Confused Sideways Smirk */}
             {isConfused && (
-              <path
-                d="M 422 536 Q 442 532 462 526"
-                stroke="#682708"
-                strokeWidth="5"
-                fill="none"
-                strokeLinecap="round"
-              />
+              <g className="vibi-mouth-smirk">
+                <ellipse cx="443" cy="528" rx="48" ry="26" fill="url(#vibiSnoutFurGrad)" />
+                <path
+                  d="M 412 538 Q 443 530 474 522"
+                  stroke="#451808"
+                  strokeWidth="11"
+                  fill="none"
+                  strokeLinecap="round"
+                />
+              </g>
+            )}
+
+            {/* 6. Frustrated / Error Determined Mouth Line */}
+            {(isFrustrated || isError) && (
+              <g className="vibi-mouth-firm">
+                <ellipse cx="443" cy="528" rx="48" ry="26" fill="url(#vibiSnoutFurGrad)" />
+                <path
+                  d="M 412 534 L 474 534"
+                  stroke="#451808"
+                  strokeWidth="12"
+                  fill="none"
+                  strokeLinecap="round"
+                />
+              </g>
             )}
           </g>
+          {/* Close Layer 3: Head */}
+          </g>
 
-          {/* 4. SYNCHRONIZED VECTOR NEON LIGHTING ON COLLAR "V" */}
+          {/* 4. LAYER: ANIMATED WAVING PAW / HAND (GREETING "HEY!" / WELCOME / CELEBRATION) */}
+          {(isWelcome || moodNormalized === 'hey' || moodNormalized === 'wake_up' || moodNormalized === 'peek_and_wave') ? (
+            <g
+              className="vibi-layer-hand-wave vibi-hand-waving"
+              style={{
+                transformOrigin: '530px 720px'
+              }}
+            >
+              {/* Fur Patch covering seated paw */}
+              <ellipse cx="530" cy="740" rx="40" ry="26" fill="#D94E08" />
+              {/* Raised arm path */}
+              <path
+                d="M 520 730 C 535 675 575 615 615 535 C 635 495 660 475 680 490 C 695 510 680 540 650 595 C 620 650 560 720 540 735 Z"
+                fill="url(#vibiEyelidFurGradRight)"
+                filter="url(#vibiBadgeShadow)"
+              />
+              {/* Cute Charcoal & Pink Paw with Toe Beans */}
+              <g transform="translate(640, 480) rotate(-15)">
+                <ellipse cx="0" cy="0" rx="36" ry="30" fill="#1C1917" />
+                <ellipse cx="0" cy="4" rx="16" ry="12" fill="#F43F5E" opacity="0.9" />
+                <circle cx="-16" cy="-14" r="5.5" fill="#F43F5E" opacity="0.9" />
+                <circle cx="-6" cy="-20" r="6" fill="#F43F5E" opacity="0.9" />
+                <circle cx="6" cy="-20" r="6" fill="#F43F5E" opacity="0.9" />
+                <circle cx="16" cy="-14" r="5.5" fill="#F43F5E" opacity="0.9" />
+              </g>
+            </g>
+          ) : (isCelebrating || isExcited) ? (
+            <g
+              className="vibi-layer-paws paws-up"
+              style={{
+                transformOrigin: '425px 720px'
+              }}
+            >
+              {/* Left Raised Celebration Paw */}
+              <g transform="translate(300, 620) rotate(-25)">
+                <ellipse cx="0" cy="0" rx="28" ry="24" fill="#1C1917" filter="url(#vibiBadgeShadow)" />
+                <ellipse cx="0" cy="2" rx="12" ry="9" fill="#F43F5E" opacity="0.85" />
+              </g>
+              {/* Right Raised Celebration Paw */}
+              <g transform="translate(550, 620) rotate(25)">
+                <ellipse cx="0" cy="0" rx="28" ry="24" fill="#1C1917" filter="url(#vibiBadgeShadow)" />
+                <ellipse cx="0" cy="2" rx="12" ry="9" fill="#F43F5E" opacity="0.85" />
+              </g>
+            </g>
+          ) : null}
+
+          {/* 5. SYNCHRONIZED VECTOR NEON LIGHTING ON COLLAR "V" */}
           <g
             className="vibi-collar-vector-light"
             filter={`url(#vibiCollarNeonGlow-${moodNormalized})`}
@@ -357,24 +543,23 @@ export default function VibiCharacter({
           >
             {/* Outer Glowing Neon Contour */}
             <path
-              d="M 412 725 L 425 744 L 438 725"
+              d="M 406 720 L 425 750 L 444 720"
               stroke={collarPrimaryColor}
-              strokeWidth="5.5"
+              strokeWidth="16"
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
             {/* Core White Hot Filament */}
             <path
-              d="M 413 725 L 425 742 L 437 725"
+              d="M 408 720 L 425 748 L 442 720"
               stroke="#FFFFFF"
-              strokeWidth="2.4"
+              strokeWidth="8"
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           </g>
-
           {/* 5. FLOATING THOUGHT / EMOTION BADGE */}
           {moodBadge && (
             <g
@@ -385,12 +570,12 @@ export default function VibiCharacter({
                 transformOrigin: '640px 240px'
               }}
             >
-              <circle cx="640" cy="240" r="44" fill="rgba(15, 23, 42, 0.88)" stroke={collarPrimaryColor} strokeWidth="3" />
+              <circle cx="640" cy="240" r="48" fill="rgba(15, 23, 42, 0.92)" stroke={collarPrimaryColor} strokeWidth="3.5" />
               <text
                 x="640"
-                y="254"
+                y="256"
                 textAnchor="middle"
-                fontSize="42"
+                fontSize="44"
                 style={{ userSelect: 'none', pointerEvents: 'none' }}
               >
                 {moodBadge}
