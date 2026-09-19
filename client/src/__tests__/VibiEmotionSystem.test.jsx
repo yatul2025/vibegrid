@@ -30,10 +30,16 @@ describe('Vibi Context-Aware Emotion System', () => {
     vi.useFakeTimers();
     vibiCharacterService.idle();
     vibiCharacterService.lastReactionTimestamp = 0;
+    vibiCharacterService.lastScrollReactionTimestamp = -60000;
+    vibiCharacterService.lastLongTypingReaction = -60000;
     vibiCharacterService.recentEvents = [];
+    vibiCharacterService.recentAmbientActivities = [];
   });
 
   afterEach(() => {
+    if (vibiCharacterService.cleanupListeners) {
+      vibiCharacterService.cleanupListeners();
+    }
     vi.clearAllTimers();
     vi.useRealTimers();
     vibiCharacterService.idle();
@@ -254,4 +260,123 @@ describe('Vibi Context-Aware Emotion System', () => {
       cleanup();
     });
   });
+
+  // ==========================================
+  // 7. Natural Companion Idle & Activity System
+  // ==========================================
+  describe('7. Natural Companion Idle & Activity Behavior System', () => {
+    it('triggers attentive state when user types in an input element', () => {
+      const cleanup = vibiCharacterService.initActivityWatchers({ animations: true });
+
+      const input = document.createElement('input');
+      document.body.appendChild(input);
+
+      // User types a key
+      const keyEvent = new KeyboardEvent('keydown', { key: 'a', bubbles: true });
+      input.dispatchEvent(keyEvent);
+
+      expect(vibiCharacterService.getState()).toBe(VIBI_STATES.ATTENTIVE);
+      expect(vibiCharacterService.isUserTyping).toBe(true);
+
+      // Reverts to IDLE after typing pauses
+      act(() => {
+        vi.advanceTimersByTime(1700);
+      });
+
+      expect(vibiCharacterService.isUserTyping).toBe(false);
+      expect(vibiCharacterService.getState()).toBe(VIBI_STATES.IDLE);
+
+      document.body.removeChild(input);
+      cleanup();
+    });
+
+    it('reacts to sustained longer typing (>3.5s)', () => {
+      const cleanup = vibiCharacterService.initActivityWatchers({ animations: true });
+
+      const textarea = document.createElement('textarea');
+      document.body.appendChild(textarea);
+
+      // Start typing
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', bubbles: true }));
+      expect(vibiCharacterService.getState()).toBe(VIBI_STATES.ATTENTIVE);
+
+      // Sustained typing: continue typing periodically over 3.7s
+      act(() => { vi.advanceTimersByTime(1000); });
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', bubbles: true }));
+
+      act(() => { vi.advanceTimersByTime(1000); });
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true }));
+
+      act(() => { vi.advanceTimersByTime(1000); });
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true }));
+
+      act(() => { vi.advanceTimersByTime(700); });
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', bubbles: true }));
+
+      const sustainedState = vibiCharacterService.getState();
+      expect([VIBI_STATES.HEAD_TILT, VIBI_STATES.LISTENING, VIBI_STATES.CURIOUS]).toContain(sustainedState);
+
+      document.body.removeChild(textarea);
+      cleanup();
+    });
+
+    it('reacts subtly to scrolling without interrupting scroll', () => {
+      const cleanup = vibiCharacterService.initActivityWatchers({ animations: true });
+
+      // User scrolls
+      window.dispatchEvent(new Event('scroll'));
+
+      const scrollState = vibiCharacterService.getState();
+      expect([VIBI_STATES.LOOK_AROUND, VIBI_STATES.CURIOUS, VIBI_STATES.ATTENTIVE]).toContain(scrollState);
+
+      // Auto-reverts after duration
+      act(() => {
+        vi.advanceTimersByTime(1600);
+      });
+      expect(vibiCharacterService.getState()).toBe(VIBI_STATES.IDLE);
+
+      cleanup();
+    });
+
+    it('picks varied ambient states avoiding immediate consecutive repetitions', () => {
+      vibiCharacterService.recentAmbientActivities = [];
+
+      const first = vibiCharacterService._getNextRandomAmbientState();
+      const second = vibiCharacterService._getNextRandomAmbientState();
+      const third = vibiCharacterService._getNextRandomAmbientState();
+
+      expect(second).not.toBe(first);
+      expect(third).not.toBe(second);
+      expect(vibiCharacterService.recentAmbientActivities.length).toBeLessThanOrEqual(3);
+    });
+
+    it('immediately cancels active ambient idle reaction when direct user interaction occurs', () => {
+      const cleanup = vibiCharacterService.initActivityWatchers({ animations: true });
+
+      // Put Vibi in subtle idle micro-behavior (e.g. look around)
+      vibiCharacterService.lookAround();
+      expect(vibiCharacterService.getState()).toBe(VIBI_STATES.LOOK_AROUND);
+
+      // User clicks or touches directly
+      window.dispatchEvent(new MouseEvent('mousedown'));
+
+      // Ambient reaction is immediately cancelled and reverts to idle
+      expect(vibiCharacterService.getState()).toBe(VIBI_STATES.IDLE);
+
+      cleanup();
+    });
+
+    it('handles system notification events with contextual reaction', () => {
+      const cleanup = vibiCharacterService.initActivityWatchers({ animations: true });
+
+      window.dispatchEvent(new CustomEvent('vibegrid:notification', {
+        detail: { type: 'sms_alert', text: 'New SMS message' }
+      }));
+
+      expect(vibiCharacterService.getState()).toBe(VIBI_STATES.NEW_MESSAGE);
+
+      cleanup();
+    });
+  });
 });
+

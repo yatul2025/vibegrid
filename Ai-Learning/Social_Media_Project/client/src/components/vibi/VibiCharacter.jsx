@@ -27,7 +27,7 @@ export default function VibiCharacter({
   // Emotion classification helpers
   const isHappy = ['happy', 'success', 'happy_response'].includes(moodNormalized);
   const isExcited = ['excited', 'celebrate', 'celebrating'].includes(moodNormalized);
-  const isCurious = ['curious', 'question'].includes(moodNormalized);
+  const isCurious = ['curious', 'question', 'head_tilt'].includes(moodNormalized);
   const isThinking = ['thinking', 'typing', 'typing_processing'].includes(moodNormalized);
   const isListening = ['listening', 'listening_speaking'].includes(moodNormalized);
   const isResponding = ['responding', 'responding_talking'].includes(moodNormalized);
@@ -40,8 +40,8 @@ export default function VibiCharacter({
   const isCelebrating = ['celebrate', 'celebrating'].includes(moodNormalized);
   const isSleepy = ['sleepy', 'sleeping', 'sleeping_alt'].includes(moodNormalized);
   const isWelcome = ['welcome', 'wake_up', 'wake_up_alt', 'peek_and_wave'].includes(moodNormalized);
-  const isAttentive = ['attentive', 'focused', 'new_message', 'missed_call'].includes(moodNormalized);
-  const isPlayful = ['playful', 'gentle_bounce', 'bounce'].includes(moodNormalized);
+  const isAttentive = ['attentive', 'focused', 'new_message', 'missed_call', 'look_around'].includes(moodNormalized);
+  const isPlayful = ['playful', 'gentle_bounce', 'bounce', 'tail_wag'].includes(moodNormalized);
   const isError = ['error'].includes(moodNormalized);
   const isDragging = ['dragging', 'dragging_move', 'dragging_move_alt'].includes(moodNormalized);
 

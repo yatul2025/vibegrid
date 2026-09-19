@@ -103,12 +103,15 @@ export const VIBI_STATES = Object.freeze({
 
 export const EMOTION_PRIORITY = Object.freeze({
   IDLE: -1,
+  RANDOM_ACTIVITY: 0,
   NORMAL: 0,
   ACTION_RESULT: 1,
-  USER_INTERACTION: 2,
-  IMPORTANT_MESSAGE: 3,
-  CALL: 4,
-  CRITICAL: 5
+  CONTEXTUAL: 2,
+  CONTEXTUAL_REACTION: 2,
+  USER_INTERACTION: 3,
+  IMPORTANT_MESSAGE: 4,
+  CALL: 5,
+  CRITICAL: 6
 });
 
 export const DEFAULT_EMOTION_PRIORITY = Object.freeze({
@@ -183,15 +186,16 @@ export const SAFE_MARGINS = {
 };
 
 // Subtle ambient micro-behavior pool
-const AMBIENT_MICRO_STATES = [
+export const AMBIENT_MICRO_STATES = Object.freeze([
   VIBI_STATES.BLINK,
   VIBI_STATES.LOOK_AROUND,
   VIBI_STATES.HEAD_TILT,
   VIBI_STATES.CURIOUS,
   VIBI_STATES.GENTLE_BOUNCE,
   VIBI_STATES.TAIL_WAG,
-  VIBI_STATES.PLAYFUL
-];
+  VIBI_STATES.PLAYFUL,
+  VIBI_STATES.ATTENTIVE
+]);
 
 class VibiCharacterService {
   constructor() {
@@ -200,12 +204,20 @@ class VibiCharacterService {
     this.lastReactionTimestamp = 0;
     this.lastEmotionSetTimestamp = 0;
     this.minDisplayDurationMs = 350; // Minimum screen time before same-priority can replace
-    this.cooldownDurationMs = 15000; // 15s cooldown between spontaneous ambient reactions
+    this.cooldownDurationMs = 4000; // 4s cooldown between spontaneous ambient reactions
     this.revertTimer = null;
     this.inactivityTimer = null;
     this.ambientTimer = null;
+    this.typingTimer = null;
     this.isInactive = false;
     this.isTabHidden = false;
+    this.isUserTyping = false;
+    this.typingStartTime = 0;
+    this.lastLongTypingReaction = -60000;
+    this.lastScrollReactionTimestamp = -60000;
+    this.scrollCooldownMs = 12000; // At most once every 12-15s
+    this.lastUserActivityTimestamp = 0;
+    this.recentAmbientActivities = []; // Track last 3 ambient activities for anti-repetition
     this.recentEvents = [];
     this.subscribers = new Set();
     this.inactivityTimeoutMs = 45000; // 45s enters sleepy state
@@ -610,12 +622,94 @@ class VibiCharacterService {
     return this.setEmotion(VIBI_STATES.GENTLE_BOUNCE, { priority: EMOTION_PRIORITY.NORMAL, durationMs: 1600, ...options });
   }
 
+  lookAround(options = {}) {
+    return this.setEmotion(VIBI_STATES.LOOK_AROUND, {
+      priority: EMOTION_PRIORITY.RANDOM_ACTIVITY,
+      durationMs: 1600,
+      force: false,
+      ...options
+    });
+  }
+
+  headTilt(options = {}) {
+    return this.setEmotion(VIBI_STATES.HEAD_TILT, {
+      priority: EMOTION_PRIORITY.RANDOM_ACTIVITY,
+      durationMs: 1600,
+      force: false,
+      ...options
+    });
+  }
+
+  blink(options = {}) {
+    return this.setEmotion(VIBI_STATES.BLINK, {
+      priority: EMOTION_PRIORITY.RANDOM_ACTIVITY,
+      durationMs: 1200,
+      force: false,
+      ...options
+    });
+  }
+
+  tailWag(options = {}) {
+    return this.setEmotion(VIBI_STATES.TAIL_WAG, {
+      priority: EMOTION_PRIORITY.RANDOM_ACTIVITY,
+      durationMs: 1600,
+      force: false,
+      ...options
+    });
+  }
+
+  notification(options = {}) {
+    return this.setEmotion(VIBI_STATES.NEW_MESSAGE, {
+      priority: EMOTION_PRIORITY.CONTEXTUAL,
+      durationMs: 2500,
+      force: true,
+      ...options
+    });
+  }
+
+  /**
+   * Cancel any active ambient reaction immediately when user interacts
+   */
+  cancelAmbientReaction() {
+    if (this.currentPriority <= EMOTION_PRIORITY.RANDOM_ACTIVITY) {
+      if (this.revertTimer) {
+        clearTimeout(this.revertTimer);
+        this.revertTimer = null;
+      }
+      this.currentState = this.isInactive ? VIBI_STATES.SLEEPY : VIBI_STATES.IDLE;
+      this.currentPriority = this.isInactive ? EMOTION_PRIORITY.NORMAL : EMOTION_PRIORITY.IDLE;
+      this._notify(this.currentState, { cancelled: true });
+    }
+  }
+
   // ==========================================
   // Ambient Watchers & Real Event Integration
   // ==========================================
 
   /**
-   * Schedule next spontaneous micro-behavior
+   * Pick next random ambient state avoiding consecutive repetition
+   * @returns {string}
+   */
+  _getNextRandomAmbientState() {
+    // Exclude recent ambient activities (last 2-3) to ensure natural variety
+    const available = AMBIENT_MICRO_STATES.filter(
+      (st) => !this.recentAmbientActivities.includes(st) && st !== this.currentState
+    );
+    const pool = available.length > 0
+      ? available
+      : AMBIENT_MICRO_STATES.filter((st) => st !== this.currentState);
+
+    const chosen = pool[Math.floor(Math.random() * pool.length)] || VIBI_STATES.LOOK_AROUND;
+
+    this.recentAmbientActivities.push(chosen);
+    if (this.recentAmbientActivities.length > 3) {
+      this.recentAmbientActivities.shift();
+    }
+    return chosen;
+  }
+
+  /**
+   * Schedule next spontaneous random micro-behavior during idle time
    */
   _scheduleAmbientMicroBehavior(preferences = {}) {
     if (this.ambientTimer) {
@@ -627,17 +721,27 @@ class VibiCharacterService {
       return;
     }
 
-    // Schedule between 18s and 32s
-    const nextInterval = 18000 + Math.random() * 14000;
+    // Schedule between 10s and 20s of idle time (subtle, occasional cadence)
+    const nextInterval = 10000 + Math.random() * 10000;
     this.ambientTimer = setTimeout(() => {
       if (
         !this.isInactive &&
         !this.isTabHidden &&
-        this.currentState === VIBI_STATES.IDLE &&
-        preferences.animations !== false
+        preferences.animations !== false &&
+        (this.currentState === VIBI_STATES.IDLE || this.currentState === VIBI_STATES.IDLE_FLOATING) &&
+        !this.isUserTyping &&
+        this.currentPriority <= EMOTION_PRIORITY.IDLE
       ) {
-        const randomState = AMBIENT_MICRO_STATES[Math.floor(Math.random() * AMBIENT_MICRO_STATES.length)];
-        this.setState(randomState, { durationMs: 1600, force: false, preferences });
+        const randomState = this._getNextRandomAmbientState();
+        // Subtle, brief display duration (1200ms - 1800ms)
+        const durationMs = 1300 + Math.floor(Math.random() * 500);
+        this.setEmotion(randomState, {
+          priority: EMOTION_PRIORITY.RANDOM_ACTIVITY,
+          durationMs,
+          force: false,
+          preferences,
+          metadata: { ambient: true }
+        });
       }
       this._scheduleAmbientMicroBehavior(preferences);
     }, nextInterval);
@@ -651,53 +755,175 @@ class VibiCharacterService {
   initActivityWatchers(preferences = {}) {
     if (typeof window === 'undefined') return () => {};
 
+    // 1. Mouse & Touch General Activity Watcher (Throttled, does NOT cancel ambientTimer)
     const handleUserActivity = () => {
+      const now = Date.now();
+      if (now - this.lastUserActivityTimestamp < 800) {
+        return; // Prevent high-frequency churn on mousemove
+      }
+      this.lastUserActivityTimestamp = now;
+
       if (this.isInactive) {
         this.isInactive = false;
         // Waking up from sleepy state: briefly wave/stretch then return to idle
         if (this.currentState === VIBI_STATES.SLEEPY || this.currentState === MANIFEST_STATES.SLEEPING) {
-          this.setState(VIBI_STATES.WAKE_UP, { durationMs: 1800, force: true });
+          this.setState(VIBI_STATES.WAKE_UP, { durationMs: 1800, force: true, preferences });
         }
       }
 
-      // Reset inactivity countdown
+      // Reset inactivity countdown (45s)
       if (this.inactivityTimer) clearTimeout(this.inactivityTimer);
       this.inactivityTimer = setTimeout(() => {
         if (!this.isTabHidden && preferences.animations !== false) {
           this.isInactive = true;
-          this.setState(VIBI_STATES.SLEEPY, { durationMs: 0, force: true });
+          this.setState(VIBI_STATES.SLEEPY, { durationMs: 0, force: true, preferences });
         }
       }, this.inactivityTimeoutMs);
 
-      // Reschedule ambient micro-behavior
-      this._scheduleAmbientMicroBehavior(preferences);
+      // Ensure ambient loop is active if it was cleared
+      if (!this.ambientTimer && !this.isInactive && !this.isTabHidden && preferences.animations !== false) {
+        this._scheduleAmbientMicroBehavior(preferences);
+      }
     };
 
+    // 2. Direct User Click/Touch Interaction Watcher (Cancels idle reaction immediately)
+    const handleDirectInteraction = () => {
+      this.cancelAmbientReaction();
+      handleUserActivity();
+    };
+
+    // 3. Typing Activity Watcher
+    const handleKeyActivity = (e) => {
+      const target = e.target;
+      const isEditable = target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable ||
+        target.getAttribute?.('role') === 'textbox'
+      );
+
+      handleUserActivity();
+
+      if (!isEditable || preferences.animations === false) {
+        return;
+      }
+
+      // Ignore non-printable modifier/navigation keys
+      const ignoredKeys = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Escape', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+      if (e.key && ignoredKeys.includes(e.key)) {
+        return;
+      }
+
+      const now = Date.now();
+
+      // Cancel any ongoing random ambient activity immediately
+      if (this.currentPriority <= EMOTION_PRIORITY.RANDOM_ACTIVITY) {
+        this.cancelAmbientReaction();
+      }
+
+      if (!this.isUserTyping) {
+        // Typing session began: show subtle listening/attention expression
+        this.isUserTyping = true;
+        this.typingStartTime = now;
+
+        if (this.currentPriority <= EMOTION_PRIORITY.CONTEXTUAL) {
+          this.setEmotion(VIBI_STATES.ATTENTIVE, {
+            priority: EMOTION_PRIORITY.CONTEXTUAL,
+            durationMs: 2500,
+            force: true,
+            preferences,
+            metadata: { typing: true }
+          });
+        }
+      } else {
+        // Sustained typing session: react occasionally to longer typing activity (>3.5s)
+        const sessionDuration = now - this.typingStartTime;
+        if (sessionDuration > 3500 && (now - this.lastLongTypingReaction > 12000)) {
+          this.lastLongTypingReaction = now;
+          const longerTypingPool = [VIBI_STATES.HEAD_TILT, VIBI_STATES.LISTENING, VIBI_STATES.CURIOUS];
+          const chosen = longerTypingPool[Math.floor(Math.random() * longerTypingPool.length)];
+          this.setEmotion(chosen, {
+            priority: EMOTION_PRIORITY.CONTEXTUAL,
+            durationMs: 1400,
+            force: true,
+            preferences,
+            metadata: { longTyping: true }
+          });
+        }
+      }
+
+      // Debounce the end of typing
+      if (this.typingTimer) clearTimeout(this.typingTimer);
+      this.typingTimer = setTimeout(() => {
+        this.isUserTyping = false;
+        this.typingStartTime = 0;
+        // Gracefully revert to idle when user stops typing
+        if (this.currentPriority <= EMOTION_PRIORITY.CONTEXTUAL) {
+          this.idle();
+        }
+      }, 1600);
+    };
+
+    // 4. Scroll Activity Watcher (Throttled, subtle glance without interrupting scroll)
+    const handleScrollActivity = () => {
+      handleUserActivity();
+
+      if (preferences.animations === false || this.isInactive || this.isTabHidden) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - this.lastScrollReactionTimestamp < this.scrollCooldownMs) {
+        return;
+      }
+
+      // Don't interrupt typing, calls, or high-priority interactions
+      if (this.currentPriority > EMOTION_PRIORITY.RANDOM_ACTIVITY || this.isUserTyping) {
+        return;
+      }
+
+      this.lastScrollReactionTimestamp = now;
+
+      // Brief subtle glance
+      const scrollPool = [VIBI_STATES.LOOK_AROUND, VIBI_STATES.CURIOUS, VIBI_STATES.ATTENTIVE];
+      const chosen = scrollPool[Math.floor(Math.random() * scrollPool.length)];
+
+      this.setEmotion(chosen, {
+        priority: EMOTION_PRIORITY.CONTEXTUAL,
+        durationMs: 1400,
+        force: false,
+        preferences,
+        metadata: { scrollReaction: true }
+      });
+    };
+
+    // 5. Visibility Change
     const handleVisibilityChange = () => {
       this.isTabHidden = document.hidden;
       if (document.hidden) {
-        // Tab hidden: freeze timers
         if (this.inactivityTimer) clearTimeout(this.inactivityTimer);
         if (this.ambientTimer) clearTimeout(this.ambientTimer);
+        if (this.typingTimer) clearTimeout(this.typingTimer);
+        this.isUserTyping = false;
       } else {
-        // Tab restored
         handleUserActivity();
+        this._scheduleAmbientMicroBehavior(preferences);
         if (preferences.welcome && preferences.animations !== false) {
           this.welcome({ preferences });
         }
       }
     };
 
-    // Real VibeGrid Event Listeners
+    // 6. Real VibeGrid Event Listeners
     const handleCelebrateEvent = () => {
       if (preferences.animations !== false) {
-        this.celebrate();
+        this.celebrate({ preferences });
       }
     };
 
     const handleCallEvent = () => {
       if (preferences.animations !== false) {
-        this.setState(VIBI_STATES.LISTENING_SPEAKING, { durationMs: 4000 });
+        this.setState(VIBI_STATES.LISTENING_SPEAKING, { durationMs: 4000, preferences });
       }
     };
 
@@ -715,6 +941,22 @@ class VibiCharacterService {
         const grouped = this.handleRapidEvent('message', preferences);
         if (!grouped) {
           this.newMessage({ preferences });
+        }
+      }
+    };
+
+    const handleNotificationEvent = (e) => {
+      if (preferences.animations !== false) {
+        const notifType = e?.detail?.type || 'notification';
+        const grouped = this.handleRapidEvent(notifType, preferences);
+        if (!grouped) {
+          this.setEmotion(VIBI_STATES.NEW_MESSAGE, {
+            priority: EMOTION_PRIORITY.CONTEXTUAL,
+            durationMs: 2500,
+            force: true,
+            preferences,
+            metadata: { notification: true, detail: e?.detail }
+          });
         }
       }
     };
@@ -742,13 +984,16 @@ class VibiCharacterService {
 
     // Global DOM Event Listeners
     window.addEventListener('mousemove', handleUserActivity, { passive: true });
-    window.addEventListener('touchstart', handleUserActivity, { passive: true });
-    window.addEventListener('keydown', handleUserActivity, { passive: true });
+    window.addEventListener('touchstart', handleDirectInteraction, { passive: true });
+    window.addEventListener('mousedown', handleDirectInteraction, { passive: true });
+    window.addEventListener('keydown', handleKeyActivity, { passive: true, capture: true });
+    window.addEventListener('scroll', handleScrollActivity, { passive: true });
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('vibegrid:emotion', handleCustomEmotion);
     window.addEventListener('vibegrid:celebrate', handleCelebrateEvent);
     window.addEventListener('vibegrid:initiate-call', handleCallEvent);
     window.addEventListener('vibegrid:new-message', handleNewMessageEvent);
+    window.addEventListener('vibegrid:notification', handleNotificationEvent);
     window.addEventListener('vibegrid:missed-call', handleMissedCallEvent);
     window.addEventListener('vibegrid:group-invite', handleGroupInviteEvent);
     window.addEventListener('vibegrid:join-request', handleJoinRequestEvent);
@@ -786,6 +1031,8 @@ class VibiCharacterService {
         handleJoinRequestEvent();
       } else if (type === 'message') {
         handleNewMessageEvent();
+      } else {
+        handleNotificationEvent({ detail: notif });
       }
     };
 
@@ -805,7 +1052,7 @@ class VibiCharacterService {
     this.inactivityTimer = setTimeout(() => {
       if (!this.isTabHidden && preferences.animations !== false) {
         this.isInactive = true;
-        this.setState(VIBI_STATES.SLEEPY, { durationMs: 0, force: true });
+        this.setState(VIBI_STATES.SLEEPY, { durationMs: 0, force: true, preferences });
       }
     }, this.inactivityTimeoutMs);
 
@@ -814,13 +1061,16 @@ class VibiCharacterService {
 
     const cleanup = () => {
       window.removeEventListener('mousemove', handleUserActivity);
-      window.removeEventListener('touchstart', handleUserActivity);
-      window.removeEventListener('keydown', handleUserActivity);
+      window.removeEventListener('touchstart', handleDirectInteraction);
+      window.removeEventListener('mousedown', handleDirectInteraction);
+      window.removeEventListener('keydown', handleKeyActivity, { capture: true });
+      window.removeEventListener('scroll', handleScrollActivity);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('vibegrid:emotion', handleCustomEmotion);
       window.removeEventListener('vibegrid:celebrate', handleCelebrateEvent);
       window.removeEventListener('vibegrid:initiate-call', handleCallEvent);
       window.removeEventListener('vibegrid:new-message', handleNewMessageEvent);
+      window.removeEventListener('vibegrid:notification', handleNotificationEvent);
       window.removeEventListener('vibegrid:missed-call', handleMissedCallEvent);
       window.removeEventListener('vibegrid:group-invite', handleGroupInviteEvent);
       window.removeEventListener('vibegrid:join-request', handleJoinRequestEvent);
@@ -840,6 +1090,8 @@ class VibiCharacterService {
       if (this.inactivityTimer) clearTimeout(this.inactivityTimer);
       if (this.revertTimer) clearTimeout(this.revertTimer);
       if (this.ambientTimer) clearTimeout(this.ambientTimer);
+      if (this.typingTimer) clearTimeout(this.typingTimer);
+      this.isUserTyping = false;
     };
 
     this.cleanupListeners = cleanup;
