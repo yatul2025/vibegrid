@@ -1,0 +1,28 @@
+VIBGRID — INTEGRATE THE PROVIDED VIBI LIVE AVATAR ASSET PACK
+
+Inspect this asset pack first, especially VIBI_ANTIGRAVITY_MANIFEST.json.
+
+Use the provided Vibi WebP assets or transparent PNG frame sequences to replace the current static Vibi floating avatar.
+
+IMPORTANT:
+- Do not rebuild or remove the existing Vibi AI architecture.
+- Preserve intent detection, fuzzy matching, Action Registry, real navigation, context awareness, event processor, security and existing settings.
+- Map the assets to the existing Vibi state machine.
+- Use the exact state names in the manifest.
+- New message, missed call, success, error, thinking, responding, idle, dragging, sleeping, wake-up and celebration must trigger the corresponding Vibi state where appropriate.
+- Do not spam animations. Use cooldowns and event coalescing.
+- Support mouse/touch/pointer dragging and safe edge docking.
+- Keep Vibi away from the composer, keyboard, bottom navigation and iPhone safe areas.
+- Preserve the user's Vibi position.
+- Respect prefers-reduced-motion.
+- Pause/reduce animation when the page is hidden/backgrounded.
+- Use responsive sizing: desktop ~80–110px normal, mobile ~56–76px normal, with larger active states only when appropriate.
+- Do not let Vibi drag gestures trigger page navigation or chat/Stories scrolling.
+- Test desktop, mobile, iPhone PWA, Android PWA, keyboard open/closed, safe areas, drag/docking and all major Vibi event states.
+
+If animated WebP is supported, prefer it.
+If not, use the numbered PNG frames with a lightweight animation controller.
+
+Do not invent replacement artwork before checking the supplied assets.
+Do not create a duplicate Vibi system.
+After integration, test the actual behavior and report which states were successfully connected.

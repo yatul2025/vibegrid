@@ -14762,6 +14762,45 @@ select.form-input option,
   box-shadow: 0 8px 24px rgba(248, 113, 113, 0.3) !important;
 }
 
+.vibi-state-new_message .vibi-launcher-fab {
+  animation: vibiThinkingPulse 1.8s infinite ease-in-out !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35), 0 0 16px rgba(59, 130, 246, 0.3) !important;
+}
+
+.vibi-state-missed_call .vibi-launcher-fab {
+  animation: vibiThinkingPulse 2s infinite ease-in-out !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.35), 0 0 16px rgba(239, 68, 68, 0.3) !important;
+}
+
+.vibi-state-group_invitation .vibi-launcher-fab,
+.vibi-state-join_request .vibi-launcher-fab {
+  border-color: #8b5cf6 !important;
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.35), 0 0 16px rgba(139, 92, 246, 0.3) !important;
+}
+
+.vibi-avatar-asset {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  border-radius: 50%;
+  z-index: 1;
+}
+
+.vibi-inline-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  background: rgba(249, 115, 22, 0.12);
+  color: #ea580c;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid rgba(249, 115, 22, 0.25);
+}
+
 /* Ears animations */
 .vibi-ear {
   transform-origin: 50% 50%;

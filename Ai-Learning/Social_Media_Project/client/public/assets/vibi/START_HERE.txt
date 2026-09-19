@@ -1,0 +1,16 @@
+VIBI ANTIGRAVITY ASSET PACK
+
+This pack is designed for environments that do not accept GIF uploads.
+
+FILES:
+- vibi_webp/ = animated WebP versions of every Vibi reaction.
+- vibi_frames/ = individual transparent PNG frames for every reaction.
+- VIBI_ANTIGRAVITY_MANIFEST.json = exact state/file mapping.
+- VIBI_IMPLEMENTATION_PROMPT.txt = copy/paste implementation instruction.
+
+RECOMMENDED:
+1. Give the agent this folder/ZIP.
+2. Tell it to inspect VIBI_ANTIGRAVITY_MANIFEST.json.
+3. Use vibi_webp for supported animated-image rendering.
+4. If animated WebP is not suitable, use the PNG frame sequences with CSS/JS animation.
+5. Preserve the existing Vibi AI/action/event architecture.

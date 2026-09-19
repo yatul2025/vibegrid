@@ -5,11 +5,15 @@
  *
  * Capabilities:
  * 1. Movable character with drag & touch gestures without scroll interference.
- * 2. Safe-edge snapping (snaps to left or right screen edge with safe margins).
- * 3. Persists custom position in localStorage across sessions.
- * 4. Responsive to character personality states (idle, thinking, celebrate, sleepy, etc.).
- * 5. Bounded collision guard: never covers bottom navigation, composer, or leaves viewport.
- * 6. Supports tap to open/restore, double-tap/long-press safe behaviors.
+ * 2. Visual state transitions during movement:
+ *    - On drag start -> transitions to 'dragging_move' state
+ *    - On release -> snaps smoothly to safe edge and triggers 'docking_snap' state
+ * 3. Dynamic personality reactions for real events:
+ *    - new_message, missed_call, group_invitation, join_request, celebrate, sleepy, thinking.
+ * 4. Safe-edge docking (snaps to left or right screen edge with safe margins).
+ * 5. Persists custom position in localStorage across sessions.
+ * 6. Responsive sizing: desktop ~80–110px normal, mobile ~56–76px normal.
+ * 7. Bounded collision guard: never covers bottom navigation, composer, or leaves viewport.
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -70,15 +74,17 @@ export default function VibiLauncher() {
     posStartRef.current = { x: pos.x, y: pos.y };
     hasMovedRef.current = false;
 
-    // Listen to global pointermove and pointerup so dragging outside element doesn't break
     const handlePointerMove = (moveEvent) => {
       const deltaX = moveEvent.clientX - pointerStartRef.current.x;
       const deltaY = moveEvent.clientY - pointerStartRef.current.y;
       const distance = Math.hypot(deltaX, deltaY);
 
       if (distance > 6) {
-        hasMovedRef.current = true;
-        setIsDragging(true);
+        if (!hasMovedRef.current) {
+          hasMovedRef.current = true;
+          setIsDragging(true);
+          vibiCharacterService.dragging(true);
+        }
 
         const itemWidth = containerRef.current?.offsetWidth || 120;
         const itemHeight = containerRef.current?.offsetHeight || 48;
@@ -109,6 +115,9 @@ export default function VibiLauncher() {
           vibiCharacterService.saveDockPosition(snapped.x, snapped.y);
           return snapped;
         });
+
+        // Trigger docking_snap micro-reaction
+        vibiCharacterService.dragging(false);
 
         setTimeout(() => {
           setIsDragging(false);
@@ -142,22 +151,54 @@ export default function VibiLauncher() {
   // Dynamic label based on mood & state
   const getActionLabel = () => {
     if (isMinimized) return 'Vibi (Minimized)';
+    if (isDragging) return 'Moving...';
+
     switch (characterState) {
       case VIBI_STATES.THINKING:
+      case VIBI_STATES.TYPING_PROCESSING:
         return 'Thinking...';
       case VIBI_STATES.LISTENING:
+      case VIBI_STATES.LISTENING_SPEAKING:
         return 'Listening...';
       case VIBI_STATES.CELEBRATE:
+      case VIBI_STATES.CELEBRATING:
       case VIBI_STATES.SUCCESS:
+      case VIBI_STATES.HAPPY_RESPONSE:
         return 'Yay! 🦊✨';
       case VIBI_STATES.SLEEPY:
+      case VIBI_STATES.SLEEPING:
         return 'Vibi (Asleep)';
+      case VIBI_STATES.NEW_MESSAGE:
+        return 'New Message!';
+      case VIBI_STATES.MISSED_CALL:
+        return 'Missed Call';
+      case VIBI_STATES.GROUP_INVITATION:
+        return 'Group Invite!';
+      case VIBI_STATES.JOIN_REQUEST:
+        return 'Join Request';
+      case VIBI_STATES.DOCKING_SNAP:
+      case VIBI_STATES.DOCKING_SNAP_ALT:
+        return 'Docked!';
       case VIBI_STATES.ERROR:
+      case VIBI_STATES.QUESTION:
         return 'Here to help!';
       default:
         return 'Ask Vibi';
     }
   };
+
+  // Dynamic sparkle badge
+  const getSparkleIcon = () => {
+    if (characterState === VIBI_STATES.CELEBRATE || characterState === VIBI_STATES.CELEBRATING) return '🎉';
+    if (characterState === VIBI_STATES.SLEEPY || characterState === VIBI_STATES.SLEEPING) return '💤';
+    if (characterState === VIBI_STATES.NEW_MESSAGE) return '💬';
+    if (characterState === VIBI_STATES.MISSED_CALL) return '📞';
+    if (characterState === VIBI_STATES.GROUP_INVITATION) return '👥';
+    if (characterState === VIBI_STATES.JOIN_REQUEST) return '👋';
+    return '✨';
+  };
+
+  const activeMood = isDragging ? VIBI_STATES.DRAGGING_MOVE : characterState;
 
   return (
     <aside
@@ -190,18 +231,18 @@ export default function VibiLauncher() {
         aria-label={isMinimized ? 'Restore Vibi Assistant' : 'Open Vibi Assistant'}
         title="Chat with Vibi"
         data-testid="vibi-launcher-fab"
-        data-mood={characterState}
+        data-mood={activeMood}
         style={{ pointerEvents: isDragging ? 'none' : 'auto' }}
       >
         <VibiAvatar
           size={isMinimized ? 32 : 38}
-          mood={characterState}
+          mood={activeMood}
           withStatusDot={true}
           isOnline={true}
         />
         <span className="vibi-fab-label">{getActionLabel()}</span>
         <span className="vibi-fab-sparkle" aria-hidden="true">
-          {characterState === VIBI_STATES.CELEBRATE ? '🎉' : characterState === VIBI_STATES.SLEEPY ? '💤' : '✨'}
+          {getSparkleIcon()}
         </span>
       </button>
     </aside>
