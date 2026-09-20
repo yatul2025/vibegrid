@@ -15604,6 +15604,80 @@ select.form-input option,
   background: #dc2626;
 }
 
+/* --- Vibi Action Confirmation Card (Phase 1) --- */
+.vibi-confirmation-card {
+  margin: 10px 0;
+  padding: 12px 14px;
+  background: var(--bg-card, #1e293b);
+  border: 1px solid rgba(249, 115, 22, 0.4);
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  animation: vibiBadgeFloat 0.2s ease-out;
+}
+
+.vibi-confirmation-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.vibi-confirmation-icon {
+  color: #f97316;
+  flex-shrink: 0;
+}
+
+.vibi-confirmation-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #f97316;
+}
+
+.vibi-confirmation-desc {
+  margin: 0 0 10px 0;
+  font-size: 0.82rem;
+  color: var(--text-primary, #ffffff);
+  line-height: 1.4;
+}
+
+.vibi-confirmation-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.vibi-btn-confirm {
+  padding: 6px 14px;
+  background: #f97316;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.vibi-btn-confirm:hover {
+  background: #ea580c;
+}
+
+.vibi-btn-cancel {
+  padding: 6px 14px;
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vibi-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #ffffff);
+}
+
 /* --- Composer & Action Bar --- */
 .vibi-composer-wrapper {
   padding: 10px 14px;

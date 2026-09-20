@@ -241,5 +241,104 @@ describe('Vibi Intent & Action Engine Suite (Phase 5)', () => {
 
       vi.useRealTimers();
     });
+
+    it('renders interactive confirmation card for clear_vibi_chat and handles confirmation', async () => {
+      vi.useFakeTimers();
+
+      render(
+        <AuthProvider>
+          <VibiAssistantProvider>
+            <VibiConversation />
+          </VibiAssistantProvider>
+        </AuthProvider>
+      );
+
+      const input = screen.getByPlaceholderText(/Ask Vibi anything/i);
+      fireEvent.change(input, { target: { value: 'clear chat' } });
+
+      const sendBtn = screen.getByTestId('vibi-send-btn');
+      fireEvent.click(sendBtn);
+
+      // Advance timers for typing & intent execution
+      await act(async () => {
+        vi.advanceTimersByTime(400);
+      });
+
+      // Verify confirmation card appears
+      expect(screen.getByTestId('vibi-confirmation-card')).toBeInTheDocument();
+      expect(screen.getByText(/Confirmation Required/i)).toBeInTheDocument();
+
+      // Click Confirm button
+      const confirmBtn = screen.getByTestId('vibi-confirm-btn');
+      await act(async () => {
+        fireEvent.click(confirmBtn);
+      });
+
+      // Confirmation card is dismissed
+      expect(screen.queryByTestId('vibi-confirmation-card')).not.toBeInTheDocument();
+
+      vi.useRealTimers();
+    });
+
+    it('renders confirmation card and handles cancellation', async () => {
+      vi.useFakeTimers();
+
+      render(
+        <AuthProvider>
+          <VibiAssistantProvider>
+            <VibiConversation />
+          </VibiAssistantProvider>
+        </AuthProvider>
+      );
+
+      const input = screen.getByPlaceholderText(/Ask Vibi anything/i);
+      fireEvent.change(input, { target: { value: 'clear chat' } });
+
+      const sendBtn = screen.getByTestId('vibi-send-btn');
+      fireEvent.click(sendBtn);
+
+      await act(async () => {
+        vi.advanceTimersByTime(400);
+      });
+
+      expect(screen.getByTestId('vibi-confirmation-card')).toBeInTheDocument();
+
+      // Click Cancel button
+      const cancelBtn = screen.getByTestId('vibi-cancel-btn');
+      await act(async () => {
+        fireEvent.click(cancelBtn);
+      });
+
+      expect(screen.queryByTestId('vibi-confirmation-card')).not.toBeInTheDocument();
+      expect(screen.getByText(/Action cancelled/i)).toBeInTheDocument();
+
+      vi.useRealTimers();
+    });
+
+    it('ignores rapid duplicate submissions of the exact same prompt', async () => {
+      vi.useFakeTimers();
+
+      render(
+        <AuthProvider>
+          <VibiAssistantProvider>
+            <VibiConversation />
+          </VibiAssistantProvider>
+        </AuthProvider>
+      );
+
+      const input = screen.getByPlaceholderText(/Ask Vibi anything/i);
+      fireEvent.change(input, { target: { value: 'go to explore' } });
+
+      const sendBtn = screen.getByTestId('vibi-send-btn');
+      fireEvent.click(sendBtn);
+      // Immediate second click (duplicate accidental submission)
+      fireEvent.click(sendBtn);
+
+      // Only 1 user bubble for 'go to explore' is created
+      const userBubbles = screen.getAllByText('go to explore');
+      expect(userBubbles.length).toBe(1);
+
+      vi.useRealTimers();
+    });
   });
 });

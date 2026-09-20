@@ -45,17 +45,20 @@ export default function VibiConversation() {
   const [inputVal, setInputVal] = useState('');
   const [errorMessage, setErrorMessage] = useState(null);
   const [lastPrompt, setLastPrompt] = useState('');
+  const [pendingConfirmation, setPendingConfirmation] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const isMountedRef = useRef(true);
   const responseTimerRef = useRef(null);
+  const lastSendTimeRef = useRef(0);
+  const isSubmittingRef = useRef(false);
 
   // Auto-scroll to bottom on new messages or typing state change
   useEffect(() => {
     if (typeof messagesEndRef.current?.scrollIntoView === 'function') {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, isTyping]);
+  }, [messages, isTyping, pendingConfirmation]);
 
   // Focus input when opened and cleanup timers on unmount
   useEffect(() => {
@@ -82,9 +85,80 @@ export default function VibiConversation() {
     }
   }, []);
 
+  const handleConfirmAction = async () => {
+    if (!pendingConfirmation) return;
+    const { actionId, params, msgId } = pendingConfirmation;
+    setPendingConfirmation(null);
+
+    const context = typeof getContext === 'function' ? getContext(user) : {};
+    const actionCallbacks = {
+      onClearChat: () => clearConversation(),
+      onOpenModal: (modal) => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('vibegrid:open-modal', { detail: { modal } }));
+        }
+      },
+      onToggleTheme: (theme) => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('vibegrid:set-theme', { detail: { theme } }));
+        }
+      },
+      onNavigate: (tab, section) => {
+        if (navigationService && typeof navigationService.navigate === 'function') {
+          navigationService.navigate(tab, { section });
+        }
+      }
+    };
+
+    try {
+      const res = await vibiIntentEngine.executeAction(
+        actionId,
+        params || {},
+        context,
+        actionCallbacks,
+        user?.username,
+        { confirmed: true }
+      );
+      vibiCharacterService.success({ preferences });
+      addMessage({
+        sender: 'vibi',
+        text: res.message || res.replyText || 'Action confirmed and executed! 🦊✨'
+      });
+      if (msgId && typeof updateMessage === 'function') {
+        updateMessage(msgId, { actionResult: res });
+      }
+    } catch (err) {
+      vibiCharacterService.error({ preferences });
+      addMessage({
+        sender: 'vibi',
+        text: `Action could not be executed: ${err.message || 'Unknown error'} ⚠️`
+      });
+    }
+  };
+
+  const handleCancelAction = () => {
+    setPendingConfirmation(null);
+    vibiCharacterService.idle({ preferences });
+    addMessage({
+      sender: 'vibi',
+      text: 'Action cancelled. 🦊'
+    });
+  };
+
   const handleSend = (textToSend = null) => {
     const prompt = (textToSend !== null ? textToSend : inputVal).trim();
     if (!prompt) return;
+
+    // Prevent duplicate rapid submissions within 800ms
+    const now = Date.now();
+    if (now - lastSendTimeRef.current < 800 && prompt === lastPrompt) {
+      return;
+    }
+    if (isTyping || isSubmittingRef.current || pendingConfirmation) {
+      return;
+    }
+    lastSendTimeRef.current = now;
+    isSubmittingRef.current = true;
 
     setErrorMessage(null);
     setLastPrompt(prompt);
@@ -93,6 +167,7 @@ export default function VibiConversation() {
     // Phase 9 Security Guard: Check prompt safety before dispatching
     const safetyCheck = vibiSecurityGuard.checkPromptSafety(prompt, user?.username || 'anonymous');
     if (!safetyCheck.safe) {
+      isSubmittingRef.current = false;
       addMessage({
         sender: 'user',
         text: prompt,
@@ -163,6 +238,17 @@ export default function VibiConversation() {
             actionCallbacks,
             user?.username
           ).then((res) => {
+            if (res?.requiresConfirmation) {
+              setPendingConfirmation({
+                actionId: res.actionId,
+                params: res.sanitizedParams,
+                actionName: res.actionName,
+                description: res.description,
+                msgId: msgObj.id
+              });
+              vibiCharacterService.attentive({ preferences });
+              return;
+            }
             vibiCharacterService.proud({ preferences });
             if (res && isMountedRef.current && typeof updateMessage === 'function') {
               updateMessage(msgObj.id, { actionResult: res });
@@ -183,34 +269,45 @@ export default function VibiConversation() {
 
           if (!isMountedRef.current) return;
 
-          // If AI proposed a validated action, execute it safely
+          // If AI proposed a validated action, verify confirmation requirement
           if (aiResult.actionProposal) {
-            const { id, params } = aiResult.actionProposal;
-            const actionCallbacks = {
-              onClearChat: () => clearConversation(),
-              onOpenModal: (modal) => {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('vibegrid:open-modal', { detail: { modal } }));
+            const { id, params, pendingConfirmation: needsConfirm, actionDef } = aiResult.actionProposal;
+            if (needsConfirm) {
+              setPendingConfirmation({
+                actionId: id,
+                params,
+                actionName: actionDef?.name || id,
+                description: actionDef?.description || `Do you want Vibi to execute ${actionDef?.name || id}?`,
+                msgId: null
+              });
+              vibiCharacterService.attentive({ preferences });
+            } else {
+              const actionCallbacks = {
+                onClearChat: () => clearConversation(),
+                onOpenModal: (modal) => {
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('vibegrid:open-modal', { detail: { modal } }));
+                  }
+                },
+                onToggleTheme: (theme) => {
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('vibegrid:set-theme', { detail: { theme } }));
+                  }
+                },
+                onNavigate: (tab, section) => {
+                  if (navigationService && typeof navigationService.navigate === 'function') {
+                    navigationService.navigate(tab, { section });
+                  }
                 }
-              },
-              onToggleTheme: (theme) => {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('vibegrid:set-theme', { detail: { theme } }));
-                }
-              },
-              onNavigate: (tab, section) => {
-                if (navigationService && typeof navigationService.navigate === 'function') {
-                  navigationService.navigate(tab, { section });
-                }
-              }
-            };
-            await vibiIntentEngine.executeAction(
-              id,
-              params,
-              context,
-              actionCallbacks,
-              user?.username
-            );
+              };
+              await vibiIntentEngine.executeAction(
+                id,
+                params,
+                context,
+                actionCallbacks,
+                user?.username
+              );
+            }
           }
 
           if (!isMountedRef.current) return;
@@ -241,6 +338,7 @@ export default function VibiConversation() {
           });
         }
       } finally {
+        isSubmittingRef.current = false;
         if (isMountedRef.current && setIsTyping) {
           setIsTyping(false);
         }
@@ -402,6 +500,37 @@ export default function VibiConversation() {
               </div>
             )}
 
+            {/* Interactive Confirmation Card (Phase 1 Reliability) */}
+            {pendingConfirmation && (
+              <div className="vibi-confirmation-card" data-testid="vibi-confirmation-card">
+                <div className="vibi-confirmation-header">
+                  <AlertCircle size={18} className="vibi-confirmation-icon" />
+                  <span className="vibi-confirmation-title">Confirmation Required</span>
+                </div>
+                <p className="vibi-confirmation-desc">
+                  {pendingConfirmation.description || `Do you want Vibi to execute "${pendingConfirmation.actionName || pendingConfirmation.actionId}"?`}
+                </p>
+                <div className="vibi-confirmation-buttons">
+                  <button
+                    type="button"
+                    className="vibi-btn-confirm"
+                    onClick={handleConfirmAction}
+                    data-testid="vibi-confirm-btn"
+                  >
+                    Confirm & Execute
+                  </button>
+                  <button
+                    type="button"
+                    className="vibi-btn-cancel"
+                    onClick={handleCancelAction}
+                    data-testid="vibi-cancel-btn"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div ref={messagesEndRef} />
           </div>
         )}
@@ -438,13 +567,13 @@ export default function VibiConversation() {
             placeholder="Ask Vibi anything..."
             value={inputVal}
             onChange={(e) => setInputVal(e.target.value)}
-            disabled={isTyping}
+            disabled={isTyping || Boolean(pendingConfirmation)}
             aria-label="Message Vibi"
           />
           <button
             type="submit"
             className="vibi-send-btn"
-            disabled={!inputVal.trim() || isTyping}
+            disabled={!inputVal.trim() || isTyping || Boolean(pendingConfirmation)}
             aria-label="Send message"
             data-testid="vibi-send-btn"
           >

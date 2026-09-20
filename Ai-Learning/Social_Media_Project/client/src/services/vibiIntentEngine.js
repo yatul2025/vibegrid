@@ -345,9 +345,10 @@ export class VibiIntentEngine {
    * @param {Object} [context={}]
    * @param {Object} [callbacks={}]
    * @param {string} [username='anonymous']
+   * @param {Object} [options={}] - Execution options (e.g. { confirmed: true })
    * @returns {Promise<Object>} Execution result
    */
-  async executeIntent(intent, context = {}, callbacks = {}, username = 'anonymous') {
+  async executeIntent(intent, context = {}, callbacks = {}, username = 'anonymous', options = {}) {
     if (!intent || !intent.actionId) {
       return {
         success: false,
@@ -358,7 +359,7 @@ export class VibiIntentEngine {
     const { actionId, params = {}, replyText = '' } = intent;
 
     // Step 1: AI Output / Tool-Call Validator
-    const validation = vibiOutputValidator.validateAction(actionId, params);
+    const validation = vibiOutputValidator.validateAction(actionId, params, options);
     if (!validation.valid) {
       vibiAuditLog.logAction({
         actionId,
@@ -390,6 +391,8 @@ export class VibiIntentEngine {
         requiresConfirmation: true,
         actionId,
         sanitizedParams,
+        actionName: action.name || actionId,
+        description: action.description || '',
         replyText: replyText || `Please confirm: Do you want to execute **${action.name}**?`
       };
     }
@@ -441,8 +444,8 @@ export class VibiIntentEngine {
   /**
    * Convenience alias to execute an action directly by actionId and params
    */
-  async executeAction(actionId, params = {}, context = {}, callbacks = {}, username = 'anonymous') {
-    return this.executeIntent({ actionId, params }, context, callbacks, username);
+  async executeAction(actionId, params = {}, context = {}, callbacks = {}, username = 'anonymous', options = {}) {
+    return this.executeIntent({ actionId, params }, context, callbacks, username, options);
   }
 }
 

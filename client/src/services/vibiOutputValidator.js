@@ -17,9 +17,10 @@ export class VibiOutputValidator {
    * Validate a proposed action and its parameters
    * @param {string} actionId - Whitelisted action identifier
    * @param {Object} [params={}] - Parameters passed to the action
+   * @param {Object} [options={}] - Validation options (e.g. { confirmed: true })
    * @returns {{ valid: boolean, action?: Object, sanitizedParams?: Object, pendingConfirmation?: boolean, error?: string }}
    */
-  validateAction(actionId, params = {}) {
+  validateAction(actionId, params = {}, options = {}) {
     // 1. Action ID must be provided
     if (!actionId || typeof actionId !== 'string') {
       return {
@@ -93,8 +94,8 @@ export class VibiOutputValidator {
       }
     }
 
-    // 4. Confirmation Requirement Check
-    const pendingConfirmation = Boolean(actionDef.requiresConfirmation);
+    // 4. Confirmation Requirement Check (bypassed when user explicitly confirmed)
+    const pendingConfirmation = Boolean(actionDef.requiresConfirmation) && !options.confirmed;
 
     return {
       valid: true,
