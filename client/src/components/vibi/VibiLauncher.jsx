@@ -42,6 +42,13 @@ export default function VibiLauncher() {
   const pointerStartRef = useRef({ x: 0, y: 0 });
   const posStartRef = useRef({ x: 0, y: 0 });
   const hasMovedRef = useRef(false);
+  const dragTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (dragTimeoutRef.current) clearTimeout(dragTimeoutRef.current);
+    };
+  }, []);
 
   // Re-clamp position on window resize or device orientation change
   useEffect(() => {
@@ -126,7 +133,7 @@ export default function VibiLauncher() {
         // Trigger docking_snap micro-reaction
         vibiCharacterService.dragging(false);
 
-        setTimeout(() => {
+        dragTimeoutRef.current = setTimeout(() => {
           setIsDragging(false);
           hasMovedRef.current = false;
         }, 50);

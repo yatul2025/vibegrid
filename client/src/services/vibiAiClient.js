@@ -44,23 +44,29 @@ export class VibiAiClient {
     // 2. Sensitive Data Redaction
     const sanitizedMessage = vibiSecurityGuard.redactSensitiveData(message.trim());
 
-    // 3. Gather and sanitize context
+    // 3. Centralized Context Engine & Irrelevance Filter (Phase 7)
     const rawContextSnapshot = vibiContextService.getContextSnapshot(runtimeContext.user || null);
-    const contextSnapshot = vibiSecurityGuard.sanitizeContext(rawContextSnapshot);
+    const sanitizedSnapshot = vibiSecurityGuard.sanitizeContext(rawContextSnapshot);
+    const relevantContext = vibiContextService.buildRelevantContext(sanitizedMessage, sanitizedSnapshot);
 
     const payload = {
       message: sanitizedMessage,
       context: {
-        activeTab: contextSnapshot.currentTab || runtimeContext.currentTab || 'feed',
-        activeSection: contextSnapshot.activeSection || runtimeContext.activeSection || null,
-        subScreen: contextSnapshot.subScreen || contextSnapshot.activeModal || runtimeContext.subScreen || 'none',
-        activeModal: contextSnapshot.activeModal || null,
-        recentTopic: contextSnapshot.recentTopic || runtimeContext.recentTopic || null,
-        lastClarificationQuestion: contextSnapshot.lastClarificationQuestion || runtimeContext.lastClarificationQuestion || null,
-        theme: contextSnapshot.theme || 'dark',
-        online: contextSnapshot.online !== false,
+        activeTab: relevantContext.currentTab || relevantContext.screen || runtimeContext.currentTab || 'feed',
+        activeSection: relevantContext.activeSection || runtimeContext.activeSection || null,
+        subScreen: relevantContext.subScreen || relevantContext.activeModal || runtimeContext.subScreen || 'none',
+        activeModal: relevantContext.activeModal || null,
+        recentTopic: relevantContext.recentTopic || runtimeContext.recentTopic || null,
+        lastClarificationQuestion: relevantContext.lastClarificationQuestion || runtimeContext.lastClarificationQuestion || null,
+        theme: relevantContext.theme || sanitizedSnapshot.theme || 'dark',
+        online: relevantContext.isOnline !== false,
         soundEnabled: Boolean(runtimeContext.soundEnabled),
-        device: contextSnapshot.device || 'web'
+        device: sanitizedSnapshot.device || 'web',
+        ...(relevantContext.selectedText ? { selectedText: relevantContext.selectedText } : {}),
+        ...(relevantContext.focusedField ? { focusedField: relevantContext.focusedField } : {}),
+        ...(relevantContext.recentActions ? { recentActions: relevantContext.recentActions } : {}),
+        ...(relevantContext.permissions ? { permissions: relevantContext.permissions } : {}),
+        ...(relevantContext.appState ? { appState: relevantContext.appState } : {})
       }
     };
 

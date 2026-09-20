@@ -70,6 +70,7 @@ export default function VibiAvatar({
   const isAttentive = ['attentive', 'focused', 'new_message', 'missed_call', 'look_around'].includes(moodNormalized);
   const isPlayful = ['playful', 'gentle_bounce', 'bounce', 'tail_wag'].includes(moodNormalized);
   const isError = moodNormalized === 'error';
+  const isConfirmation = ['confirmation', 'confirm', 'awaiting_confirmation'].includes(moodNormalized);
 
   // Determine floating emotion badge
   let emotionBadge = null;
@@ -84,6 +85,10 @@ export default function VibiAvatar({
     emotionBadge = '🎧';
     badgeColor = '#00E5FF';
     badgeAnim = 'vibiListeningTilt 2s infinite ease-in-out';
+  } else if (isConfirmation) {
+    emotionBadge = '🛡️';
+    badgeColor = '#F59E0B';
+    badgeAnim = 'vibiAttentiveFocus 1.8s infinite ease-in-out';
   } else if (isResponding) {
     emotionBadge = '💬';
     badgeColor = '#00E5FF';
@@ -314,7 +319,7 @@ export default function VibiAvatar({
       {/* Universal Floating Emotion Badge for all 20 Core Emotions */}
       {emotionBadge && (
         <span
-          className={`vibi-floating-emotion-badge ${isThinking ? 'vibi-floating-thought-badge' : ''} ${isHappy ? 'vibi-floating-star-badge' : ''} ${isSleepy ? 'vibi-floating-sleep-badge' : ''}`}
+          className={`vibi-floating-emotion-badge vibi-emotion-badge ${isThinking ? 'vibi-floating-thought-badge' : ''} ${isHappy ? 'vibi-floating-star-badge' : ''} ${isSleepy ? 'vibi-floating-sleep-badge' : ''}`}
           style={{
             position: 'absolute',
             top: -Math.max(8, Math.round(size * 0.16)),

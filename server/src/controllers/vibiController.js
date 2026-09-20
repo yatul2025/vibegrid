@@ -107,7 +107,11 @@ const handleVibiChat = async (req, res) => {
       theme: typeof cleanContext.theme === 'string' ? cleanContext.theme.slice(0, 30) : 'dark',
       online: Boolean(cleanContext.online !== false),
       soundEnabled: Boolean(cleanContext.soundEnabled),
-      device: typeof cleanContext.device === 'string' ? cleanContext.device.slice(0, 50) : 'web'
+      device: typeof cleanContext.device === 'string' ? cleanContext.device.slice(0, 50) : 'web',
+      selectedText: typeof cleanContext.selectedText === 'string' ? cleanContext.selectedText.slice(0, 200) : null,
+      focusedField: typeof cleanContext.focusedField === 'string' ? cleanContext.focusedField.slice(0, 30) : null,
+      recentActions: Array.isArray(cleanContext.recentActions) ? cleanContext.recentActions.slice(0, 5) : [],
+      permissions: typeof cleanContext.permissions === 'object' && cleanContext.permissions !== null ? cleanContext.permissions : {}
     };
 
     // 4. Process AI Generation

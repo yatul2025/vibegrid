@@ -28,11 +28,17 @@ export default function VibiPanel() {
 
   const panelRef = useRef(null);
 
-  // Phase 10 Accessibility: Keyboard focus trap within modal dialog
+  // Accessibility: Keyboard focus trap & Escape key dismiss within assistant dialog
   useEffect(() => {
     if (!isOpen || isMinimized) return;
 
-    const handleTabKey = (e) => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeAssistant();
+        return;
+      }
+
       if (e.key !== 'Tab' || !panelRef.current) return;
 
       const focusableEls = panelRef.current.querySelectorAll(
@@ -56,9 +62,9 @@ export default function VibiPanel() {
       }
     };
 
-    window.addEventListener('keydown', handleTabKey);
-    return () => window.removeEventListener('keydown', handleTabKey);
-  }, [isOpen, isMinimized]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isMinimized, closeAssistant]);
 
   if (!isEnabled || !isOpen || isMinimized) {
     return null;

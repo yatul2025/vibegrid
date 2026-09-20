@@ -15760,10 +15760,45 @@ select.form-input option,
   .vibi-panel-drawer,
   .vibi-panel-backdrop,
   .vibi-sparkle-pip,
-  .vibi-launcher-fab {
+  .vibi-launcher-fab,
+  .vibi-avatar-badge,
+  .vibi-character-root,
+  .vibi-master-character-svg,
+  .vibi-master-render-group,
+  .vibi-layer-tail,
+  .vibi-layer-body,
+  .vibi-layer-head,
+  .vibi-layer-hand-wave,
+  .vibi-collar-vector-light,
+  .vibi-floating-mood-badge,
+  .vibi-emotion-badge,
+  .vibi-message-row,
+  .vibi-suggestion-pill,
+  .vibi-post-suggestions-list {
     animation: none !important;
     transition: none !important;
+    transform: none !important;
   }
+}
+
+.reduced-motion .vibi-launcher-fab,
+.reduced-motion .vibi-avatar-badge,
+.reduced-motion .vibi-character-root,
+.reduced-motion .vibi-master-character-svg,
+.reduced-motion .vibi-master-render-group,
+.reduced-motion .vibi-layer-tail,
+.reduced-motion .vibi-layer-body,
+.reduced-motion .vibi-layer-head,
+.reduced-motion .vibi-layer-hand-wave,
+.reduced-motion .vibi-collar-vector-light,
+.reduced-motion .vibi-floating-mood-badge,
+.reduced-motion .vibi-emotion-badge,
+.reduced-motion .vibi-message-row,
+.reduced-motion .vibi-suggestion-pill,
+.reduced-motion .vibi-post-suggestions-list {
+  animation: none !important;
+  transition: none !important;
+  transform: none !important;
 }
 
 /* --- Phase 8: Troubleshooting & Self-Healing Card --- */

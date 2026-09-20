@@ -15,8 +15,63 @@ import vibiOutputValidator, { SAFETY_TIERS } from './vibiOutputValidator';
 import vibiAuditLog from './vibiAuditLog';
 import vibiCharacterService from './vibiCharacterService';
 import vibiSecurityGuard from './vibiSecurityGuard';
+import vibiContextService from './vibiContextService';
+import vibiMemoryService from './vibiMemoryService';
+
+export const EXECUTION_STATES = {
+  IDLE: 'idle',
+  VALIDATING: 'validating',
+  AWAITING_CONFIRMATION: 'awaiting_confirmation',
+  EXECUTING: 'executing',
+  SUCCESS: 'success',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
+  TIMED_OUT: 'timed_out'
+};
 
 export class VibiIntentEngine {
+  constructor() {
+    this.executionState = EXECUTION_STATES.IDLE;
+    this.recentActionNonces = new Map();
+  }
+
+  getExecutionState() {
+    return this.executionState;
+  }
+
+  isExecuting() {
+    return this.executionState === EXECUTION_STATES.EXECUTING;
+  }
+
+  setExecutionState(state) {
+    this.executionState = state;
+  }
+
+  /**
+   * Replay protection guard for state mutating / destructive actions
+   * @param {string} actionId
+   * @param {Object} sanitizedParams
+   * @param {string} username
+   * @returns {boolean} true if execution allowed, false if duplicate
+   */
+  _checkReplayGuard(actionId, sanitizedParams = {}, username = 'anonymous') {
+    const signature = `${actionId}:${JSON.stringify(sanitizedParams)}:${username}`;
+    const now = Date.now();
+    const last = this.recentActionNonces.get(signature);
+    if (last && now - last < 1500) {
+      return false; // rejected by replay guard
+    }
+    this.recentActionNonces.set(signature, now);
+
+    // Bounded cleanup: prune old signatures
+    if (this.recentActionNonces.size > 50) {
+      for (const [k, ts] of this.recentActionNonces.entries()) {
+        if (now - ts > 10000) this.recentActionNonces.delete(k);
+      }
+    }
+    return true;
+  }
+
   /**
    * Extract user handle from text (e.g. @alice)
    * @param {string} text
@@ -298,6 +353,121 @@ export class VibiIntentEngine {
           responseType: 'STEP_BY_STEP',
           topic: 'diagnostics'
         };
+      }
+    }
+
+    // =========================================================================
+    // STEP 0.7: RECENT ACTIONS & WORKFLOW CONTEXT (PHASE 7)
+    // Handle "what did you just do", "what was the last action", "what did you do"
+    // =========================================================================
+    if (query.includes('what did you just do') || query.includes('what was the last action') || query.includes('what did you do')) {
+      const recent = vibiContextService.getRecentActions();
+      if (recent.length > 0) {
+        const last = recent[recent.length - 1];
+        return {
+          matched: true,
+          actionId: 'explain_feature',
+          params: { feature: 'vibi' },
+          confidence: 0.98,
+          safetyTier: SAFETY_TIERS.READ_ONLY,
+          topic: 'recent_action',
+          responseType: 'SHORT',
+          replyText: `I recently executed **${last.actionId}** (status: *${last.status}*). 🦊 Would you like me to repeat it or undo it?`,
+          actions: [{ id: 'explain_feature', params: { feature: 'vibi' } }]
+        };
+      }
+      return {
+        matched: true,
+        actionId: 'explain_feature',
+        params: { feature: 'vibi' },
+        confidence: 0.95,
+        safetyTier: SAFETY_TIERS.READ_ONLY,
+        topic: 'recent_action',
+        responseType: 'SHORT',
+        replyText: 'No actions have been executed yet in this session! 🦊 Anything I can help you with?',
+        actions: []
+      };
+    }
+
+    // =========================================================================
+    // STEP 0.8: CONTROLLED MEMORY & PERSONALIZATION (PHASE 8)
+    // Handle "what do you remember", "remember that ...", "forget everything", "clear memory"
+    // =========================================================================
+    if (query.includes('what do you remember') || query.includes('show my memory') || query.includes('list memories') || query === 'memory') {
+      const allMem = vibiMemoryService.getAllMemories();
+      const facts = Object.entries(allMem.persistentFacts);
+      if (facts.length === 0) {
+        return {
+          matched: true,
+          actionId: 'explain_feature',
+          params: { feature: 'vibi_memory' },
+          confidence: 0.98,
+          safetyTier: SAFETY_TIERS.READ_ONLY,
+          topic: 'memory',
+          responseType: 'SHORT',
+          replyText: 'I currently have no saved preferences or memories about you! 🦊 You can tell me things like "Remember that I prefer dark mode" or "Remember that I like short answers".',
+          actions: []
+        };
+      }
+      const factList = facts.map(([k, v]) => `• **${k}**: ${v}`).join('\n');
+      return {
+        matched: true,
+        actionId: 'explain_feature',
+        params: { feature: 'vibi_memory' },
+        confidence: 0.98,
+        safetyTier: SAFETY_TIERS.READ_ONLY,
+        topic: 'memory',
+        responseType: 'DETAILED',
+        replyText: `Here is everything I remember about your preferences:\n\n${factList}\n\nYou can say **"forget everything"** to wipe my memory anytime! 🦊🛡️`,
+        actions: [{ id: 'explain_feature', params: { feature: 'vibi_memory' } }]
+      };
+    }
+
+    if (query.includes('forget everything') || query.includes('clear my memory') || query.includes('delete memory') || query.includes('wipe memory')) {
+      vibiMemoryService.clearAllMemory();
+      return {
+        matched: true,
+        actionId: 'clear_temporary_cache',
+        params: { target: 'memory' },
+        confidence: 0.98,
+        safetyTier: SAFETY_TIERS.READ_ONLY,
+        topic: 'memory',
+        responseType: 'SHORT',
+        replyText: 'Memory completely wiped! 🦊🧹 I have forgotten all saved preferences and session topics.',
+        actions: []
+      };
+    }
+
+    if (query.startsWith('remember that ') || query.startsWith('remember ')) {
+      const rawFact = text.trim().replace(/^remember (that )?/i, '').trim();
+      if (rawFact.length >= 3) {
+        const key = rawFact.toLowerCase().split(/\s+/).slice(0, 3).join('_').replace(/[^a-z0-9_]/gi, '').slice(0, 30) || 'user_preference';
+        const saveRes = vibiMemoryService.rememberFact(key, rawFact);
+        if (saveRes.success) {
+          return {
+            matched: true,
+            actionId: 'explain_feature',
+            params: { feature: 'vibi_memory' },
+            confidence: 0.98,
+            safetyTier: SAFETY_TIERS.READ_ONLY,
+            topic: 'memory',
+            responseType: 'SHORT',
+            replyText: `Got it! 🦊 I will remember: "${rawFact}". You can view or clear this anytime!`,
+            actions: []
+          };
+        } else {
+          return {
+            matched: true,
+            actionId: 'explain_feature',
+            params: { feature: 'vibi_memory' },
+            confidence: 0.95,
+            safetyTier: SAFETY_TIERS.READ_ONLY,
+            topic: 'memory',
+            responseType: 'SHORT',
+            replyText: 'I couldn\'t remember that because it contains restricted keywords or exceeds my memory limit. 🦊🛡️',
+            actions: []
+          };
+        }
       }
     }
 
@@ -917,14 +1087,19 @@ export class VibiIntentEngine {
    */
   async executeIntent(intent, context = {}, callbacks = {}, username = 'anonymous', options = {}) {
     if (!intent || !intent.actionId) {
+      this.setExecutionState(EXECUTION_STATES.IDLE);
       return {
         success: false,
+        state: EXECUTION_STATES.FAILED,
         error: 'no_action: No action specified to execute.'
       };
     }
 
+    const startTime = Date.now();
+
     // Step 0: Composite Execution handling
     if (intent.isComposite && intent.secondaryIntent && intent.secondaryIntent.actionId) {
+      this.setExecutionState(EXECUTION_STATES.EXECUTING);
       const primaryRes = await this.executeIntent(
         intent.primaryIntent || { actionId: intent.actionId, params: intent.params },
         context,
@@ -933,6 +1108,7 @@ export class VibiIntentEngine {
         options
       );
       if (primaryRes.requiresConfirmation) {
+        this.setExecutionState(EXECUTION_STATES.AWAITING_CONFIRMATION);
         return primaryRes;
       }
       const secondaryRes = await this.executeIntent(
@@ -942,9 +1118,15 @@ export class VibiIntentEngine {
         username,
         options
       );
+      const durationMs = Date.now() - startTime;
+      const isSuccess = Boolean(primaryRes.success && secondaryRes.success);
+      this.setExecutionState(isSuccess ? EXECUTION_STATES.SUCCESS : EXECUTION_STATES.FAILED);
+
       return {
-        success: Boolean(primaryRes.success && secondaryRes.success),
+        success: isSuccess,
         isComposite: true,
+        state: this.executionState,
+        durationMs,
         primaryResult: primaryRes,
         secondaryResult: secondaryRes,
         safetyTier: primaryRes.safetyTier || secondaryRes.safetyTier || SAFETY_TIERS.READ_ONLY,
@@ -957,18 +1139,22 @@ export class VibiIntentEngine {
     const { actionId, params = {}, replyText = '' } = intent;
 
     // Step 1: AI Output / Tool-Call Validator
+    this.setExecutionState(EXECUTION_STATES.VALIDATING);
     const validation = vibiOutputValidator.validateAction(actionId, params, options);
     if (!validation.valid) {
+      this.setExecutionState(EXECUTION_STATES.FAILED);
       vibiAuditLog.logAction({
         actionId,
         category: 'unknown',
         status: 'rejected',
         failureReason: validation.error,
+        durationMs: Date.now() - startTime,
         username
       });
       return {
         success: false,
         rejected: true,
+        state: EXECUTION_STATES.FAILED,
         error: validation.error,
         replyText: `⚠️ Action could not be executed: ${validation.error}`
       };
@@ -978,16 +1164,19 @@ export class VibiIntentEngine {
 
     // Step 2: Confirmation Guard
     if (pendingConfirmation) {
+      this.setExecutionState(EXECUTION_STATES.AWAITING_CONFIRMATION);
       vibiAuditLog.logAction({
         actionId,
         category: action.category,
         safetyTier,
         status: 'pending_confirmation',
+        durationMs: Date.now() - startTime,
         username
       });
       return {
         success: true,
         requiresConfirmation: true,
+        state: EXECUTION_STATES.AWAITING_CONFIRMATION,
         actionId,
         sanitizedParams,
         safetyTier,
@@ -999,52 +1188,94 @@ export class VibiIntentEngine {
       };
     }
 
-    // Step 3: Execute Action
+    // Step 2.5: Replay Guard for Mutating / Destructive actions
+    if ((safetyTier === SAFETY_TIERS.STATE_MUTATING || safetyTier === SAFETY_TIERS.DESTRUCTIVE) && !options.bypassReplayGuard) {
+      const allowed = this._checkReplayGuard(actionId, sanitizedParams, username);
+      if (!allowed) {
+        this.setExecutionState(EXECUTION_STATES.IDLE);
+        return {
+          success: false,
+          isDuplicate: true,
+          state: EXECUTION_STATES.IDLE,
+          message: 'Duplicate action suppressed by replay guard.',
+          replyText: 'Action already recently executed! 🦊⏳'
+        };
+      }
+    }
+
+    // Step 3: State transition to EXECUTING with Timeout Guard
+    this.setExecutionState(EXECUTION_STATES.EXECUTING);
+    const timeoutMs = options.timeoutMs || 5000;
+
     try {
-      const result = await action.handler(sanitizedParams, context, callbacks);
+      const handlerPromise = action.handler(sanitizedParams, context, callbacks);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`action_timeout: Handler timed out after ${timeoutMs}ms`)), timeoutMs);
+      });
+
+      const result = await Promise.race([handlerPromise, timeoutPromise]);
+      const durationMs = Date.now() - startTime;
+      const isSuccess = result?.success !== false;
+      this.setExecutionState(isSuccess ? EXECUTION_STATES.SUCCESS : EXECUTION_STATES.FAILED);
 
       vibiAuditLog.logAction({
         actionId,
         category: action.category,
         safetyTier,
-        status: result.success ? 'success' : 'failed',
-        failureReason: result.success ? null : result.message,
+        status: isSuccess ? 'success' : 'failed',
+        failureReason: isSuccess ? null : result?.message,
+        durationMs,
         username
       });
 
-      if (result.success) {
+      if (isSuccess) {
         vibiCharacterService.success();
       } else {
         vibiCharacterService.error();
       }
 
+      vibiContextService.recordRecentAction(actionId, sanitizedParams, isSuccess ? 'success' : 'failed');
+
       return {
-        success: Boolean(result.success),
-        message: replyText || result.message,
+        success: isSuccess,
+        state: this.executionState,
+        durationMs,
+        actionId,
+        message: replyText || result?.message,
         data: result,
-        explanation: result.explanation || null,
+        explanation: result?.explanation || null,
         safetyTier,
         responseType: intent.responseType || 'SHORT',
         topic: intent.topic || null,
-        replyText: result.explanation ? `${replyText}\n\n${result.explanation}` : (replyText || result.summary || result.message)
+        replyText: result?.explanation ? `${replyText}\n\n${result.explanation}` : (replyText || result?.summary || result?.message)
       };
     } catch (err) {
+      const isTimeout = err.message?.includes('action_timeout');
+      this.setExecutionState(isTimeout ? EXECUTION_STATES.TIMED_OUT : EXECUTION_STATES.FAILED);
       vibiCharacterService.error();
 
+      const durationMs = Date.now() - startTime;
       vibiAuditLog.logAction({
         actionId,
         category: action.category,
         safetyTier,
         status: 'failed',
         failureReason: err.message,
+        durationMs,
         username
       });
 
+      vibiContextService.recordRecentAction(actionId, sanitizedParams, 'failed');
+
       return {
         success: false,
+        state: this.executionState,
+        durationMs,
         error: err.message,
         replyText: `⚠️ An error occurred while executing ${action.name}: ${err.message}`
       };
+    } finally {
+      this.setExecutionState(EXECUTION_STATES.IDLE);
     }
   }
 

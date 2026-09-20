@@ -57,7 +57,7 @@ class VibiAuditLog {
    * @param {string} [entry.username] - User who initiated the action
    * @returns {Object} the recorded entry
    */
-  logAction({ actionId, category = 'ui', status = 'success', failureReason = null, username = 'anonymous' }) {
+  logAction({ actionId, category = 'ui', status = 'success', failureReason = null, username = 'anonymous', durationMs = null, safetyTier = null }) {
     const entry = {
       id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       timestamp: Date.now(),
@@ -65,6 +65,8 @@ class VibiAuditLog {
       category: String(category),
       status: ['success', 'failed', 'rejected', 'pending_confirmation'].includes(status) ? status : 'unknown',
       failureReason: failureReason ? String(failureReason).slice(0, 200) : null,
+      durationMs: typeof durationMs === 'number' ? durationMs : null,
+      safetyTier: safetyTier ? String(safetyTier) : null,
       user: username ? String(username).slice(0, 50) : 'anonymous',
       username: username ? String(username).slice(0, 50) : 'anonymous'
     };

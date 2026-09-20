@@ -43,12 +43,15 @@ export default function VibiCharacter({
   const isAttentive = ['attentive', 'focused', 'new_message', 'missed_call', 'look_around'].includes(moodNormalized);
   const isPlayful = ['playful', 'gentle_bounce', 'bounce', 'tail_wag'].includes(moodNormalized);
   const isError = ['error'].includes(moodNormalized);
+  const isConfirmation = ['confirmation', 'confirm', 'awaiting_confirmation'].includes(moodNormalized);
   const isDragging = ['dragging', 'dragging_move', 'dragging_move_alt'].includes(moodNormalized);
 
   // Dynamic mood animation class
   let moodAnimationClass = 'vibi-idle-float';
   if (isDragging) {
     moodAnimationClass = 'vibi-dragging-tilt';
+  } else if (isConfirmation) {
+    moodAnimationClass = 'vibi-attentive-focus';
   } else if (isCelebrating || isExcited) {
     moodAnimationClass = 'vibi-celebrate-bounce';
   } else if (isThinking) {
@@ -98,6 +101,10 @@ export default function VibiCharacter({
     collarPrimaryColor = '#00E5FF'; // Electric Cyan
     collarSecondaryColor = '#0284C7';
     collarPulseDuration = isThinking ? '1.4s' : '2.0s';
+  } else if (isConfirmation) {
+    collarPrimaryColor = '#F59E0B'; // Shield Amber
+    collarSecondaryColor = '#D97706';
+    collarPulseDuration = '1.6s';
   } else if (isSleepy) {
     collarPrimaryColor = '#C084FC'; // Calming Lavender
     collarSecondaryColor = '#7C3AED';
@@ -119,7 +126,8 @@ export default function VibiCharacter({
   // Floating Mood Badge configuration (for emotions not rendered as external badge in VibiAvatar)
   let moodBadge = null;
   if (!isDragging && moodNormalized !== 'idle' && moodNormalized !== 'idle_floating') {
-    if (isListening) moodBadge = '🎧';
+    if (isConfirmation) moodBadge = '🛡️';
+    else if (isListening) moodBadge = '🎧';
     else if (isResponding) moodBadge = '💬';
     else if (isExcited && !isCelebrating) moodBadge = '🎉';
     else if (isProud) moodBadge = '⭐';

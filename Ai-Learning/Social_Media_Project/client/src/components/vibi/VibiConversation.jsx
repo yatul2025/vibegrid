@@ -151,6 +151,43 @@ export default function VibiConversation() {
     });
   };
 
+  // Accessibility: Escape key dismisses pending confirmation modal first
+  useEffect(() => {
+    if (!pendingConfirmation) return;
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleCancelAction();
+      }
+    };
+    window.addEventListener('keydown', handleEscape, true);
+    return () => window.removeEventListener('keydown', handleEscape, true);
+  }, [pendingConfirmation]);
+
+  // Accessibility: Keyboard Arrow / Home / End navigation for suggestion chips
+  const handleChipKeyDown = (e, index, total) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIdx = (index + 1) % total;
+      const pills = e.currentTarget.parentElement?.querySelectorAll('.vibi-suggestion-pill');
+      if (pills && pills[nextIdx]) pills[nextIdx].focus();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIdx = (index - 1 + total) % total;
+      const pills = e.currentTarget.parentElement?.querySelectorAll('.vibi-suggestion-pill');
+      if (pills && pills[prevIdx]) pills[prevIdx].focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      const pills = e.currentTarget.parentElement?.querySelectorAll('.vibi-suggestion-pill');
+      if (pills && pills[0]) pills[0].focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      const pills = e.currentTarget.parentElement?.querySelectorAll('.vibi-suggestion-pill');
+      if (pills && pills[total - 1]) pills[total - 1].focus();
+    }
+  };
+
   const handleSend = (textToSend = null) => {
     const prompt = (textToSend !== null ? textToSend : inputVal).trim();
     if (!prompt) return;
@@ -281,7 +318,7 @@ export default function VibiConversation() {
                 description: res.description,
                 msgId: msgObj.id
               });
-              vibiCharacterService.attentive({ preferences });
+              vibiCharacterService.confirmation({ preferences });
               return;
             }
             vibiCharacterService.proud({ preferences });
@@ -319,7 +356,7 @@ export default function VibiConversation() {
                 description: actionDef?.description || `Do you want Vibi to execute ${actionDef?.name || id}?`,
                 msgId: null
               });
-              vibiCharacterService.attentive({ preferences });
+              vibiCharacterService.confirmation({ preferences });
             } else {
               const actionCallbacks = {
                 onClearChat: () => handleClearConversation(),
@@ -422,12 +459,15 @@ export default function VibiConversation() {
             </p>
 
             {preferences.smartSuggestions && (
-              <div className="vibi-suggestion-grid">
+              <div className="vibi-suggestion-grid" role="list" aria-label="Suggested prompts">
                 {screenSuggestions.map((sug, idx) => (
                   <button
                     key={idx}
                     type="button"
                     className="vibi-suggestion-pill"
+                    role="listitem"
+                    aria-label={`Suggestion: ${sug.label}`}
+                    onKeyDown={(e) => handleChipKeyDown(e, idx, screenSuggestions.length)}
                     onClick={() => handleSuggestionClick(sug.prompt)}
                   >
                     <Sparkles size={12} className="vibi-sug-icon" />
@@ -507,12 +547,21 @@ export default function VibiConversation() {
 
                     {/* Dynamic Post-Response Contextual Suggestions */}
                     {msg.suggestions && msg.suggestions.length > 0 && (
-                      <div className="vibi-post-suggestions-list" data-testid="vibi-post-suggestions" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                      <div
+                        className="vibi-post-suggestions-list"
+                        data-testid="vibi-post-suggestions"
+                        role="list"
+                        aria-label="Follow-up suggestions"
+                        style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}
+                      >
                         {msg.suggestions.map((sug, sugIdx) => (
                           <button
                             key={sug.id || sugIdx}
                             type="button"
                             className="vibi-suggestion-pill"
+                            role="listitem"
+                            aria-label={`Suggestion: ${sug.label}`}
+                            onKeyDown={(e) => handleChipKeyDown(e, sugIdx, msg.suggestions.length)}
                             onClick={async () => {
                               if (sug.actionId) {
                                 vibiCharacterService.proud({ durationMs: 2000, preferences });
@@ -602,12 +651,19 @@ export default function VibiConversation() {
 
             {/* Interactive Confirmation Card (Phase 1 Reliability) */}
             {pendingConfirmation && (
-              <div className="vibi-confirmation-card" data-testid="vibi-confirmation-card">
+              <div
+                className="vibi-confirmation-card"
+                data-testid="vibi-confirmation-card"
+                role="alertdialog"
+                aria-modal="false"
+                aria-labelledby="vibi-confirm-title"
+                aria-describedby="vibi-confirm-desc"
+              >
                 <div className="vibi-confirmation-header">
                   <AlertCircle size={18} className="vibi-confirmation-icon" />
-                  <span className="vibi-confirmation-title">Confirmation Required</span>
+                  <span id="vibi-confirm-title" className="vibi-confirmation-title">Confirmation Required</span>
                 </div>
-                <p className="vibi-confirmation-desc">
+                <p id="vibi-confirm-desc" className="vibi-confirmation-desc">
                   {pendingConfirmation.description || `Do you want Vibi to execute "${pendingConfirmation.actionName || pendingConfirmation.actionId}"?`}
                 </p>
                 <div className="vibi-confirmation-buttons">

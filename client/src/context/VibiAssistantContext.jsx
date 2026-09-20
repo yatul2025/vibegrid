@@ -16,7 +16,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import navigationService from '../services/navigationService';
 import vibiContextService from '../services/vibiContextService';
 import vibiProactiveService from '../services/vibiProactiveService';
-import vibiCharacterService, { VIBI_STATES } from '../services/vibiCharacterService';
+import vibiCharacterService, { VIBI_STATES, EMOTION_PRIORITY } from '../services/vibiCharacterService';
+import vibiMemoryService from '../services/vibiMemoryService';
 
 export const VIBI_PREFERENCES_STORAGE_KEY = 'vibegrid_vibi_preferences';
 
@@ -86,7 +87,12 @@ export function VibiAssistantProvider({ children }) {
     if (isTyping) {
       vibiCharacterService.think({ preferences: preferencesRef.current });
     } else if (prevTypingRef.current && !isTyping) {
-      vibiCharacterService.happy({ durationMs: 1600, preferences: preferencesRef.current });
+      if (
+        vibiCharacterService.getState() !== VIBI_STATES.CONFIRMATION &&
+        vibiCharacterService.getPriority() < EMOTION_PRIORITY.CRITICAL
+      ) {
+        vibiCharacterService.happy({ durationMs: 1600, preferences: preferencesRef.current });
+      }
     }
     prevTypingRef.current = isTyping;
   }, [isTyping]);
@@ -219,14 +225,15 @@ export function VibiAssistantProvider({ children }) {
   }, []);
 
   // Add a message into the conversation state
-  const addMessage = useCallback(({ sender = 'vibi', text, action = null, status = 'complete' }) => {
+  const addMessage = useCallback(({ sender = 'vibi', text, action = null, status = 'complete', ...rest }) => {
     const newMessage = {
       id: `${sender}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       sender,
       text,
       timestamp: Date.now(),
       status,
-      action
+      action,
+      ...rest
     };
     setMessages((prev) => [...prev, newMessage]);
     return newMessage;
@@ -357,7 +364,13 @@ export function VibiAssistantProvider({ children }) {
     triggerSuggestion,
     evaluateSuggestions,
     triggerReaction,
-    setCharacterState
+    setCharacterState,
+    // Memory & Personalization (Phase 8)
+    memoryService: vibiMemoryService,
+    getMemories: () => vibiMemoryService.getAllMemories(),
+    forgetMemory: (key) => vibiMemoryService.forgetFact(key),
+    clearAllMemory: () => vibiMemoryService.clearAllMemory(),
+    exportMemory: () => vibiMemoryService.exportMemory()
   }), [
     preferences,
     isOpen,

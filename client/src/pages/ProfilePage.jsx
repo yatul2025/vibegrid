@@ -242,6 +242,14 @@ export default function ProfilePage({
 
   // Phase 8 Option 6 Delight: Jelly Stat Bounce
   const [bumpedStat, setBumpedStat] = useState(null);
+  const bumpedTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (bumpedTimeoutRef.current) clearTimeout(bumpedTimeoutRef.current);
+    };
+  }, []);
+
   const triggerStatBump = (type) => {
     setBumpedStat(type);
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
@@ -249,8 +257,11 @@ export default function ProfilePage({
         navigator.vibrate([10, 25]);
       } catch {}
     }
-    setTimeout(() => {
-      setBumpedStat((prev) => (prev === type ? null : prev));
+    if (bumpedTimeoutRef.current) clearTimeout(bumpedTimeoutRef.current);
+    bumpedTimeoutRef.current = setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        setBumpedStat((prev) => (prev === type ? null : prev));
+      }
     }, 500);
   };
 

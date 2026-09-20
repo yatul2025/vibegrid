@@ -16,7 +16,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import navigationService from '../services/navigationService';
 import vibiContextService from '../services/vibiContextService';
 import vibiProactiveService from '../services/vibiProactiveService';
-import vibiCharacterService, { VIBI_STATES } from '../services/vibiCharacterService';
+import vibiCharacterService, { VIBI_STATES, EMOTION_PRIORITY } from '../services/vibiCharacterService';
 import vibiMemoryService from '../services/vibiMemoryService';
 
 export const VIBI_PREFERENCES_STORAGE_KEY = 'vibegrid_vibi_preferences';
@@ -87,7 +87,12 @@ export function VibiAssistantProvider({ children }) {
     if (isTyping) {
       vibiCharacterService.think({ preferences: preferencesRef.current });
     } else if (prevTypingRef.current && !isTyping) {
-      vibiCharacterService.happy({ durationMs: 1600, preferences: preferencesRef.current });
+      if (
+        vibiCharacterService.getState() !== VIBI_STATES.CONFIRMATION &&
+        vibiCharacterService.getPriority() < EMOTION_PRIORITY.CRITICAL
+      ) {
+        vibiCharacterService.happy({ durationMs: 1600, preferences: preferencesRef.current });
+      }
     }
     prevTypingRef.current = isTyping;
   }, [isTyping]);

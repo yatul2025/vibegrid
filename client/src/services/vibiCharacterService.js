@@ -39,7 +39,8 @@ export const VIBI_EMOTIONS = Object.freeze({
   ATTENTIVE: 'attentive',
   PLAYFUL: 'playful',
   ERROR: 'error',
-  SUCCESS: 'success'
+  SUCCESS: 'success',
+  CONFIRMATION: 'confirmation'
 });
 
 export const VIBI_STATES = Object.freeze({
@@ -64,6 +65,7 @@ export const VIBI_STATES = Object.freeze({
   PLAYFUL: 'playful',
   ERROR: 'error',
   SUCCESS: 'success',
+  CONFIRMATION: 'confirmation',
 
   // Canonical / Core aliases
   CELEBRATE: 'celebrate',
@@ -172,6 +174,7 @@ export const DEFAULT_EMOTION_PRIORITY = Object.freeze({
   // Critical
   [VIBI_STATES.CONCERNED]: EMOTION_PRIORITY.CRITICAL,
   [VIBI_STATES.ERROR]: EMOTION_PRIORITY.CRITICAL,
+  [VIBI_STATES.CONFIRMATION]: EMOTION_PRIORITY.CRITICAL,
   [VIBI_STATES.QUESTION]: EMOTION_PRIORITY.CRITICAL
 });
 
@@ -248,6 +251,21 @@ class VibiCharacterService {
   }
 
   /**
+   * Check if user or system has enabled prefers-reduced-motion
+   * @returns {boolean}
+   */
+  isReducedMotion() {
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      try {
+        return Boolean(window.matchMedia('(prefers-reduced-motion: reduce)')?.matches);
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Get the current character state
    * @returns {string}
    */
@@ -283,12 +301,8 @@ class VibiCharacterService {
     }
 
     // Check prefers-reduced-motion
-    if (typeof window !== 'undefined' && window.matchMedia) {
-      try {
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches && !force && emotion !== VIBI_STATES.IDLE) {
-          return false;
-        }
-      } catch {}
+    if (this.isReducedMotion() && !force && emotion !== VIBI_STATES.IDLE) {
+      return false;
     }
 
     const targetPriority = typeof priority === 'number'
@@ -566,6 +580,15 @@ class VibiCharacterService {
     });
   }
 
+  confirmation(options = {}) {
+    return this.setEmotion(VIBI_STATES.CONFIRMATION, {
+      priority: EMOTION_PRIORITY.CRITICAL,
+      durationMs: 0,
+      force: true,
+      ...options
+    });
+  }
+
   // ==========================================
   // Direct Event Helpers
   // ==========================================
@@ -717,7 +740,7 @@ class VibiCharacterService {
       this.ambientTimer = null;
     }
 
-    if (this.isInactive || this.isTabHidden || preferences.animations === false) {
+    if (this.isInactive || this.isTabHidden || preferences.animations === false || this.isReducedMotion()) {
       return;
     }
 
