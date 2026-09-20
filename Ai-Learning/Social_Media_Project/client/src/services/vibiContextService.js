@@ -40,6 +40,104 @@ export class VibiContextService {
     this.activeTab = 'feed';
     this.activeSection = null;
     this.activeChatMetadata = null; // { id, name, type }
+    this.recentTopic = null;
+    this.lastClarificationQuestion = null;
+    this.recentTurns = [];
+  }
+
+  /**
+   * Set the most recently discussed topic for contextual continuity
+   * @param {string|null} topic
+   */
+  setRecentTopic(topic) {
+    if (!topic) {
+      this.recentTopic = null;
+      return;
+    }
+    if (typeof topic === 'string') {
+      this.recentTopic = topic.trim().toLowerCase().slice(0, 50);
+    }
+  }
+
+  /**
+   * Get the current active topic
+   * @returns {string|null}
+   */
+  getRecentTopic() {
+    return this.recentTopic || null;
+  }
+
+  /**
+   * Clear recent topic
+   */
+  clearRecentTopic() {
+    this.recentTopic = null;
+  }
+
+  /**
+   * Set active clarification prompt key (e.g. 'which_settings', 'which_diagnostic')
+   * @param {string|null} key
+   */
+  setLastClarification(key) {
+    if (!key) {
+      this.lastClarificationQuestion = null;
+      return;
+    }
+    if (typeof key === 'string') {
+      this.lastClarificationQuestion = key.trim().toLowerCase().slice(0, 50);
+    }
+  }
+
+  /**
+   * Get last pending clarification question
+   * @returns {string|null}
+   */
+  getLastClarification() {
+    return this.lastClarificationQuestion || null;
+  }
+
+  /**
+   * Clear active clarification question
+   */
+  clearClarification() {
+    this.lastClarificationQuestion = null;
+  }
+
+  /**
+   * Record a conversational turn (up to 5 recent turns)
+   * @param {'user'|'vibi'} role
+   * @param {string} text
+   * @param {string|null} [topic=null]
+   */
+  recordTurn(role, text, topic = null) {
+    if (!text || typeof text !== 'string') return;
+    if (topic) {
+      this.setRecentTopic(topic);
+    }
+    const turn = {
+      role: role === 'user' ? 'user' : 'vibi',
+      text: text.slice(0, 300),
+      topic: topic || this.recentTopic || null,
+      timestamp: Date.now()
+    };
+    this.recentTurns = [...this.recentTurns.slice(-4), turn];
+  }
+
+  /**
+   * Get recent conversation turns
+   * @returns {Array}
+   */
+  getRecentTurns() {
+    return Array.isArray(this.recentTurns) ? [...this.recentTurns] : [];
+  }
+
+  /**
+   * Reset conversation memory, topics and clarifications
+   */
+  clearHistory() {
+    this.recentTopic = null;
+    this.lastClarificationQuestion = null;
+    this.recentTurns = [];
   }
 
   /**
@@ -240,6 +338,9 @@ export class VibiContextService {
       subScreen: this.getActiveSubScreen(),
       activeSection: this.getActiveSection(),
       activeChat: this.activeChatMetadata ? { ...this.activeChatMetadata } : null,
+      recentTopic: this.getRecentTopic(),
+      lastClarificationQuestion: this.getLastClarification(),
+      recentTurns: this.getRecentTurns(),
       user: this.getUserSummary(user),
       device: this.getDeviceContext(),
       appContextEnabled: true
@@ -258,6 +359,8 @@ export class VibiContextService {
           screen: snapshot.screen,
           subScreen: 'none',
           activeSection: snapshot.activeSection,
+          recentTopic: snapshot.recentTopic,
+          lastClarificationQuestion: snapshot.lastClarificationQuestion,
           user: snapshot.user,
           device: { isOnline: snapshot.device.isOnline },
           appContextEnabled: true
@@ -276,6 +379,9 @@ export class VibiContextService {
     return {
       currentTab: raw.screen || 'feed',
       activeSection: raw.activeSection || null,
+      recentTopic: raw.recentTopic || null,
+      lastClarificationQuestion: raw.lastClarificationQuestion || null,
+      recentTurns: raw.recentTurns || [],
       theme: raw.device?.theme || 'dark',
       online: raw.device?.isOnline !== false,
       device: raw.device?.isPWA ? 'pwa' : 'web',

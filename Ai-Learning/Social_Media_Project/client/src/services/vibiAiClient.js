@@ -53,6 +53,8 @@ export class VibiAiClient {
       context: {
         activeTab: contextSnapshot.currentTab || runtimeContext.currentTab || 'feed',
         activeSection: contextSnapshot.activeSection || runtimeContext.activeSection || null,
+        recentTopic: contextSnapshot.recentTopic || runtimeContext.recentTopic || null,
+        lastClarificationQuestion: contextSnapshot.lastClarificationQuestion || runtimeContext.lastClarificationQuestion || null,
         theme: contextSnapshot.theme || 'dark',
         online: contextSnapshot.online !== false,
         soundEnabled: Boolean(runtimeContext.soundEnabled),
@@ -67,7 +69,7 @@ export class VibiAiClient {
         throw new Error(response.error || 'Failed to receive response from Vibi AI.');
       }
 
-      const { replyText, action, provider, isFallback } = response.data;
+      const { replyText, action, responseType, topic, provider, isFallback } = response.data;
 
       // 2. Validate proposed action with VibiOutputValidator
       let actionProposal = null;
@@ -88,6 +90,8 @@ export class VibiAiClient {
       return {
         replyText: replyText || "I'm right here! 🦊",
         actionProposal,
+        responseType: responseType || 'NORMAL',
+        topic: topic || null,
         provider: provider || 'unknown',
         isFallback: Boolean(isFallback)
       };
@@ -106,32 +110,48 @@ export class VibiAiClient {
     const query = message.toLowerCase();
     let replyText = "I'm here to help you get the most out of VibeGrid! 🦊✨";
     let actionProposal = null;
+    let responseType = 'NORMAL';
+    let topic = null;
 
     if (query.includes('explore') || query.includes('trend')) {
       replyText = "Hey! I'm Vibi! Heading over to **Explore** where you can discover trending hashtags and posts! 🧭";
       actionProposal = { id: 'navigate', params: { tab: 'explore' } };
+      responseType = 'SHORT';
+      topic = 'navigation';
     } else if (query.includes('setting')) {
       replyText = "Opening **Settings** for you right now! ⚙️";
       actionProposal = { id: 'navigate', params: { tab: 'settings' } };
+      responseType = 'SHORT';
+      topic = 'settings';
     } else if (query.includes('theme') || query.includes('dark')) {
       replyText = "You can change themes under Settings > Appearance! 🎨";
       actionProposal = { id: 'navigate', params: { tab: 'settings', section: 'appearance' } };
+      responseType = 'SHORT';
+      topic = 'theme';
     } else if (query.includes('e2ee') || query.includes('encrypt')) {
       replyText = "🔒 **End-to-End Encryption**: All your 1-on-1 chats are encrypted on your device using AES-256-GCM. Nobody else can read them!";
+      responseType = 'DETAILED';
+      topic = 'e2ee';
     } else if (query.includes('diagnostic') || query.includes('troubleshoot') || query.includes('fix') || query.includes('stuck') || query.includes('slow')) {
       replyText = "I can help diagnose connectivity, notifications, WebRTC calls, or storage right on your device! 🦊🔧";
       actionProposal = { id: 'run_diagnostics', params: {} };
+      responseType = 'STEP_BY_STEP';
+      topic = 'diagnostics';
     } else {
       replyText = `Hey! I'm Vibi, your native VibeGrid assistant. I can help you navigate screens, adjust settings, change themes, or explain privacy and calls! Try asking me:
 - *"Go to Explore"* 🧭
 - *"Open Privacy Settings"* 🛡️
 - *"Change theme to Dark"* 🌙
 - *"What is E2EE?"* 🔒`;
+      responseType = 'NORMAL';
+      topic = 'greeting';
     }
 
     return {
       replyText,
       actionProposal,
+      responseType,
+      topic,
       provider: 'client_offline_fallback',
       isFallback: true
     };

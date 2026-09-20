@@ -50,33 +50,123 @@ Do not wrap your JSON in markdown code blocks if possible, or provide standard p
  */
 function queryKnowledgeBase(message, context = {}) {
   const query = (message || '').toLowerCase().trim();
+  const lastClarification = context.lastClarificationQuestion || null;
+  const recentTopic = context.recentTopic || null;
 
-  // 1. Navigation & Screens
+  // 0. Clarification Response Resolution
+  if (lastClarification === 'which_settings') {
+    if (query.includes('privacy') || query.includes('permission') || query.includes('security')) {
+      return {
+        replyText: "Opening **Privacy & Permissions** settings for you! 🛡️",
+        action: { id: 'navigate', params: { tab: 'settings', section: 'privacy' } },
+        responseType: 'SHORT',
+        topic: 'settings'
+      };
+    }
+    if (query.includes('appearance') || query.includes('theme') || query.includes('dark') || query.includes('light')) {
+      return {
+        replyText: "Opening **Appearance & Themes** settings! 🎨",
+        action: { id: 'navigate', params: { tab: 'settings', section: 'appearance' } },
+        responseType: 'SHORT',
+        topic: 'theme'
+      };
+    }
+    if (query.includes('notification') || query.includes('alert')) {
+      return {
+        replyText: "Opening **Notification Preferences**! 🔔",
+        action: { id: 'navigate', params: { tab: 'settings', section: 'notifications' } },
+        responseType: 'SHORT',
+        topic: 'notifications'
+      };
+    }
+    if (query.includes('vibi') || query.includes('assistant')) {
+      return {
+        replyText: "Opening **Vibi Assistant** settings! 🦊⚙️",
+        action: { id: 'navigate', params: { tab: 'settings', section: 'vibi' } },
+        responseType: 'SHORT',
+        topic: 'vibi'
+      };
+    }
+    if (query.includes('all') || query.includes('main') || query.includes('everything') || query === 'settings') {
+      return {
+        replyText: "Navigating to **Settings & Privacy**! ⚙️",
+        action: { id: 'navigate', params: { tab: 'settings' } },
+        responseType: 'SHORT',
+        topic: 'settings'
+      };
+    }
+  }
+
+  // 1. Follow-up & Pronoun Resolution
+  const isReferenceQuery =
+    /\b(how do i fix (it|this)|how to fix (it|this)|fix (it|this)|why is (it|this) not working|test (it|this)|verify (it|this)|how does (it|this) work|tell me more about (it|this)|is (it|this) safe|is (it|this) secure|what about (it|this)|explain (it|this))\b/i.test(query) ||
+    query === 'it' ||
+    query === 'fix it' ||
+    query === 'verify it' ||
+    query === 'is it safe' ||
+    query === 'how does it work';
+
+  if (isReferenceQuery && recentTopic) {
+    if (recentTopic === 'e2ee') {
+      return {
+        replyText: "🔒 **End-to-End Encryption (E2EE) Deep Dive**:\n\nVibeGrid uses the Signal protocol architecture with **AES-256-GCM** authenticated cipher. Your keys never leave your device. When you send a message, it is encrypted locally on your phone/browser before transmission. The server acts purely as an encrypted postbox and cannot read or decrypt the contents.\n\nTo verify: open any DM and click the shield icon 🛡️ to view verified fingerprint key hashes!",
+        action: { id: 'explain_feature', params: { feature: 'e2ee' } },
+        responseType: 'DETAILED',
+        topic: 'e2ee'
+      };
+    }
+    if (recentTopic === 'calls') {
+      return {
+        replyText: "📞 **WebRTC Call Troubleshooting & Setup**:\n\n1. Checking microphone & camera device permissions.\n2. Verifying UDP/STUN server connectivity.\n3. Testing peer signaling socket status.\n\nRunning audio/video call diagnostic now! 🦊📹",
+        action: { id: 'run_diagnostics', params: { category: 'calls' } },
+        responseType: 'STEP_BY_STEP',
+        topic: 'calls'
+      };
+    }
+    if (recentTopic === 'notifications') {
+      return {
+        replyText: "🔔 **Notification Diagnostic Checklist**:\n\n1. Verifying browser Notification permission status.\n2. Testing service worker push registration.\n3. Verifying in-app sound and banner alert dispatch.\n\nRunning notification diagnostic now! 🦊",
+        action: { id: 'run_diagnostics', params: { category: 'notifications' } },
+        responseType: 'STEP_BY_STEP',
+        topic: 'notifications'
+      };
+    }
+  }
+
+  // 2. Navigation & Screens
   if (query.includes('explore') || query.includes('trending') || query.includes('discover')) {
     return {
       replyText: "You can explore trending hashtags, viral reels, and posts from all across VibeGrid on the **Explore** tab! 🧭✨",
-      action: { id: 'navigate', params: { tab: 'explore' } }
+      action: { id: 'navigate', params: { tab: 'explore' } },
+      responseType: 'SHORT',
+      topic: 'navigation'
     };
   }
 
   if (query.includes('feed') || query.includes('home') || query.includes('timeline') || query.includes('posts')) {
     return {
       replyText: "Taking you to your home **Feed** so you can catch up on latest updates and stories! 📰🦊",
-      action: { id: 'navigate', params: { tab: 'feed' } }
+      action: { id: 'navigate', params: { tab: 'feed' } },
+      responseType: 'SHORT',
+      topic: 'navigation'
     };
   }
 
   if (query.includes('message') || query.includes('chat') || query.includes('dm') || query.includes('direct')) {
     return {
       replyText: "Heading to your **Direct Messages & Groups**! Remember, all 1-on-1 chats are End-to-End Encrypted (E2EE)! 💬🔒",
-      action: { id: 'navigate', params: { tab: 'messages' } }
+      action: { id: 'navigate', params: { tab: 'messages' } },
+      responseType: 'SHORT',
+      topic: 'messages'
     };
   }
 
   if (query.includes('profile') || query.includes('my account') || query.includes('bio')) {
     return {
       replyText: "Here is your **Profile** screen where you can edit your avatar, bio, and review your shared posts! 👤✨",
-      action: { id: 'navigate', params: { tab: 'profile' } }
+      action: { id: 'navigate', params: { tab: 'profile' } },
+      responseType: 'SHORT',
+      topic: 'navigation'
     };
   }
 
@@ -84,12 +174,16 @@ function queryKnowledgeBase(message, context = {}) {
     if (context.activeTab === 'settings' && context.activeSection === 'privacy') {
       return {
         replyText: "You are currently right inside **Privacy & Permissions**! Here you can toggle Private Account mode, choose who can message or mention you, and manage your online presence status! 🛡️✨",
-        action: null
+        action: null,
+        responseType: 'SHORT',
+        topic: 'settings'
       };
     }
     return {
       replyText: "Security is paramount at VibeGrid! Let me open **Privacy & Permissions** for you where you can manage two-factor OTP, active sessions, and visibility! 🛡️⚙️",
-      action: { id: 'navigate', params: { tab: 'settings', section: 'privacy' } }
+      action: { id: 'navigate', params: { tab: 'settings', section: 'privacy' } },
+      responseType: 'SHORT',
+      topic: 'settings'
     };
   }
 
@@ -97,27 +191,35 @@ function queryKnowledgeBase(message, context = {}) {
     if (context.activeTab === 'settings' && context.activeSection === 'vibi') {
       return {
         replyText: "You are already inside **Vibi Assistant Settings**! You can toggle my floating button, smart suggestions, animations, or turn me off anytime. 🦊⚙️",
-        action: null
+        action: null,
+        responseType: 'SHORT',
+        topic: 'vibi'
       };
     }
     return {
       replyText: "You have complete control over me! Let's open **Vibi Assistant Settings** where you can toggle my floating button, smart suggestions, or turn me off entirely! 🦊⚙️",
-      action: { id: 'navigate', params: { tab: 'settings', section: 'vibi' } }
+      action: { id: 'navigate', params: { tab: 'settings', section: 'vibi' } },
+      responseType: 'SHORT',
+      topic: 'vibi'
     };
   }
 
-  // 2. Explanations of Security, E2EE, Calls, and Themes
+  // 3. Explanations of Security, E2EE, Calls, and Themes
   if (query.includes('e2ee') || query.includes('encryption') || query.includes('encrypted') || query.includes('safe')) {
     return {
       replyText: "🔒 **End-to-End Encryption (E2EE) in VibeGrid**:\n\nAll your direct 1-on-1 messages are encrypted using military-grade **AES-256-GCM** keys generated right on your device. The VibeGrid server cannot read your messages, and neither can I! Only you and your chat partner hold the decryption keys. 🛡️✨",
-      action: { id: 'explain_feature', params: { feature: 'e2ee' } }
+      action: { id: 'explain_feature', params: { feature: 'e2ee' } },
+      responseType: 'DETAILED',
+      topic: 'e2ee'
     };
   }
 
   if (query.includes('call') || query.includes('video') || query.includes('voice') || query.includes('webrtc')) {
     return {
       replyText: "📞 **WebRTC Encrypted Calls**:\n\nVibeGrid provides crystal-clear peer-to-peer audio and video calls. Signaling is securely authenticated, and audio/video streams flow directly between participants with zero media recording or eavesdropping! 🦊📹",
-      action: { id: 'explain_feature', params: { feature: 'calls' } }
+      action: { id: 'explain_feature', params: { feature: 'calls' } },
+      responseType: 'DETAILED',
+      topic: 'calls'
     };
   }
 
@@ -125,30 +227,38 @@ function queryKnowledgeBase(message, context = {}) {
     if (context.activeTab === 'settings' && context.activeSection === 'appearance') {
       return {
         replyText: "You are already in **Appearance & Themes**! Tap any of the 10 theme cards above to instantly preview or switch themes, or toggle Dark Mode right here! 🎨🌙",
-        action: null
+        action: null,
+        responseType: 'SHORT',
+        topic: 'theme'
       };
     }
     return {
       replyText: "🎨 VibeGrid features **10 gorgeous themes**! You can choose Light, Dark, Neon Glow, Ocean Blue, Sunset Gradient, AMOLED Black, and more in Appearance settings! Want to switch to Dark Mode? 🌙",
-      action: { id: 'navigate', params: { tab: 'settings', section: 'appearance' } }
+      action: { id: 'navigate', params: { tab: 'settings', section: 'appearance' } },
+      responseType: 'SHORT',
+      topic: 'theme'
     };
   }
 
   if (query.includes('sound') || query.includes('audio') || query.includes('fx')) {
     return {
       replyText: "🔊 VibeGrid features an interactive Sound FX engine for gentle pops, navigation chirps, and mascot feedback. You can toggle sound effects anytime in Settings! 🎵",
-      action: { id: 'navigate', params: { tab: 'settings', section: 'appearance' } }
+      action: { id: 'navigate', params: { tab: 'settings', section: 'appearance' } },
+      responseType: 'SHORT',
+      topic: 'sound'
     };
   }
 
-  // 3. General Assistant Persona Greeting
+  // 4. General Assistant Persona Greeting
   const currentTab = context.activeTab || 'app';
   const activeSection = context.activeSection;
   const screenLocation = activeSection ? `${currentTab.toUpperCase()} > ${activeSection.toUpperCase()}` : currentTab.toUpperCase();
 
   return {
     replyText: `Hello! I'm **Vibi** 🦊, your native VibeGrid assistant. You're currently on the **${screenLocation}** screen.\n\nI can help you navigate, adjust settings, switch themes, or explain features like E2EE messaging and WebRTC calls. How can I assist you today? ✨`,
-    action: null
+    action: null,
+    responseType: 'NORMAL',
+    topic: 'greeting'
   };
 }
 

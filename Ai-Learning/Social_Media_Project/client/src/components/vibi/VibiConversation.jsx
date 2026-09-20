@@ -21,6 +21,7 @@ import vibiActionRegistry from '../../services/vibiActionRegistry';
 import vibiProactiveService from '../../services/vibiProactiveService';
 import vibiSecurityGuard from '../../services/vibiSecurityGuard';
 import vibiCharacterService from '../../services/vibiCharacterService';
+import vibiContextService from '../../services/vibiContextService';
 import navigationService from '../../services/navigationService';
 import VibiAvatar from './VibiAvatar';
 import VibiTroubleshootingCard from './VibiTroubleshootingCard';
@@ -85,6 +86,11 @@ export default function VibiConversation() {
     }
   }, []);
 
+  const handleClearConversation = () => {
+    clearConversation();
+    vibiContextService.clearHistory();
+  };
+
   const handleConfirmAction = async () => {
     if (!pendingConfirmation) return;
     const { actionId, params, msgId } = pendingConfirmation;
@@ -92,7 +98,7 @@ export default function VibiConversation() {
 
     const context = typeof getContext === 'function' ? getContext(user) : {};
     const actionCallbacks = {
-      onClearChat: () => clearConversation(),
+      onClearChat: () => handleClearConversation(),
       onOpenModal: (modal) => {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('vibegrid:open-modal', { detail: { modal } }));
@@ -182,6 +188,7 @@ export default function VibiConversation() {
     }
 
     // Add user message to conversation
+    vibiContextService.recordTurn('user', prompt);
     addMessage({
       sender: 'user',
       text: prompt,
@@ -203,10 +210,21 @@ export default function VibiConversation() {
 
         if (intent.matched) {
           if (!isMountedRef.current) return;
+          if (intent.isClarification) {
+            vibiContextService.setLastClarification(intent.clarificationKey);
+            if (intent.topic) vibiContextService.setRecentTopic(intent.topic);
+          } else {
+            vibiContextService.clearClarification();
+            if (intent.topic) vibiContextService.setRecentTopic(intent.topic);
+          }
+          vibiContextService.recordTurn('vibi', intent.replyText, intent.topic || null);
+
           const msgObj = addMessage({
             sender: 'vibi',
             text: intent.replyText || "Action completed! 🦊✨",
             status: 'complete',
+            responseType: intent.responseType || 'SHORT',
+            topic: intent.topic || null,
             action: intent.actionId ? { id: intent.actionId, params: intent.params } : null
           });
           if (isMountedRef.current && setIsTyping) setIsTyping(false);
@@ -214,7 +232,7 @@ export default function VibiConversation() {
           vibiCharacterService.responding({ preferences });
 
           const actionCallbacks = {
-            onClearChat: () => clearConversation(),
+            onClearChat: () => handleClearConversation(),
             onOpenModal: (modal) => {
               if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('vibegrid:open-modal', { detail: { modal } }));
@@ -269,6 +287,10 @@ export default function VibiConversation() {
 
           if (!isMountedRef.current) return;
 
+          vibiContextService.clearClarification();
+          if (aiResult.topic) vibiContextService.setRecentTopic(aiResult.topic);
+          vibiContextService.recordTurn('vibi', aiResult.replyText, aiResult.topic || null);
+
           // If AI proposed a validated action, verify confirmation requirement
           if (aiResult.actionProposal) {
             const { id, params, pendingConfirmation: needsConfirm, actionDef } = aiResult.actionProposal;
@@ -283,7 +305,7 @@ export default function VibiConversation() {
               vibiCharacterService.attentive({ preferences });
             } else {
               const actionCallbacks = {
-                onClearChat: () => clearConversation(),
+                onClearChat: () => handleClearConversation(),
                 onOpenModal: (modal) => {
                   if (typeof window !== 'undefined') {
                     window.dispatchEvent(new CustomEvent('vibegrid:open-modal', { detail: { modal } }));
@@ -324,6 +346,8 @@ export default function VibiConversation() {
           addMessage({
             sender: 'vibi',
             text: aiResult.replyText,
+            responseType: aiResult.responseType || 'NORMAL',
+            topic: aiResult.topic || null,
             status: 'complete'
           });
         }
@@ -424,7 +448,7 @@ export default function VibiConversation() {
                                 act.params || {},
                                 currentContext,
                                 {
-                                  onClearChat: () => clearConversation(),
+                                  onClearChat: () => handleClearConversation(),
                                   onOpenModal: (modal) => {
                                     if (typeof window !== 'undefined') {
                                       window.dispatchEvent(new CustomEvent('vibegrid:open-modal', { detail: { modal } }));
@@ -543,7 +567,7 @@ export default function VibiConversation() {
             <button
               type="button"
               className="vibi-clear-thread-btn"
-              onClick={clearConversation}
+              onClick={handleClearConversation}
               title="Clear conversation"
               aria-label="Clear conversation history"
             >

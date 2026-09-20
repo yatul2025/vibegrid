@@ -100,6 +100,8 @@ const handleVibiChat = async (req, res) => {
     const sanitizedContext = {
       activeTab: typeof cleanContext.activeTab === 'string' ? cleanContext.activeTab.slice(0, 30) : 'feed',
       activeSection: typeof cleanContext.activeSection === 'string' ? cleanContext.activeSection.slice(0, 30) : null,
+      recentTopic: typeof cleanContext.recentTopic === 'string' ? cleanContext.recentTopic.slice(0, 50) : null,
+      lastClarificationQuestion: typeof cleanContext.lastClarificationQuestion === 'string' ? cleanContext.lastClarificationQuestion.slice(0, 50) : null,
       theme: typeof cleanContext.theme === 'string' ? cleanContext.theme.slice(0, 30) : 'dark',
       online: Boolean(cleanContext.online !== false),
       soundEnabled: Boolean(cleanContext.soundEnabled),
@@ -132,6 +134,8 @@ const handleVibiChat = async (req, res) => {
       data: {
         replyText: result.replyText,
         action: result.action || null,
+        responseType: result.responseType || 'NORMAL',
+        topic: result.topic || sanitizedContext.recentTopic || null,
         provider: result.provider,
         isFallback: Boolean(result.isFallback),
         durationMs
