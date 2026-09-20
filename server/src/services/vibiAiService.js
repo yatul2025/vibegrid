@@ -81,6 +81,12 @@ function queryKnowledgeBase(message, context = {}) {
   }
 
   if (query.includes('privacy') || query.includes('security') || query.includes('2fa') || query.includes('permission')) {
+    if (context.activeTab === 'settings' && context.activeSection === 'privacy') {
+      return {
+        replyText: "You are currently right inside **Privacy & Permissions**! Here you can toggle Private Account mode, choose who can message or mention you, and manage your online presence status! 🛡️✨",
+        action: null
+      };
+    }
     return {
       replyText: "Security is paramount at VibeGrid! Let me open **Privacy & Permissions** for you where you can manage two-factor OTP, active sessions, and visibility! 🛡️⚙️",
       action: { id: 'navigate', params: { tab: 'settings', section: 'privacy' } }
@@ -88,6 +94,12 @@ function queryKnowledgeBase(message, context = {}) {
   }
 
   if (query.includes('vibi setting') || query.includes('assistant setting') || query.includes('turn off vibi')) {
+    if (context.activeTab === 'settings' && context.activeSection === 'vibi') {
+      return {
+        replyText: "You are already inside **Vibi Assistant Settings**! You can toggle my floating button, smart suggestions, animations, or turn me off anytime. 🦊⚙️",
+        action: null
+      };
+    }
     return {
       replyText: "You have complete control over me! Let's open **Vibi Assistant Settings** where you can toggle my floating button, smart suggestions, or turn me off entirely! 🦊⚙️",
       action: { id: 'navigate', params: { tab: 'settings', section: 'vibi' } }
@@ -110,6 +122,12 @@ function queryKnowledgeBase(message, context = {}) {
   }
 
   if (query.includes('theme') || query.includes('dark mode') || query.includes('light mode') || query.includes('appearance')) {
+    if (context.activeTab === 'settings' && context.activeSection === 'appearance') {
+      return {
+        replyText: "You are already in **Appearance & Themes**! Tap any of the 10 theme cards above to instantly preview or switch themes, or toggle Dark Mode right here! 🎨🌙",
+        action: null
+      };
+    }
     return {
       replyText: "🎨 VibeGrid features **10 gorgeous themes**! You can choose Light, Dark, Neon Glow, Ocean Blue, Sunset Gradient, AMOLED Black, and more in Appearance settings! Want to switch to Dark Mode? 🌙",
       action: { id: 'navigate', params: { tab: 'settings', section: 'appearance' } }
@@ -125,8 +143,11 @@ function queryKnowledgeBase(message, context = {}) {
 
   // 3. General Assistant Persona Greeting
   const currentTab = context.activeTab || 'app';
+  const activeSection = context.activeSection;
+  const screenLocation = activeSection ? `${currentTab.toUpperCase()} > ${activeSection.toUpperCase()}` : currentTab.toUpperCase();
+
   return {
-    replyText: `Hello! I'm **Vibi** 🦊, your native VibeGrid assistant. You're currently on the **${currentTab.toUpperCase()}** screen.\n\nI can help you navigate, adjust settings, switch themes, or explain features like E2EE messaging and WebRTC calls. How can I assist you today? ✨`,
+    replyText: `Hello! I'm **Vibi** 🦊, your native VibeGrid assistant. You're currently on the **${screenLocation}** screen.\n\nI can help you navigate, adjust settings, switch themes, or explain features like E2EE messaging and WebRTC calls. How can I assist you today? ✨`,
     action: null
   };
 }

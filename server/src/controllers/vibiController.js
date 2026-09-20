@@ -99,6 +99,7 @@ const handleVibiChat = async (req, res) => {
     const cleanContext = serverVibiSecurityGuard.sanitizeContext(context || {});
     const sanitizedContext = {
       activeTab: typeof cleanContext.activeTab === 'string' ? cleanContext.activeTab.slice(0, 30) : 'feed',
+      activeSection: typeof cleanContext.activeSection === 'string' ? cleanContext.activeSection.slice(0, 30) : null,
       theme: typeof cleanContext.theme === 'string' ? cleanContext.theme.slice(0, 30) : 'dark',
       online: Boolean(cleanContext.online !== false),
       soundEnabled: Boolean(cleanContext.soundEnabled),

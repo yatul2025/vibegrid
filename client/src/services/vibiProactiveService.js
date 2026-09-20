@@ -21,15 +21,54 @@ export class VibiProactiveService {
    * @param {string} [tab='feed']
    * @returns {Array<{ label: string, prompt: string }>}
    */
-  getScreenSuggestions(tab = 'feed') {
+  getScreenSuggestions(tab = 'feed', section = null) {
     switch (tab) {
-      case 'settings':
-        return [
-          { label: 'Privacy & Permissions', prompt: 'Open Privacy Settings' },
-          { label: 'Appearance & Themes', prompt: 'Switch theme to dark mode' },
-          { label: 'Vibi Preferences', prompt: 'Show Vibi Assistant Settings' },
-          { label: 'Security & Passwords', prompt: 'Open Security Settings' }
-        ];
+      case 'settings': {
+        switch (section) {
+          case 'appearance':
+            return [
+              { label: 'Dark Mode', prompt: 'Switch theme to dark mode' },
+              { label: 'Light Mode', prompt: 'Switch theme to light mode' },
+              { label: 'Cyberpunk Theme', prompt: 'Switch theme to cyberpunk' },
+              { label: 'Toggle Sound FX', prompt: 'Toggle sound effects' }
+            ];
+          case 'privacy':
+            return [
+              { label: 'Private Account', prompt: 'How does a Private Account work?' },
+              { label: 'Online Status', prompt: 'How do I hide my online status?' },
+              { label: 'E2EE Details', prompt: 'How does End-to-End Encryption work?' },
+              { label: 'Security Center', prompt: 'Open Security Settings' }
+            ];
+          case 'security':
+            return [
+              { label: 'Active Sessions', prompt: 'How do active device sessions work?' },
+              { label: 'Change Password', prompt: 'How do I change my password?' },
+              { label: 'Privacy Controls', prompt: 'Open Privacy Settings' },
+              { label: 'Vibi Settings', prompt: 'Open Vibi Assistant Settings' }
+            ];
+          case 'notifications':
+            return [
+              { label: 'Test Notification', prompt: 'Check notification status' },
+              { label: 'Push Setup', prompt: 'How do push notifications work?' },
+              { label: 'Quiet Hours', prompt: 'How do notification preferences work?' },
+              { label: 'Back to Feed', prompt: 'Go to feed' }
+            ];
+          case 'vibi':
+            return [
+              { label: 'Floating Button', prompt: 'How do I toggle Vibi floating button?' },
+              { label: 'Smart Suggestions', prompt: 'Explain Vibi smart suggestions' },
+              { label: 'Context Sharing', prompt: 'How does Vibi use application context?' },
+              { label: 'Appearance', prompt: 'Open Appearance Settings' }
+            ];
+          default:
+            return [
+              { label: 'Privacy & Permissions', prompt: 'Open Privacy Settings' },
+              { label: 'Appearance & Themes', prompt: 'Switch theme to dark mode' },
+              { label: 'Vibi Preferences', prompt: 'Show Vibi Assistant Settings' },
+              { label: 'Security & Passwords', prompt: 'Open Security Settings' }
+            ];
+        }
+      }
 
       case 'messages':
         return [

@@ -207,13 +207,16 @@ export default function VibiCharacter({
 
           {/* Anatomical Articulation Clips for Dynamic Moving Parts */}
           <clipPath id="vibiTailClip">
-            <rect x="520" y="470" width="330" height="470" />
+            <rect x="60" y="400" width="330" height="460" rx="30" />
           </clipPath>
           <clipPath id="vibiBodyClip">
-            <rect x="0" y="610" width="850" height="414" />
+            <rect x="0" y="540" width="850" height="484" />
           </clipPath>
           <clipPath id="vibiHeadClip">
-            <rect x="0" y="0" width="850" height="640" />
+            <rect x="60" y="50" width="730" height="520" rx="40" />
+          </clipPath>
+          <clipPath id="vibiRightPawClip">
+            <rect x="450" y="570" width="160" height="200" rx="24" />
           </clipPath>
 
           {/* Floating Badge Shadow Filter */}
@@ -235,11 +238,11 @@ export default function VibiCharacter({
             style={{ pointerEvents: 'none' }}
           />
 
-          {/* 1. LAYER: ANIMATED ARTICULATED TAIL (SWISHES & WAGS) */}
+          {/* 1. LAYER: ANIMATED ARTICULATED TAIL (SWISHES & WAGS ON THE LEFT) */}
           <g
             className={`vibi-layer-tail ${animate ? (isHappy || isExcited || isCelebrating || isPlayful ? 'tail-wag' : 'tail-swish') : ''}`}
             style={{
-              transformOrigin: '580px 820px'
+              transformOrigin: '340px 720px'
             }}
           >
             <image
@@ -287,7 +290,7 @@ export default function VibiCharacter({
                 : ''
             }`}
             style={{
-              transformOrigin: '425px 630px'
+              transformOrigin: '425px 550px'
             }}
           >
             <image
@@ -300,11 +303,11 @@ export default function VibiCharacter({
               preserveAspectRatio="xMidYMid meet"
             />
 
-            {/* Cheek Blushes (Joyful / Playful / Proud) */}
+            {/* Cheek Blushes (Soft Natural Fur Glow) */}
             {showBlush && (
-              <g className="vibi-facial-blush" opacity={animate ? '0.85' : '0.7'}>
-                <ellipse cx="260" cy="495" rx="55" ry="36" fill="#FF4081" filter="url(#vibiBlushBlur)" />
-                <ellipse cx="630" cy="505" rx="55" ry="36" fill="#FF4081" filter="url(#vibiBlushBlur)" />
+              <g className="vibi-facial-blush" opacity={animate ? '0.45' : '0.3'}>
+                <ellipse cx="290" cy="420" rx="45" ry="30" fill="#FB7185" filter="url(#vibiBlushBlur)" />
+                <ellipse cx="560" cy="425" rx="45" ry="30" fill="#FB7185" filter="url(#vibiBlushBlur)" />
               </g>
             )}
 
@@ -486,49 +489,23 @@ export default function VibiCharacter({
           {/* Close Layer 3: Head */}
           </g>
 
-          {/* 4. LAYER: ANIMATED WAVING PAW / HAND (GREETING "HEY!" / WELCOME / CELEBRATION) */}
+          {/* 4. LAYER: ANIMATED WAVING PAW / HAND (HER ACTUAL 3D PAW) */}
           {(isWelcome || moodNormalized === 'hey' || moodNormalized === 'wake_up' || moodNormalized === 'peek_and_wave') ? (
             <g
-              className="vibi-layer-hand-wave vibi-hand-waving"
+              className="vibi-layer-hand-wave vibi-paw-waving"
               style={{
-                transformOrigin: '530px 720px'
+                transformOrigin: '475px 590px'
               }}
             >
-              {/* Fur Patch covering seated paw */}
-              <ellipse cx="530" cy="740" rx="40" ry="26" fill="#D94E08" />
-              {/* Raised arm path */}
-              <path
-                d="M 520 730 C 535 675 575 615 615 535 C 635 495 660 475 680 490 C 695 510 680 540 650 595 C 620 650 560 720 540 735 Z"
-                fill="url(#vibiEyelidFurGradRight)"
-                filter="url(#vibiBadgeShadow)"
+              <image
+                href="/assets/vibi/vibi_master_transparent.png"
+                x="0"
+                y="0"
+                width="850"
+                height="1024"
+                clipPath="url(#vibiRightPawClip)"
+                preserveAspectRatio="xMidYMid meet"
               />
-              {/* Cute Charcoal & Pink Paw with Toe Beans */}
-              <g transform="translate(640, 480) rotate(-15)">
-                <ellipse cx="0" cy="0" rx="36" ry="30" fill="#1C1917" />
-                <ellipse cx="0" cy="4" rx="16" ry="12" fill="#F43F5E" opacity="0.9" />
-                <circle cx="-16" cy="-14" r="5.5" fill="#F43F5E" opacity="0.9" />
-                <circle cx="-6" cy="-20" r="6" fill="#F43F5E" opacity="0.9" />
-                <circle cx="6" cy="-20" r="6" fill="#F43F5E" opacity="0.9" />
-                <circle cx="16" cy="-14" r="5.5" fill="#F43F5E" opacity="0.9" />
-              </g>
-            </g>
-          ) : (isCelebrating || isExcited) ? (
-            <g
-              className="vibi-layer-paws paws-up"
-              style={{
-                transformOrigin: '425px 720px'
-              }}
-            >
-              {/* Left Raised Celebration Paw */}
-              <g transform="translate(300, 620) rotate(-25)">
-                <ellipse cx="0" cy="0" rx="28" ry="24" fill="#1C1917" filter="url(#vibiBadgeShadow)" />
-                <ellipse cx="0" cy="2" rx="12" ry="9" fill="#F43F5E" opacity="0.85" />
-              </g>
-              {/* Right Raised Celebration Paw */}
-              <g transform="translate(550, 620) rotate(25)">
-                <ellipse cx="0" cy="0" rx="28" ry="24" fill="#1C1917" filter="url(#vibiBadgeShadow)" />
-                <ellipse cx="0" cy="2" rx="12" ry="9" fill="#F43F5E" opacity="0.85" />
-              </g>
             </g>
           ) : null}
 
@@ -538,23 +515,23 @@ export default function VibiCharacter({
             filter={`url(#vibiCollarNeonGlow-${moodNormalized})`}
             style={{
               animation: animate ? `collarPulse ${collarPulseDuration} ease-in-out infinite` : 'none',
-              transformOrigin: '425px 735px'
+              transformOrigin: '425px 575px'
             }}
           >
             {/* Outer Glowing Neon Contour */}
             <path
-              d="M 406 720 L 425 750 L 444 720"
+              d="M 406 565 L 425 595 L 444 565"
               stroke={collarPrimaryColor}
-              strokeWidth="16"
+              strokeWidth="14"
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
             {/* Core White Hot Filament */}
             <path
-              d="M 408 720 L 425 748 L 442 720"
+              d="M 408 565 L 425 593 L 442 565"
               stroke="#FFFFFF"
-              strokeWidth="8"
+              strokeWidth="7"
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"

@@ -120,6 +120,10 @@ class VibiActionRegistry {
           callbacks.onOpenModal(params.modal);
           return { success: true, message: `Opened modal ${params.modal}` };
         }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('vibegrid:open-modal', { detail: { modal: params.modal } }));
+          return { success: true, message: `Opened modal ${params.modal}` };
+        }
         return { success: false, message: 'Modal callback unavailable' };
       }
     });
@@ -141,6 +145,10 @@ class VibiActionRegistry {
       handler: async (params, context, callbacks) => {
         if (callbacks && typeof callbacks.onToggleTheme === 'function') {
           callbacks.onToggleTheme(params.theme || null);
+          return { success: true, message: `Theme switched to ${params.theme || 'toggled'}` };
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('vibegrid:set-theme', { detail: { theme: params.theme || null } }));
           return { success: true, message: `Theme switched to ${params.theme || 'toggled'}` };
         }
         return { success: false, message: 'Theme callback unavailable' };
