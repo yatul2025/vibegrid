@@ -219,14 +219,15 @@ export function VibiAssistantProvider({ children }) {
   }, []);
 
   // Add a message into the conversation state
-  const addMessage = useCallback(({ sender = 'vibi', text, action = null, status = 'complete' }) => {
+  const addMessage = useCallback(({ sender = 'vibi', text, action = null, status = 'complete', ...rest }) => {
     const newMessage = {
       id: `${sender}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       sender,
       text,
       timestamp: Date.now(),
       status,
-      action
+      action,
+      ...rest
     };
     setMessages((prev) => [...prev, newMessage]);
     return newMessage;

@@ -314,6 +314,121 @@ export class VibiProactiveService {
   }
 
   /**
+   * Dynamically generate 2 to 4 contextual follow-up suggestions based on response topic and current UI context
+   * @param {string|null} topic - Extracted response topic
+   * @param {string} [replyText=''] - AI or intent response text
+   * @param {Object} [contextSnapshot={}] - Current application context
+   * @returns {Array<{ id: string, label: string, prompt: string, actionId?: string, params?: Object, icon?: string }>}
+   */
+  generatePostResponseSuggestions(topic = null, replyText = '', contextSnapshot = {}) {
+    const rawSuggestions = [];
+    const activeTab = (contextSnapshot.currentTab || contextSnapshot.screen || 'feed').toLowerCase();
+    const activeSection = (contextSnapshot.activeSection || '').toLowerCase();
+    const cleanTopic = (topic || '').toLowerCase();
+    const textLower = (replyText || '').toLowerCase();
+
+    // Check if user has selected text
+    if (contextSnapshot.selectedText && typeof contextSnapshot.selectedText === 'string') {
+      const snippet = contextSnapshot.selectedText.slice(0, 16);
+      rawSuggestions.push({
+        id: 'explain_selection',
+        label: `Explain "${snippet}..."`,
+        prompt: `Explain this: "${contextSnapshot.selectedText}"`,
+        icon: 'HelpCircle'
+      });
+    }
+
+    if (cleanTopic === 'e2ee' || textLower.includes('encryption') || textLower.includes('e2ee') || textLower.includes('signal protocol')) {
+      rawSuggestions.push(
+        { id: 'verify_keys', label: 'Verify Safety Number', prompt: 'How do I verify E2EE safety numbers?', actionId: 'open_modal', params: { modal: 'key_backup' }, icon: 'ShieldCheck' },
+        { id: 'key_backup', label: 'Key Backup & Export', prompt: 'How do I backup and restore my encryption keys?', actionId: 'open_modal', params: { modal: 'key_backup' }, icon: 'Key' },
+        { id: 'signal_protocol', label: 'Signal Protocol Details', prompt: 'Explain the Double Ratchet and Signal Protocol in VibeGrid', icon: 'Lock' },
+        { id: 'privacy_settings', label: 'Privacy Settings', prompt: 'Open Privacy Settings', actionId: 'navigate', params: { tab: 'settings', section: 'privacy' }, icon: 'Shield' }
+      );
+    } else if (cleanTopic === 'calls' || textLower.includes('webrtc') || textLower.includes('audio call') || textLower.includes('video call')) {
+      rawSuggestions.push(
+        { id: 'call_diag', label: 'Run Call Diagnostics', prompt: 'Test WebRTC calls and microphone', actionId: 'run_diagnostics', params: { type: 'calls' }, icon: 'Activity' },
+        { id: 'camera_mic', label: 'Camera & Mic Access', prompt: 'Why does VibeGrid need camera and mic access?', actionId: 'open_modal', params: { modal: 'permission_onboarding' }, icon: 'Video' },
+        { id: 'open_chats', label: 'Direct Messages', prompt: 'Open messages', actionId: 'navigate', params: { tab: 'messages' }, icon: 'MessageSquare' },
+        { id: 'quiet_hours', label: 'Quiet Hours', prompt: 'How do notification preferences work?', actionId: 'navigate', params: { tab: 'settings', section: 'notifications' }, icon: 'Bell' }
+      );
+    } else if (cleanTopic === 'appearance' || textLower.includes('theme') || textLower.includes('dark mode') || textLower.includes('cyberpunk')) {
+      rawSuggestions.push(
+        { id: 'cyberpunk_mode', label: 'Cyberpunk Theme', prompt: 'Switch theme to cyberpunk', actionId: 'toggle_theme', params: { theme: 'cyberpunk' }, icon: 'Palette' },
+        { id: 'oled_mode', label: 'OLED Dark Mode', prompt: 'Switch theme to oled', actionId: 'toggle_theme', params: { theme: 'oled' }, icon: 'Moon' },
+        { id: 'sound_fx', label: 'Toggle Sound Effects', prompt: 'Toggle sound effects', actionId: 'toggle_sound', params: {}, icon: 'Volume2' },
+        { id: 'all_themes', label: 'Appearance Settings', prompt: 'Open Appearance Settings', actionId: 'navigate', params: { tab: 'settings', section: 'appearance' }, icon: 'Sliders' }
+      );
+    } else if (cleanTopic === 'diagnostics' || textLower.includes('diagnostic') || textLower.includes('troubleshoot') || textLower.includes('health check')) {
+      rawSuggestions.push(
+        { id: 'clear_cache', label: 'Clear Temporary Cache', prompt: 'Clear temporary cache', actionId: 'clear_temporary_cache', params: {}, icon: 'Trash2' },
+        { id: 'reconnect_sock', label: 'Reconnect Socket', prompt: 'Reconnect socket', actionId: 'reconnect_network', params: {}, icon: 'Wifi' },
+        { id: 'webrtc_test', label: 'Test WebRTC Calls', prompt: 'Test WebRTC calls and microphone', actionId: 'run_diagnostics', params: { type: 'calls' }, icon: 'Activity' },
+        { id: 'settings_center', label: 'Open Settings', prompt: 'Open Settings', actionId: 'navigate', params: { tab: 'settings' }, icon: 'Settings' }
+      );
+    } else if (cleanTopic === 'notifications' || textLower.includes('notification') || textLower.includes('quiet hours')) {
+      rawSuggestions.push(
+        { id: 'notif_perm', label: 'Permission Status', prompt: 'Check notification status', actionId: 'open_modal', params: { modal: 'permission_onboarding' }, icon: 'Bell' },
+        { id: 'quiet_settings', label: 'Notification Settings', prompt: 'Open Notification Settings', actionId: 'navigate', params: { tab: 'settings', section: 'notifications' }, icon: 'Clock' },
+        { id: 'test_chime', label: 'Toggle Sound FX', prompt: 'Toggle sound effects', actionId: 'toggle_sound', params: {}, icon: 'Volume2' }
+      );
+    } else if (cleanTopic === 'posts' || textLower.includes('create post') || textLower.includes('upload')) {
+      rawSuggestions.push(
+        { id: 'create_post', label: 'Create Post', prompt: 'Open create post modal', actionId: 'open_modal', params: { modal: 'create_post' }, icon: 'PlusCircle' },
+        { id: 'trending_tags', label: 'Explore Trending', prompt: 'Show me what is trending on VibeGrid', actionId: 'navigate', params: { tab: 'explore' }, icon: 'Compass' },
+        { id: 'upload_reqs', label: 'Upload Limits', prompt: 'What are the image upload requirements and limits?', icon: 'HelpCircle' }
+      );
+    } else {
+      if (activeTab === 'feed') {
+        rawSuggestions.push(
+          { id: 'go_explore', label: 'Explore Trending', prompt: 'Show me what is trending on VibeGrid', actionId: 'navigate', params: { tab: 'explore' }, icon: 'Compass' },
+          { id: 'go_messages', label: 'Direct Messages', prompt: 'Open messages', actionId: 'navigate', params: { tab: 'messages' }, icon: 'MessageSquare' },
+          { id: 'dark_mode', label: 'Dark Mode', prompt: 'Switch theme to dark mode', actionId: 'toggle_theme', params: { theme: 'dark' }, icon: 'Moon' },
+          { id: 'open_settings', label: 'Settings', prompt: 'Open Settings', actionId: 'navigate', params: { tab: 'settings' }, icon: 'Settings' }
+        );
+      } else if (activeTab === 'messages') {
+        rawSuggestions.push(
+          { id: 'learn_e2ee', label: 'End-to-End Encryption', prompt: 'How does End-to-End Encryption work?', icon: 'Lock' },
+          { id: 'go_feed', label: 'Home Feed', prompt: 'Go to feed', actionId: 'navigate', params: { tab: 'feed' }, icon: 'Home' },
+          { id: 'go_explore', label: 'Explore Trending', prompt: 'Show me what is trending on VibeGrid', actionId: 'navigate', params: { tab: 'explore' }, icon: 'Compass' }
+        );
+      } else if (activeTab === 'explore') {
+        rawSuggestions.push(
+          { id: 'search_tips', label: 'Search Tips', prompt: 'How do I search for topics and hashtags?', icon: 'Search' },
+          { id: 'go_feed', label: 'Home Feed', prompt: 'Go to feed', actionId: 'navigate', params: { tab: 'feed' }, icon: 'Home' },
+          { id: 'go_profile', label: 'My Profile', prompt: 'Go to profile', actionId: 'navigate', params: { tab: 'profile' }, icon: 'User' }
+        );
+      } else if (activeTab === 'settings') {
+        rawSuggestions.push(
+          { id: 'privacy_center', label: 'Privacy Settings', prompt: 'Open Privacy Settings', actionId: 'navigate', params: { tab: 'settings', section: 'privacy' }, icon: 'Shield' },
+          { id: 'appearance_center', label: 'Appearance Settings', prompt: 'Open Appearance Settings', actionId: 'navigate', params: { tab: 'settings', section: 'appearance' }, icon: 'Palette' },
+          { id: 'go_feed', label: 'Back to Feed', prompt: 'Go to feed', actionId: 'navigate', params: { tab: 'feed' }, icon: 'Home' }
+        );
+      } else {
+        rawSuggestions.push(
+          { id: 'go_feed', label: 'Home Feed', prompt: 'Go to feed', actionId: 'navigate', params: { tab: 'feed' }, icon: 'Home' },
+          { id: 'go_explore', label: 'Explore Trending', prompt: 'Show me what is trending on VibeGrid', actionId: 'navigate', params: { tab: 'explore' }, icon: 'Compass' },
+          { id: 'dark_mode', label: 'Dark Mode', prompt: 'Switch theme to dark mode', actionId: 'toggle_theme', params: { theme: 'dark' }, icon: 'Moon' }
+        );
+      }
+    }
+
+    // Filter out redundant actions
+    const filtered = rawSuggestions.filter((sug) => {
+      if (sug.actionId === 'navigate' && sug.params?.tab) {
+        if (sug.params.tab === activeTab) {
+          if (!sug.params.section || sug.params.section === activeSection) {
+            return false;
+          }
+        }
+      }
+      return true;
+    });
+
+    return filtered.slice(0, 4);
+  }
+
+  /**
    * Reset session storage tracking (useful for testing or session reset)
    */
   resetSession() {

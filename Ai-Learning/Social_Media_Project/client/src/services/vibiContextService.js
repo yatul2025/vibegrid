@@ -44,6 +44,8 @@ export class VibiContextService {
     this.recentTopic = null;
     this.lastClarificationQuestion = null;
     this.recentTurns = [];
+    this.selectedText = null;
+    this.focusedField = null;
     this.listeners = new Set();
     this.initSystemListeners();
   }
@@ -94,6 +96,64 @@ export class VibiContextService {
         const tab = this.getActiveTab();
         this.setActiveTab(tab);
       });
+
+      // Authorized interaction signals: text selection & focused element
+      if (typeof document !== 'undefined') {
+        document.addEventListener('selectionchange', () => {
+          try {
+            const sel = window.getSelection ? window.getSelection() : null;
+            if (!sel || sel.isCollapsed) {
+              if (this.selectedText) this.clearSelectedText();
+              return;
+            }
+            const anchor = sel.anchorNode;
+            const parentEl = anchor ? (anchor.nodeType === 1 ? anchor : anchor.parentElement) : null;
+            if (parentEl) {
+              const inputEl = parentEl.closest('input, textarea');
+              if (inputEl) {
+                const inputType = (inputEl.getAttribute('type') || '').toLowerCase();
+                const inputName = (inputEl.getAttribute('name') || '').toLowerCase();
+                if (inputType === 'password' || inputName.includes('password') || inputName.includes('token') || inputName.includes('secret')) {
+                  if (this.selectedText) this.clearSelectedText();
+                  return;
+                }
+              }
+            }
+            const rawText = sel.toString();
+            this.setSelectedText(rawText);
+          } catch {}
+        });
+
+        document.addEventListener('focusin', (e) => {
+          try {
+            const target = e.target;
+            if (!target || !target.tagName) return;
+            const tag = target.tagName.toLowerCase();
+            if (tag === 'input' || tag === 'textarea') {
+              const type = (target.getAttribute('type') || '').toLowerCase();
+              const name = (target.getAttribute('name') || '').toLowerCase();
+              const placeholder = (target.getAttribute('placeholder') || '').toLowerCase();
+              const testId = (target.getAttribute('data-testid') || '').toLowerCase();
+              if (type === 'password' || name.includes('password') || name.includes('token') || testId.includes('password')) {
+                return;
+              }
+              if (type === 'search' || name.includes('search') || placeholder.includes('search') || testId.includes('search')) {
+                this.setFocusedField('search');
+              } else if (name.includes('comment') || placeholder.includes('comment') || testId.includes('comment')) {
+                this.setFocusedField('comment');
+              } else if (name.includes('caption') || placeholder.includes('caption') || testId.includes('caption')) {
+                this.setFocusedField('caption');
+              } else {
+                this.setFocusedField('input');
+              }
+            }
+          } catch {}
+        });
+
+        document.addEventListener('focusout', () => {
+          this.clearFocusedField();
+        });
+      }
     } catch {}
   }
 
@@ -126,6 +186,102 @@ export class VibiContextService {
   clearActiveModal() {
     this.activeModal = null;
     this.notify();
+  }
+
+  /**
+   * Set selected text snippet from UI
+   * @param {string|null} text
+   */
+  setSelectedText(text) {
+    if (!text || typeof text !== 'string') {
+      if (this.selectedText !== null) {
+        this.selectedText = null;
+        this.notify();
+      }
+      return;
+    }
+    const clean = text.replace(/[\r\n\t]+/g, ' ').trim();
+    if (clean.length < 3) {
+      if (this.selectedText !== null) {
+        this.selectedText = null;
+        this.notify();
+      }
+      return;
+    }
+    for (const forbidden of STRICT_SECURITY_BLACKLIST) {
+      if (clean.toLowerCase().includes(forbidden.toLowerCase())) {
+        this.selectedText = null;
+        return;
+      }
+    }
+    const truncated = clean.slice(0, 250);
+    if (this.selectedText !== truncated) {
+      this.selectedText = truncated;
+      this.notify();
+    }
+  }
+
+  /**
+   * Get currently selected text
+   * @returns {string|null}
+   */
+  getSelectedText() {
+    return this.selectedText || null;
+  }
+
+  /**
+   * Clear selected text
+   */
+  clearSelectedText() {
+    if (this.selectedText !== null) {
+      this.selectedText = null;
+      this.notify();
+    }
+  }
+
+  /**
+   * Set focused input field type (e.g. 'search', 'comment', 'caption')
+   * @param {string|null} field
+   */
+  setFocusedField(field) {
+    if (!field) {
+      if (this.focusedField !== null) {
+        this.focusedField = null;
+        this.notify();
+      }
+      return;
+    }
+    if (typeof field === 'string') {
+      const lower = field.trim().toLowerCase();
+      if (lower.includes('password') || lower.includes('token') || lower.includes('secret') || lower.includes('key')) {
+        this.focusedField = null;
+        return;
+      }
+      const allowed = ['search', 'comment', 'composer', 'caption', 'bio'];
+      const matched = allowed.find(a => lower.includes(a)) || 'input';
+      if (this.focusedField !== matched) {
+        this.focusedField = matched;
+        this.notify();
+      }
+    }
+  }
+
+  /**
+   * Get focused field
+   * @returns {string|null}
+   */
+  getFocusedField() {
+    return this.focusedField || null;
+  }
+
+  /**
+   * Clear focused field
+   */
+  clearFocusedField() {
+    if (this.focusedField !== null) {
+      this.focusedField = null;
+      this.notify();
+    }
   }
 
   /**
@@ -437,6 +593,8 @@ export class VibiContextService {
       recentTopic: this.getRecentTopic(),
       lastClarificationQuestion: this.getLastClarification(),
       recentTurns: this.getRecentTurns(),
+      ...(this.selectedText ? { selectedText: this.selectedText } : {}),
+      ...(this.focusedField ? { focusedField: this.focusedField } : {}),
       user: this.getUserSummary(user),
       device: this.getDeviceContext(),
       appContextEnabled: true
@@ -458,6 +616,8 @@ export class VibiContextService {
           activeModal: snapshot.activeModal,
           recentTopic: snapshot.recentTopic,
           lastClarificationQuestion: snapshot.lastClarificationQuestion,
+          selectedText: snapshot.selectedText,
+          focusedField: snapshot.focusedField,
           user: snapshot.user,
           device: { isOnline: snapshot.device.isOnline },
           appContextEnabled: true
@@ -480,6 +640,8 @@ export class VibiContextService {
       recentTopic: raw.recentTopic || null,
       lastClarificationQuestion: raw.lastClarificationQuestion || null,
       recentTurns: raw.recentTurns || [],
+      selectedText: raw.selectedText || null,
+      focusedField: raw.focusedField || null,
       theme: raw.device?.theme || 'dark',
       online: raw.device?.isOnline !== false,
       device: raw.device?.isPWA ? 'pwa' : 'web',

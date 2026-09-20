@@ -223,6 +223,10 @@ export default function VibiConversation() {
           // Do NOT auto-execute; present interactive action buttons instead!
           const isMediumConfidenceSuggestion = Boolean(intent.isSuggestion || (intent.confidence !== undefined && intent.confidence < 0.85 && intent.confidence >= 0.50));
 
+          const postSuggestions = (preferences.smartSuggestions && !isMediumConfidenceSuggestion)
+            ? vibiProactiveService.generatePostResponseSuggestions(intent.topic, intent.replyText, context)
+            : [];
+
           const msgObj = addMessage({
             sender: 'vibi',
             text: intent.replyText || "Action completed! 🦊✨",
@@ -230,7 +234,8 @@ export default function VibiConversation() {
             responseType: intent.responseType || 'SHORT',
             topic: intent.topic || null,
             action: intent.actionId ? { id: intent.actionId, params: intent.params } : null,
-            actions: intent.actions || (isMediumConfidenceSuggestion && intent.actionId ? [{ id: intent.actionId, params: intent.params, label: intent.actionLabel || intent.actionName || 'Proceed' }] : null)
+            actions: intent.actions || (isMediumConfidenceSuggestion && intent.actionId ? [{ id: intent.actionId, params: intent.params, label: intent.actionLabel || intent.actionName || 'Proceed' }] : null),
+            suggestions: postSuggestions
           });
           if (isMountedRef.current && setIsTyping) setIsTyping(false);
 
@@ -355,12 +360,17 @@ export default function VibiConversation() {
             vibiCharacterService.happy({ preferences });
           }
 
+          const postSuggestions = preferences.smartSuggestions
+            ? vibiProactiveService.generatePostResponseSuggestions(aiResult.topic, aiResult.replyText, context)
+            : [];
+
           addMessage({
             sender: 'vibi',
             text: aiResult.replyText,
             responseType: aiResult.responseType || 'NORMAL',
             topic: aiResult.topic || null,
-            status: 'complete'
+            status: 'complete',
+            suggestions: postSuggestions
           });
         }
       } catch (err) {
@@ -490,6 +500,59 @@ export default function VibiConversation() {
                           >
                             <Sparkles size={12} className="vibi-sug-icon" />
                             <span>{act.label || act.name || act.id}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Dynamic Post-Response Contextual Suggestions */}
+                    {msg.suggestions && msg.suggestions.length > 0 && (
+                      <div className="vibi-post-suggestions-list" data-testid="vibi-post-suggestions" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                        {msg.suggestions.map((sug, sugIdx) => (
+                          <button
+                            key={sug.id || sugIdx}
+                            type="button"
+                            className="vibi-suggestion-pill"
+                            onClick={async () => {
+                              if (sug.actionId) {
+                                vibiCharacterService.proud({ durationMs: 2000, preferences });
+                                const res = await vibiIntentEngine.executeAction(
+                                  sug.actionId,
+                                  sug.params || {},
+                                  currentContext,
+                                  {
+                                    onClearChat: () => handleClearConversation(),
+                                    onOpenModal: (modal) => {
+                                      if (typeof window !== 'undefined') {
+                                        window.dispatchEvent(new CustomEvent('vibegrid:open-modal', { detail: { modal } }));
+                                      }
+                                    },
+                                    onToggleTheme: (theme) => {
+                                      if (typeof window !== 'undefined') {
+                                        window.dispatchEvent(new CustomEvent('vibegrid:set-theme', { detail: { theme } }));
+                                      }
+                                    },
+                                    onNavigate: (tab, section) => {
+                                      if (navigationService && typeof navigationService.navigate === 'function') {
+                                        navigationService.navigate(tab, { section });
+                                      }
+                                    }
+                                  },
+                                  user?.username
+                                );
+                                if (res) {
+                                  addMessage({
+                                    sender: 'vibi',
+                                    text: res.message || res.replyText || 'Action executed successfully! 🦊'
+                                  });
+                                }
+                              } else if (sug.prompt) {
+                                handleSuggestionClick(sug.prompt);
+                              }
+                            }}
+                          >
+                            <Sparkles size={12} className="vibi-sug-icon" />
+                            <span>{sug.label}</span>
                           </button>
                         ))}
                       </div>
