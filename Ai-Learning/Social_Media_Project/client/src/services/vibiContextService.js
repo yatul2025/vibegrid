@@ -46,6 +46,9 @@ export class VibiContextService {
     this.recentTurns = [];
     this.selectedText = null;
     this.focusedField = null;
+    this.recentActions = []; // FIFO max 5 actions: { actionId, paramsSummary, status, timestamp }
+    this.e2eeReady = false;
+    this.unreadNotificationsCount = 0;
     this.listeners = new Set();
     this.initSystemListeners();
   }
@@ -522,6 +525,109 @@ export class VibiContextService {
   }
 
   /**
+   * Record an executed action in the session history (FIFO, max 5 actions)
+   * @param {string} actionId
+   * @param {Object} [params={}]
+   * @param {'success'|'failed'|'pending'} [status='success']
+   */
+  recordRecentAction(actionId, params = {}, status = 'success') {
+    if (!actionId || typeof actionId !== 'string') return;
+    const cleanActionId = actionId.trim().slice(0, 50);
+    const safeParams = {};
+    if (params && typeof params === 'object') {
+      for (const [k, v] of Object.entries(params)) {
+        const lowerK = k.toLowerCase();
+        if (STRICT_SECURITY_BLACKLIST.some(b => lowerK.includes(b.toLowerCase()))) continue;
+        if (typeof v === 'string') safeParams[k] = v.slice(0, 50);
+        else if (typeof v === 'number' || typeof v === 'boolean') safeParams[k] = v;
+      }
+    }
+    const entry = {
+      actionId: cleanActionId,
+      paramsSummary: Object.keys(safeParams).length > 0 ? safeParams : null,
+      status: status === 'failed' ? 'failed' : (status === 'pending' ? 'pending' : 'success'),
+      timestamp: Date.now()
+    };
+    this.recentActions = [...this.recentActions.slice(-4), entry];
+    this.notify();
+  }
+
+  /**
+   * Get recently executed actions
+   * @returns {Array}
+   */
+  getRecentActions() {
+    return Array.isArray(this.recentActions) ? [...this.recentActions] : [];
+  }
+
+  /**
+   * Clear recent actions history
+   */
+  clearRecentActions() {
+    this.recentActions = [];
+    this.notify();
+  }
+
+  /**
+   * Set E2EE readiness flag
+   * @param {boolean} ready
+   */
+  setE2eeReady(ready = true) {
+    this.e2eeReady = Boolean(ready);
+    this.notify();
+  }
+
+  /**
+   * Get safe permissions context
+   */
+  getPermissionsContext() {
+    let notifications = 'unsupported';
+    let audioMic = 'prompt';
+    let isPWA = false;
+    let soundEnabled = true;
+
+    if (typeof window !== 'undefined') {
+      try {
+        if ('Notification' in window) {
+          notifications = Notification.permission;
+        }
+      } catch {}
+
+      try {
+        isPWA = Boolean(
+          (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+          window.navigator?.standalone === true
+        );
+      } catch {}
+
+      try {
+        const storedSound = localStorage.getItem('vibegrid_sound_enabled');
+        if (storedSound !== null) soundEnabled = storedSound === 'true';
+      } catch {}
+    }
+
+    return {
+      notifications,
+      audioMic,
+      isPWA,
+      soundEnabled
+    };
+  }
+
+  /**
+   * Get high-level application state
+   */
+  getApplicationState() {
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine !== false : true;
+    return {
+      isOnline,
+      activeChat: this.activeChatMetadata ? { ...this.activeChatMetadata } : null,
+      e2eeReady: this.e2eeReady,
+      hasUnreadMessages: false
+    };
+  }
+
+  /**
    * Sanitize and extract safe user profile summary
    * @param {Object} user
    */
@@ -595,6 +701,7 @@ export class VibiContextService {
       recentTurns: this.getRecentTurns(),
       ...(this.selectedText ? { selectedText: this.selectedText } : {}),
       ...(this.focusedField ? { focusedField: this.focusedField } : {}),
+      ...(this.recentActions.length > 0 ? { recentActions: this.getRecentActions() } : {}),
       user: this.getUserSummary(user),
       device: this.getDeviceContext(),
       appContextEnabled: true
@@ -629,6 +736,157 @@ export class VibiContextService {
   }
 
   /**
+   * Complete 7-Domain Workflow Context representation
+   * @param {Object} [params]
+   * @returns {Object} 7 context domains
+   */
+  getWorkflowContext({ user, preferences } = {}) {
+    if (preferences && preferences.enabled === false) {
+      return { status: 'dormant', reason: 'vibi_disabled', appContextEnabled: false };
+    }
+    if (preferences && preferences.appContext === false) {
+      return {
+        conversation: { recentTurns: [], recentTopic: null, lastClarificationQuestion: null },
+        page: { currentTab: 'unknown', activeSection: null, subScreen: 'none' },
+        ui: { activeModal: null, focusedField: null },
+        selection: { selectedText: null },
+        recentActions: [],
+        appState: { isOnline: true, activeChat: null, e2eeReady: false },
+        permissions: {},
+        user: { username: user?.username || 'anonymous' },
+        appContextEnabled: false
+      };
+    }
+
+    const workflow = {
+      conversation: {
+        recentTurns: this.getRecentTurns(),
+        recentTopic: this.getRecentTopic(),
+        lastClarificationQuestion: this.getLastClarification()
+      },
+      page: {
+        currentTab: this.getActiveTab(),
+        activeSection: this.getActiveSection(),
+        subScreen: this.getActiveSubScreen()
+      },
+      ui: {
+        activeModal: this.getActiveModal(),
+        focusedField: this.getFocusedField()
+      },
+      selection: {
+        selectedText: this.getSelectedText()
+      },
+      recentActions: this.getRecentActions(),
+      appState: this.getApplicationState(),
+      permissions: this.getPermissionsContext(),
+      user: this.getUserSummary(user),
+      appContextEnabled: true,
+      timestamp: Date.now()
+    };
+
+    this.sanitizeSecurityCheck(workflow);
+    return workflow;
+  }
+
+  /**
+   * Irrelevance Filter: Prunes unneeded context domains based on query intent
+   * Ensures outgoing context to AI is minimal, relevant, and strictly bounded (< 500 bytes).
+   * @param {string} query
+   * @param {Object} [baseSnapshot]
+   * @returns {Object} filtered, relevant context
+   */
+  buildRelevantContext(query = '', baseSnapshot = null) {
+    const snapshot = baseSnapshot || this.assembleContext();
+    if (!snapshot || snapshot.status === 'dormant') {
+      return { status: 'dormant' };
+    }
+
+    const q = (query || '').toLowerCase().trim();
+    const relevant = {
+      timestamp: snapshot.timestamp,
+      appContextEnabled: Boolean(snapshot.appContextEnabled),
+      screen: snapshot.screen || snapshot.currentTab || 'feed',
+      currentTab: snapshot.screen || snapshot.currentTab || 'feed'
+    };
+
+    // 1. Route / Section context
+    if (snapshot.activeSection) {
+      relevant.activeSection = snapshot.activeSection;
+    }
+    if (snapshot.activeModal && snapshot.activeModal !== 'none') {
+      relevant.activeModal = snapshot.activeModal;
+    }
+
+    // 2. Conversation context: preserve topic & clarification
+    if (snapshot.recentTopic) {
+      relevant.recentTopic = snapshot.recentTopic;
+    }
+    if (snapshot.lastClarificationQuestion) {
+      relevant.lastClarificationQuestion = snapshot.lastClarificationQuestion;
+    }
+
+    // 3. Selection Context: only attach if query mentions selection/this or query is empty
+    const hasSelection = Boolean(snapshot.selectedText);
+    const selectionKeywords = ['this', 'selected', 'explain', 'what does', 'mean', 'translate', 'summarize', 'search'];
+    const queryMentionsSelection = selectionKeywords.some(kw => q.includes(kw));
+    if (hasSelection && (queryMentionsSelection || q.length === 0)) {
+      relevant.selectedText = snapshot.selectedText;
+    }
+
+    // 4. UI Focus Context: only attach if query is related to typing or searching
+    if (snapshot.focusedField && (q.includes('search') || q.includes('type') || q.includes('comment') || q.includes('write'))) {
+      relevant.focusedField = snapshot.focusedField;
+    }
+
+    // 5. Recent Actions Context: attach if query inquires about actions or workflow
+    const actionKeywords = ['undo', 'action', 'did you', 'what did', 'repeat', 'again', 'why did', 'last'];
+    const queryAsksAction = actionKeywords.some(kw => q.includes(kw));
+    const recentActions = snapshot.recentActions || this.getRecentActions();
+    if (queryAsksAction && recentActions.length > 0) {
+      relevant.recentActions = recentActions.slice(-3);
+    } else if (recentActions.length > 0 && ['why', 'how come', 'what happened'].some(kw => q.includes(kw))) {
+      relevant.recentActions = recentActions.slice(-1);
+    }
+
+    // 6. Permissions & Device Context
+    const callsKeywords = ['call', 'audio', 'mic', 'microphone', 'video', 'webrtc'];
+    const notifKeywords = ['notification', 'alert', 'quiet', 'ping', 'push'];
+    const themeKeywords = ['theme', 'dark', 'light', 'cyberpunk', 'appearance', 'oled'];
+
+    if (callsKeywords.some(kw => q.includes(kw))) {
+      relevant.permissions = {
+        audioMic: snapshot.permissions?.audioMic || 'prompt',
+        notifications: snapshot.permissions?.notifications || 'default'
+      };
+      relevant.appState = {
+        isOnline: snapshot.device?.isOnline !== false
+      };
+    } else if (notifKeywords.some(kw => q.includes(kw))) {
+      relevant.permissions = {
+        notifications: snapshot.permissions?.notifications || 'default',
+        soundEnabled: snapshot.permissions?.soundEnabled !== false
+      };
+    } else if (themeKeywords.some(kw => q.includes(kw))) {
+      relevant.theme = snapshot.device?.theme || 'dark';
+    } else {
+      relevant.isOnline = snapshot.device?.isOnline !== false;
+    }
+
+    // 7. Active Chat Metadata
+    if ((snapshot.screen === 'messages' || q.includes('chat') || q.includes('message') || q.includes('talk')) && snapshot.activeChat) {
+      relevant.activeChat = snapshot.activeChat;
+    }
+
+    // 8. User summary
+    if (snapshot.user) {
+      relevant.user = snapshot.user;
+    }
+
+    this.sanitizeSecurityCheck(relevant);
+    return relevant;
+  }
+
+  /**
    * Snapshot alias for AI client and direct consumers
    */
   getContextSnapshot(user = null, preferences = null) {
@@ -642,6 +900,7 @@ export class VibiContextService {
       recentTurns: raw.recentTurns || [],
       selectedText: raw.selectedText || null,
       focusedField: raw.focusedField || null,
+      recentActions: raw.recentActions || [],
       theme: raw.device?.theme || 'dark',
       online: raw.device?.isOnline !== false,
       device: raw.device?.isPWA ? 'pwa' : 'web',

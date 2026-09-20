@@ -15,6 +15,7 @@ import vibiOutputValidator, { SAFETY_TIERS } from './vibiOutputValidator';
 import vibiAuditLog from './vibiAuditLog';
 import vibiCharacterService from './vibiCharacterService';
 import vibiSecurityGuard from './vibiSecurityGuard';
+import vibiContextService from './vibiContextService';
 
 export const EXECUTION_STATES = {
   IDLE: 'idle',
@@ -352,6 +353,39 @@ export class VibiIntentEngine {
           topic: 'diagnostics'
         };
       }
+    }
+
+    // =========================================================================
+    // STEP 0.7: RECENT ACTIONS & WORKFLOW CONTEXT (PHASE 7)
+    // Handle "what did you just do", "what was the last action", "what did you do"
+    // =========================================================================
+    if (query.includes('what did you just do') || query.includes('what was the last action') || query.includes('what did you do')) {
+      const recent = vibiContextService.getRecentActions();
+      if (recent.length > 0) {
+        const last = recent[recent.length - 1];
+        return {
+          matched: true,
+          actionId: 'explain_feature',
+          params: { feature: 'vibi' },
+          confidence: 0.98,
+          safetyTier: SAFETY_TIERS.READ_ONLY,
+          topic: 'recent_action',
+          responseType: 'SHORT',
+          replyText: `I recently executed **${last.actionId}** (status: *${last.status}*). 🦊 Would you like me to repeat it or undo it?`,
+          actions: [{ id: 'explain_feature', params: { feature: 'vibi' } }]
+        };
+      }
+      return {
+        matched: true,
+        actionId: 'explain_feature',
+        params: { feature: 'vibi' },
+        confidence: 0.95,
+        safetyTier: SAFETY_TIERS.READ_ONLY,
+        topic: 'recent_action',
+        responseType: 'SHORT',
+        replyText: 'No actions have been executed yet in this session! 🦊 Anything I can help you with?',
+        actions: []
+      };
     }
 
     // =========================================================================
@@ -1117,6 +1151,8 @@ export class VibiIntentEngine {
         vibiCharacterService.error();
       }
 
+      vibiContextService.recordRecentAction(actionId, sanitizedParams, isSuccess ? 'success' : 'failed');
+
       return {
         success: isSuccess,
         state: this.executionState,
@@ -1145,6 +1181,8 @@ export class VibiIntentEngine {
         durationMs,
         username
       });
+
+      vibiContextService.recordRecentAction(actionId, sanitizedParams, 'failed');
 
       return {
         success: false,

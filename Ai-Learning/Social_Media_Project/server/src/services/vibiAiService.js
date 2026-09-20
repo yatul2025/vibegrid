@@ -156,6 +156,26 @@ function queryKnowledgeBase(message, context = {}) {
     }
   }
 
+  // 1.5. Recent Actions Inquiry (Phase 7)
+  if (query.includes('what did you do') || query.includes('what was the last action') || query.includes('what did you just do')) {
+    const recent = Array.isArray(context.recentActions) ? context.recentActions : [];
+    if (recent.length > 0) {
+      const last = recent[recent.length - 1];
+      return {
+        replyText: `I recently executed **${last.actionId}** (status: *${last.status}*). 🦊 Would you like me to repeat it or undo it?`,
+        action: null,
+        topic: 'recent_action',
+        responseType: 'SHORT'
+      };
+    }
+    return {
+      replyText: "No actions have been executed yet in this session! 🦊 Anything I can help you with?",
+      action: null,
+      topic: 'recent_action',
+      responseType: 'SHORT'
+    };
+  }
+
   // 2. Navigation & Screens
   if (query.includes('explore') || query.includes('trending') || query.includes('discover')) {
     return {
