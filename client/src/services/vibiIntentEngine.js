@@ -11,26 +11,161 @@
  */
 
 import vibiActionRegistry from './vibiActionRegistry';
-import vibiOutputValidator from './vibiOutputValidator';
+import vibiOutputValidator, { SAFETY_TIERS } from './vibiOutputValidator';
 import vibiAuditLog from './vibiAuditLog';
 import vibiCharacterService from './vibiCharacterService';
+import vibiSecurityGuard from './vibiSecurityGuard';
 
 export class VibiIntentEngine {
+  /**
+   * Extract user handle from text (e.g. @alice)
+   * @param {string} text
+   * @returns {string|null}
+   */
+  extractUserHandle(text = '') {
+    if (!text || typeof text !== 'string') return null;
+    const match = text.match(/@([a-zA-Z0-9_]{3,30})/);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * Extract search term / query from text
+   * @param {string} text
+   * @returns {string|null}
+   */
+  extractSearchQuery(text = '') {
+    if (!text || typeof text !== 'string') return null;
+    const match = text.match(/\b(?:search for|search|find|lookup|look up)\s+(?:users?\s+|posts?\s+about\s+|tag\s+)?["']?([^"'\n\r\t.,!?;]+)["']?/i);
+    if (!match) return null;
+    const candidate = match[1].trim();
+    if (['settings', 'privacy', 'messages', 'profile', 'feed', 'explore', 'notifications'].includes(candidate.toLowerCase())) {
+      return null;
+    }
+    return candidate;
+  }
+
+  /**
+   * Extract theme name from natural language
+   * @param {string} text
+   * @returns {string|null}
+   */
+  extractTheme(text = '') {
+    if (!text || typeof text !== 'string') return null;
+    const themes = ['dark', 'light', 'cyberpunk', 'nordic', 'oled', 'synthwave', 'sunset', 'emerald', 'forest', 'crimson'];
+    const lower = text.toLowerCase();
+    for (const theme of themes) {
+      if (lower.includes(theme)) return theme;
+    }
+    return null;
+  }
+
+  /**
+   * Extract target tab
+   * @param {string} text
+   * @returns {string|null}
+   */
+  extractTab(text = '') {
+    if (!text || typeof text !== 'string') return null;
+    const lower = text.toLowerCase();
+    if (lower.includes('explore') || lower.includes('trending') || lower.includes('discover')) return 'explore';
+    if (lower.includes('message') || lower.includes('chat') || lower.includes('dm')) return 'messages';
+    if (lower.includes('profile') || lower.includes('my account')) return 'profile';
+    if (lower.includes('feed') || lower.includes('timeline') || lower.includes('home')) return 'feed';
+    if (lower.includes('setting')) return 'settings';
+    return null;
+  }
+
+  /**
+   * Extract settings section
+   * @param {string} text
+   * @returns {string|null}
+   */
+  extractSettingsSection(text = '') {
+    if (!text || typeof text !== 'string') return null;
+    const lower = text.toLowerCase();
+    if (lower.includes('privacy') || lower.includes('permission')) return 'privacy';
+    if (lower.includes('appearance') || lower.includes('theme')) return 'appearance';
+    if (lower.includes('security') || lower.includes('password') || lower.includes('session')) return 'security';
+    if (lower.includes('notification') || lower.includes('alert')) return 'notifications';
+    if (lower.includes('vibi') || lower.includes('assistant')) return 'vibi';
+    return null;
+  }
+
+  /**
+   * Extract modal identifier
+   * @param {string} text
+   * @returns {string|null}
+   */
+  extractModal(text = '') {
+    if (!text || typeof text !== 'string') return null;
+    const lower = text.toLowerCase();
+    if (lower.includes('create post') || lower.includes('new post') || lower.includes('post photo')) return 'create_post';
+    if (lower.includes('notification') && (lower.includes('show') || lower.includes('open') || lower.includes('check'))) return 'notifications';
+    if (lower.includes('call history') || lower.includes('recent call')) return 'call_history';
+    if (lower.includes('permission') || lower.includes('onboarding')) return 'permission_onboarding';
+    return null;
+  }
+
   /**
    * Deterministically detect user intent from natural text
    * @param {string} text - User message input
    * @param {Object} [context={}] - Runtime app context
-   * @returns {{ matched: boolean, actionId?: string, params?: Object, replyText?: string, isQuickAction?: boolean }}
+   * @param {Object} [options={}] - Internal routing options (e.g. { isSubIntent: true })
+   * @returns {{ matched: boolean, actionId?: string, params?: Object, replyText?: string, isQuickAction?: boolean, confidence?: number, actions?: Array, isComposite?: boolean, isSuggestion?: boolean }}
    */
-  detectIntent(text = '', context = {}) {
+  _matchIntent(text = '', context = {}, options = {}) {
     if (!text || typeof text !== 'string') {
-      return { matched: false };
+      return { matched: false, confidence: 0.0 };
+    }
+
+    // Step -1: Security Guard Prompt Injection Defense
+    const safetyCheck = vibiSecurityGuard.checkPromptSafety(text);
+    if (!safetyCheck.safe) {
+      return {
+        matched: false,
+        rejected: true,
+        confidence: 0.0,
+        safetyReason: safetyCheck.reason,
+        replyText: safetyCheck.friendlyReply
+      };
     }
 
     const query = text.trim().toLowerCase();
 
     // =========================================================================
-    // STEP 0: CLARIFICATION ANSWER RESOLUTION
+    // STEP 0: COMPOSITE MULTI-INTENT PARSER
+    // Detect composite commands connected with conjunctions: 'and then', 'and', 'then', 'also'
+    // =========================================================================
+    if (!options.isSubIntent && /\s+(?:and then|and|then|also)\s+/i.test(query)) {
+      const parts = query.split(/\s+(?:and then|and|then|also)\s+/i);
+      if (parts.length >= 2 && parts[0].trim() && parts[1].trim()) {
+        const intent1 = this.detectIntent(parts[0].trim(), context, { isSubIntent: true });
+        const intent2 = this.detectIntent(parts[1].trim(), context, { isSubIntent: true });
+
+        if (intent1.matched && intent2.matched && intent1.actionId && intent2.actionId) {
+          return {
+            matched: true,
+            isQuickAction: true,
+            isComposite: true,
+            actionId: intent1.actionId,
+            params: intent1.params,
+            primaryIntent: intent1,
+            secondaryIntent: intent2,
+            actions: [
+              { id: intent1.actionId, params: intent1.params, label: intent1.replyText?.slice(0, 30) || 'Step 1' },
+              { id: intent2.actionId, params: intent2.params, label: intent2.replyText?.slice(0, 30) || 'Step 2' }
+            ],
+            confidence: Math.min(intent1.confidence || 0.95, intent2.confidence || 0.95),
+            responseType: 'STEP_BY_STEP',
+            topic: intent1.topic || intent2.topic || 'multi_action',
+            replyText: `${intent1.replyText} And then: ${intent2.replyText}`
+          };
+        }
+      }
+    }
+
+    // =========================================================================
+    // STEP 0.5: CLARIFICATION ANSWER RESOLUTION
     // If the previous turn asked a clarification question, resolve user's answer
     // =========================================================================
     const lastClarification = context.lastClarificationQuestion || null;
@@ -42,6 +177,7 @@ export class VibiIntentEngine {
           actionId: 'navigate',
           params: { tab: 'settings', section: 'privacy' },
           replyText: "Opening **Privacy & Permissions** settings for you! 🛡️",
+          confidence: 0.95,
           responseType: 'SHORT',
           topic: 'settings'
         };
@@ -53,6 +189,7 @@ export class VibiIntentEngine {
           actionId: 'navigate',
           params: { tab: 'settings', section: 'appearance' },
           replyText: "Opening **Appearance & Themes** settings! 🎨",
+          confidence: 0.95,
           responseType: 'SHORT',
           topic: 'theme'
         };
@@ -64,6 +201,7 @@ export class VibiIntentEngine {
           actionId: 'navigate',
           params: { tab: 'settings', section: 'notifications' },
           replyText: "Opening **Notification Preferences**! 🔔",
+          confidence: 0.95,
           responseType: 'SHORT',
           topic: 'notifications'
         };
@@ -75,6 +213,7 @@ export class VibiIntentEngine {
           actionId: 'navigate',
           params: { tab: 'settings', section: 'vibi' },
           replyText: "Opening **Vibi Assistant** settings! 🦊⚙️",
+          confidence: 0.95,
           responseType: 'SHORT',
           topic: 'vibi'
         };
@@ -86,6 +225,7 @@ export class VibiIntentEngine {
           actionId: 'navigate',
           params: { tab: 'settings' },
           replyText: "Navigating to **Settings & Privacy**! ⚙️",
+          confidence: 0.95,
           responseType: 'SHORT',
           topic: 'settings'
         };
@@ -320,6 +460,108 @@ export class VibiIntentEngine {
         actionId: 'navigate',
         params: { tab: 'settings', section: 'notifications' },
         replyText: "Taking you to **Notification Preferences**! 🔔",
+        responseType: 'SHORT',
+        topic: 'notifications'
+      };
+    }
+
+    // =========================================================================
+    // STEP 2.5: PARAMETER EXTRACTION & SEMANTIC SEARCH ROUTING
+    // Extract user handles (@handle), search queries, and themes from natural language
+    // =========================================================================
+
+    // Parameter Extraction: Search Queries ("search for dogs", "find #vibegrid", "lookup photo")
+    const searchQuery = this.extractSearchQuery(text);
+    if (searchQuery) {
+      return {
+        matched: true,
+        isQuickAction: true,
+        actionId: 'navigate',
+        params: { tab: 'explore', query: searchQuery },
+        replyText: `Searching VibeGrid for "${searchQuery}" on Explore! 🔍`,
+        confidence: 0.92,
+        responseType: 'SHORT',
+        topic: 'search'
+      };
+    }
+
+    // Parameter Extraction: User Handles (@username)
+    const userHandle = this.extractUserHandle(text);
+    if (userHandle && (query.includes('find') || query.includes('search') || query.includes('view') || query.includes('open') || query.includes('profile') || query.includes('user'))) {
+      return {
+        matched: true,
+        isQuickAction: true,
+        actionId: 'navigate',
+        params: { tab: 'explore', query: `@${userHandle}` },
+        replyText: `Looking up profile for **@${userHandle}**! 👤`,
+        confidence: 0.92,
+        responseType: 'SHORT',
+        topic: 'navigation'
+      };
+    }
+
+    // Parameter Extraction: Direct Theme Switching ("set theme to cyberpunk", "switch theme to sunset")
+    const extractedTheme = this.extractTheme(text);
+    if (extractedTheme && (query.includes('theme') || query.includes('mode') || query.includes('appearance') || query.includes('switch') || query.includes('change') || query.includes('set'))) {
+      return {
+        matched: true,
+        isQuickAction: true,
+        actionId: 'toggle_theme',
+        params: { theme: extractedTheme },
+        replyText: `Switched appearance to **${extractedTheme.toUpperCase()}** theme! 🎨`,
+        confidence: 0.95,
+        responseType: 'SHORT',
+        topic: 'theme'
+      };
+    }
+
+    // =========================================================================
+    // STEP 2.6: MEDIUM CONFIDENCE SUGGESTION ROUTING (0.50 - 0.84)
+    // Suggest actions with interactive confirmation chips rather than taking speculative action
+    // =========================================================================
+    if ((query === 'change theme' || query === 'switch theme' || query === 'change appearance' || query.includes('can you change theme') || query.includes('what themes')) && !extractedTheme) {
+      return {
+        matched: true,
+        isSuggestion: true,
+        confidence: 0.70,
+        replyText: "I can switch themes for you! Choose a style below or tell me your favorite: 🎨",
+        actions: [
+          { id: 'toggle_theme', params: { theme: 'dark' }, label: '🌙 Dark Mode' },
+          { id: 'toggle_theme', params: { theme: 'light' }, label: '☀️ Light Mode' },
+          { id: 'toggle_theme', params: { theme: 'cyberpunk' }, label: '⚡ Cyberpunk' }
+        ],
+        responseType: 'SHORT',
+        topic: 'theme'
+      };
+    }
+
+    if (query.includes('show some posts') || query.includes('show posts') || query.includes('want to browse') || query === 'show me something') {
+      return {
+        matched: true,
+        isSuggestion: true,
+        confidence: 0.75,
+        actionId: 'navigate',
+        params: { tab: 'feed' },
+        replyText: "Would you like to head to your Feed to browse latest updates and stories? 📰",
+        actions: [
+          { id: 'navigate', params: { tab: 'feed' }, label: '🏠 Go to Feed' }
+        ],
+        responseType: 'SHORT',
+        topic: 'navigation'
+      };
+    }
+
+    if (query.includes('do i have alerts') || query.includes('any alerts') || query.includes('check alerts')) {
+      return {
+        matched: true,
+        isSuggestion: true,
+        confidence: 0.80,
+        actionId: 'open_modal',
+        params: { modal: 'notifications' },
+        replyText: "Would you like me to open your notification center? 🔔",
+        actions: [
+          { id: 'open_modal', params: { modal: 'notifications' }, label: '🔔 Open Notifications' }
+        ],
         responseType: 'SHORT',
         topic: 'notifications'
       };
@@ -641,6 +883,30 @@ export class VibiIntentEngine {
   }
 
   /**
+   * Deterministically detect user intent and assign confidence score
+   * @param {string} text - User message input
+   * @param {Object} [context={}] - Runtime app context
+   * @param {Object} [options={}] - Internal routing options
+   * @returns {{ matched: boolean, actionId?: string, params?: Object, replyText?: string, isQuickAction?: boolean, confidence: number, actions?: Array, isComposite?: boolean, isSuggestion?: boolean }}
+   */
+  detectIntent(text = '', context = {}, options = {}) {
+    const res = this._matchIntent(text, context, options);
+    if (!res) {
+      return { matched: false, confidence: 0.20 };
+    }
+    if (!res.matched) {
+      return {
+        ...res,
+        confidence: res.confidence !== undefined ? res.confidence : 0.20
+      };
+    }
+    return {
+      ...res,
+      confidence: res.confidence !== undefined ? res.confidence : 0.95
+    };
+  }
+
+  /**
    * Execute an intent securely through the validator and action registry
    * @param {Object} intent
    * @param {Object} [context={}]
@@ -654,6 +920,37 @@ export class VibiIntentEngine {
       return {
         success: false,
         error: 'no_action: No action specified to execute.'
+      };
+    }
+
+    // Step 0: Composite Execution handling
+    if (intent.isComposite && intent.secondaryIntent && intent.secondaryIntent.actionId) {
+      const primaryRes = await this.executeIntent(
+        intent.primaryIntent || { actionId: intent.actionId, params: intent.params },
+        context,
+        callbacks,
+        username,
+        options
+      );
+      if (primaryRes.requiresConfirmation) {
+        return primaryRes;
+      }
+      const secondaryRes = await this.executeIntent(
+        intent.secondaryIntent,
+        context,
+        callbacks,
+        username,
+        options
+      );
+      return {
+        success: Boolean(primaryRes.success && secondaryRes.success),
+        isComposite: true,
+        primaryResult: primaryRes,
+        secondaryResult: secondaryRes,
+        safetyTier: primaryRes.safetyTier || secondaryRes.safetyTier || SAFETY_TIERS.READ_ONLY,
+        message: `${primaryRes.message || 'Step 1 completed.'} Then: ${secondaryRes.message || 'Step 2 completed.'}`,
+        replyText: intent.replyText || `${primaryRes.replyText || primaryRes.message} Then: ${secondaryRes.replyText || secondaryRes.message}`,
+        responseType: 'STEP_BY_STEP'
       };
     }
 
@@ -677,13 +974,14 @@ export class VibiIntentEngine {
       };
     }
 
-    const { action, sanitizedParams, pendingConfirmation } = validation;
+    const { action, sanitizedParams, safetyTier, pendingConfirmation } = validation;
 
     // Step 2: Confirmation Guard
     if (pendingConfirmation) {
       vibiAuditLog.logAction({
         actionId,
         category: action.category,
+        safetyTier,
         status: 'pending_confirmation',
         username
       });
@@ -692,6 +990,7 @@ export class VibiIntentEngine {
         requiresConfirmation: true,
         actionId,
         sanitizedParams,
+        safetyTier,
         actionName: action.name || actionId,
         description: action.description || '',
         responseType: intent.responseType || 'SHORT',
@@ -707,6 +1006,7 @@ export class VibiIntentEngine {
       vibiAuditLog.logAction({
         actionId,
         category: action.category,
+        safetyTier,
         status: result.success ? 'success' : 'failed',
         failureReason: result.success ? null : result.message,
         username
@@ -723,6 +1023,7 @@ export class VibiIntentEngine {
         message: replyText || result.message,
         data: result,
         explanation: result.explanation || null,
+        safetyTier,
         responseType: intent.responseType || 'SHORT',
         topic: intent.topic || null,
         replyText: result.explanation ? `${replyText}\n\n${result.explanation}` : (replyText || result.summary || result.message)
@@ -733,6 +1034,7 @@ export class VibiIntentEngine {
       vibiAuditLog.logAction({
         actionId,
         category: action.category,
+        safetyTier,
         status: 'failed',
         failureReason: err.message,
         username

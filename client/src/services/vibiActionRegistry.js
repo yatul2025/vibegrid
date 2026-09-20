@@ -34,6 +34,7 @@ class VibiActionRegistry {
       category: action.category || 'ui',
       description: action.description || '',
       requiresConfirmation: Boolean(action.requiresConfirmation),
+      safetyTier: action.safetyTier || (action.requiresConfirmation ? 'STATE_MUTATING' : 'READ_ONLY'),
       paramsSchema: action.paramsSchema || {},
       handler: action.handler || (async () => ({ success: true }))
     });
@@ -75,6 +76,7 @@ class VibiActionRegistry {
       name: 'Navigate Screen',
       category: 'navigation',
       description: 'Switch active tab or open a specific settings section.',
+      safetyTier: 'READ_ONLY',
       requiresConfirmation: false,
       paramsSchema: {
         tab: {
@@ -86,16 +88,26 @@ class VibiActionRegistry {
           type: 'string',
           required: false,
           enum: ['profile', 'appearance', 'contact', 'security', 'privacy', 'notifications', 'vibi', 'danger']
+        },
+        query: {
+          type: 'string',
+          required: false
         }
       },
       handler: async (params, context, callbacks) => {
         if (callbacks && typeof callbacks.onNavigate === 'function') {
-          callbacks.onNavigate(params.tab, params.section || null);
-          return { success: true, message: `Navigated to ${params.tab}${params.section ? ` (${params.section})` : ''}` };
+          if (params.query) {
+            callbacks.onNavigate(params.tab, params.section || null, params.query);
+          } else {
+            callbacks.onNavigate(params.tab, params.section || null);
+          }
+          return { success: true, message: `Navigated to ${params.tab}${params.section ? ` (${params.section})` : ''}${params.query ? ` [Query: ${params.query}]` : ''}` };
         }
         if (navigationService && typeof navigationService.navigate === 'function') {
-          navigationService.navigate(params.tab, { section: params.section || null });
-          return { success: true, message: `Navigated to ${params.tab}${params.section ? ` (${params.section})` : ''}` };
+          const navOpts = { section: params.section || null };
+          if (params.query) navOpts.query = params.query;
+          navigationService.navigate(params.tab, navOpts);
+          return { success: true, message: `Navigated to ${params.tab}${params.section ? ` (${params.section})` : ''}${params.query ? ` [Query: ${params.query}]` : ''}` };
         }
         return { success: false, message: 'Navigation callback unavailable' };
       }
@@ -107,6 +119,7 @@ class VibiActionRegistry {
       name: 'Open Modal',
       category: 'navigation',
       description: 'Open a standard VibeGrid dialog or drawer.',
+      safetyTier: 'READ_ONLY',
       requiresConfirmation: false,
       paramsSchema: {
         modal: {
@@ -134,6 +147,7 @@ class VibiActionRegistry {
       name: 'Change Theme',
       category: 'ui',
       description: 'Change or toggle VibeGrid appearance theme.',
+      safetyTier: 'READ_ONLY',
       requiresConfirmation: false,
       paramsSchema: {
         theme: {
@@ -161,6 +175,7 @@ class VibiActionRegistry {
       name: 'Toggle Sound Effects',
       category: 'ui',
       description: 'Turn procedural web audio sound effects on or off.',
+      safetyTier: 'READ_ONLY',
       requiresConfirmation: false,
       paramsSchema: {
         enabled: {
@@ -186,6 +201,7 @@ class VibiActionRegistry {
       name: 'Scroll to Top',
       category: 'ui',
       description: 'Smoothly scroll current feed or view to the very top.',
+      safetyTier: 'READ_ONLY',
       requiresConfirmation: false,
       paramsSchema: {},
       handler: async () => {
@@ -203,6 +219,7 @@ class VibiActionRegistry {
       name: 'Clear Vibi Chat',
       category: 'ui',
       description: 'Clear the current conversation thread with Vibi.',
+      safetyTier: 'STATE_MUTATING',
       requiresConfirmation: true, // Confirmation required
       paramsSchema: {},
       handler: async (params, context, callbacks) => {
@@ -220,6 +237,7 @@ class VibiActionRegistry {
       name: 'Explain VibeGrid Feature',
       category: 'info',
       description: 'Educational answers about VibeGrid capabilities, E2EE, themes, and calls.',
+      safetyTier: 'READ_ONLY',
       requiresConfirmation: false,
       paramsSchema: {
         topic: {
@@ -253,6 +271,7 @@ class VibiActionRegistry {
       name: 'Get App Status',
       category: 'info',
       description: 'Summarize connection, PWA installation, and active device state.',
+      safetyTier: 'READ_ONLY',
       requiresConfirmation: false,
       paramsSchema: {},
       handler: async (params, context) => {
@@ -278,6 +297,7 @@ class VibiActionRegistry {
       name: 'Run System Diagnostics',
       category: 'troubleshooting',
       description: 'Check network, notifications, media permissions, and storage health.',
+      safetyTier: 'READ_ONLY',
       requiresConfirmation: false,
       paramsSchema: {
         category: {
@@ -308,6 +328,7 @@ class VibiActionRegistry {
       name: 'Reconnect Network',
       category: 'troubleshooting',
       description: 'Reconnect real-time sockets and refresh connection status.',
+      safetyTier: 'STATE_MUTATING',
       requiresConfirmation: false,
       paramsSchema: {},
       handler: async () => {
@@ -321,6 +342,7 @@ class VibiActionRegistry {
       name: 'Test Notifications',
       category: 'troubleshooting',
       description: 'Send test browser notification to verify delivery.',
+      safetyTier: 'READ_ONLY',
       requiresConfirmation: false,
       paramsSchema: {},
       handler: async () => {
@@ -334,10 +356,33 @@ class VibiActionRegistry {
       name: 'Clear Temporary Cache',
       category: 'troubleshooting',
       description: 'Clear temporary image/preview caches while safeguarding credentials and E2EE keys.',
+      safetyTier: 'STATE_MUTATING',
       requiresConfirmation: false,
       paramsSchema: {},
       handler: async () => {
         return vibiTroubleshootingService.clearTemporaryCache();
+      }
+    });
+
+    // 13. Destructive: Reset All Vibi Local Memory & Data (Double-Confirmed)
+    this.registerAction({
+      id: 'delete_all_vibi_data',
+      name: 'Reset All Vibi Memory & Data',
+      category: 'storage',
+      description: 'Permanently wipe local Vibi preferences, conversation logs, and memory cache.',
+      safetyTier: 'DESTRUCTIVE',
+      requiresConfirmation: true,
+      paramsSchema: {},
+      handler: async (params, context, callbacks) => {
+        if (callbacks && typeof callbacks.onClearChat === 'function') {
+          callbacks.onClearChat();
+        }
+        try {
+          localStorage.removeItem('vibegrid_vibi_history');
+          localStorage.removeItem('vibegrid_vibi_preferences');
+          localStorage.removeItem('vibegrid_vibi_audit_logs');
+        } catch (_) {}
+        return { success: true, message: 'All Vibi local memory and preferences have been permanently reset.' };
       }
     });
   }

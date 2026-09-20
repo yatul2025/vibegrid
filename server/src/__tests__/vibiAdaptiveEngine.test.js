@@ -115,4 +115,37 @@ describe('Server Vibi Adaptive Response Engine Suite (Phase 2)', () => {
       expect(data.replyText).toContain('End-to-End Encryption');
     });
   });
+
+  describe('5. Composite Multi-Intent Routing & Confidence (Phase 4)', () => {
+    it('parses composite query into sequential actions with confidence score', () => {
+      const res = queryKnowledgeBase('go to feed and then open explore', {});
+      expect(res.action?.id).toBe('navigate');
+      expect(res.actions).toHaveLength(2);
+      expect(res.confidence).toBe(0.90);
+      expect(res.safetyTier).toBe('READ_ONLY');
+      expect(res.responseType).toBe('STEP_BY_STEP');
+    });
+
+    it('returns confidence and safetyTier through controller', async () => {
+      const req = {
+        body: {
+          message: 'go to feed',
+          context: { activeTab: 'explore' }
+        },
+        user: { id: 1, username: 'testuser' }
+      };
+
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn()
+      };
+
+      await handleVibiChat(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const data = res.json.mock.calls[0][0]?.data;
+      expect(data.confidence).toBeGreaterThanOrEqual(0.85);
+      expect(data.safetyTier).toBe('READ_ONLY');
+    });
+  });
 });

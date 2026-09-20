@@ -219,15 +219,25 @@ export default function VibiConversation() {
           }
           vibiContextService.recordTurn('vibi', intent.replyText, intent.topic || null);
 
+          // Medium confidence threshold (0.50 <= confidence < 0.85) OR explicit suggestion:
+          // Do NOT auto-execute; present interactive action buttons instead!
+          const isMediumConfidenceSuggestion = Boolean(intent.isSuggestion || (intent.confidence !== undefined && intent.confidence < 0.85 && intent.confidence >= 0.50));
+
           const msgObj = addMessage({
             sender: 'vibi',
             text: intent.replyText || "Action completed! 🦊✨",
             status: 'complete',
             responseType: intent.responseType || 'SHORT',
             topic: intent.topic || null,
-            action: intent.actionId ? { id: intent.actionId, params: intent.params } : null
+            action: intent.actionId ? { id: intent.actionId, params: intent.params } : null,
+            actions: intent.actions || (isMediumConfidenceSuggestion && intent.actionId ? [{ id: intent.actionId, params: intent.params, label: intent.actionLabel || intent.actionName || 'Proceed' }] : null)
           });
           if (isMountedRef.current && setIsTyping) setIsTyping(false);
+
+          if (isMediumConfidenceSuggestion) {
+            vibiCharacterService.attentive({ preferences });
+            return;
+          }
 
           vibiCharacterService.responding({ preferences });
 
@@ -243,9 +253,11 @@ export default function VibiConversation() {
                 window.dispatchEvent(new CustomEvent('vibegrid:set-theme', { detail: { theme } }));
               }
             },
-            onNavigate: (tab, section) => {
+            onNavigate: (tab, section, query) => {
               if (navigationService && typeof navigationService.navigate === 'function') {
-                navigationService.navigate(tab, { section });
+                const navOpts = { section: section || null };
+                if (query) navOpts.query = query;
+                navigationService.navigate(tab, navOpts);
               }
             }
           };

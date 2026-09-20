@@ -53,7 +53,7 @@ function queryKnowledgeBase(message, context = {}) {
   const lastClarification = context.lastClarificationQuestion || null;
   const recentTopic = context.recentTopic || null;
 
-  // 0. Clarification Response Resolution
+  // 0. Clarification Response Resolution (Highest priority when clarification is pending)
   if (lastClarification === 'which_settings') {
     if (query.includes('privacy') || query.includes('permission') || query.includes('security')) {
       return {
@@ -94,6 +94,29 @@ function queryKnowledgeBase(message, context = {}) {
         responseType: 'SHORT',
         topic: 'settings'
       };
+    }
+  }
+
+  // 0.5. Composite Multi-Intent Handling
+  if (/\s+(?:and then|and|then|also)\s+/i.test(query)) {
+    const parts = query.split(/\s+(?:and then|and|then|also)\s+/i);
+    if (parts.length >= 2 && parts[0].trim() && parts[1].trim()) {
+      const res1 = queryKnowledgeBase(parts[0].trim(), context);
+      const res2 = queryKnowledgeBase(parts[1].trim(), context);
+      if (res1.action && res2.action) {
+        return {
+          replyText: `${res1.replyText} Then: ${res2.replyText}`,
+          action: res1.action,
+          actions: [
+            { id: res1.action.id, params: res1.action.params, label: 'Step 1' },
+            { id: res2.action.id, params: res2.action.params, label: 'Step 2' }
+          ],
+          confidence: 0.90,
+          safetyTier: 'READ_ONLY',
+          responseType: 'STEP_BY_STEP',
+          topic: res1.topic || res2.topic || 'multi_action'
+        };
+      }
     }
   }
 

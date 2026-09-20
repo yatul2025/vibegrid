@@ -136,6 +136,9 @@ const handleVibiChat = async (req, res) => {
       data: {
         replyText: result.replyText,
         action: result.action || null,
+        actions: result.actions || null,
+        confidence: result.confidence !== undefined ? result.confidence : 0.95,
+        safetyTier: result.safetyTier || (result.action ? 'READ_ONLY' : null),
         responseType: result.responseType || 'NORMAL',
         topic: result.topic || sanitizedContext.recentTopic || null,
         provider: result.provider,

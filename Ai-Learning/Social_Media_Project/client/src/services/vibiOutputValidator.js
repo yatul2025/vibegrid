@@ -12,13 +12,19 @@
 
 import vibiActionRegistry from './vibiActionRegistry';
 
+export const SAFETY_TIERS = {
+  READ_ONLY: 'READ_ONLY',
+  STATE_MUTATING: 'STATE_MUTATING',
+  DESTRUCTIVE: 'DESTRUCTIVE'
+};
+
 export class VibiOutputValidator {
   /**
    * Validate a proposed action and its parameters
    * @param {string} actionId - Whitelisted action identifier
    * @param {Object} [params={}] - Parameters passed to the action
-   * @param {Object} [options={}] - Validation options (e.g. { confirmed: true })
-   * @returns {{ valid: boolean, action?: Object, sanitizedParams?: Object, pendingConfirmation?: boolean, error?: string }}
+   * @param {Object} [options={}] - Validation options (e.g. { confirmed: true, doubleConfirmed: true })
+   * @returns {{ valid: boolean, action?: Object, sanitizedParams?: Object, safetyTier?: string, pendingConfirmation?: boolean, error?: string }}
    */
   validateAction(actionId, params = {}, options = {}) {
     // 1. Action ID must be provided
@@ -94,13 +100,23 @@ export class VibiOutputValidator {
       }
     }
 
-    // 4. Confirmation Requirement Check (bypassed when user explicitly confirmed)
-    const pendingConfirmation = Boolean(actionDef.requiresConfirmation) && !options.confirmed;
+    // 4. Action Safety Classification & Confirmation Check
+    const safetyTier = actionDef.safetyTier || (actionDef.requiresConfirmation ? SAFETY_TIERS.STATE_MUTATING : SAFETY_TIERS.READ_ONLY);
+    let pendingConfirmation = false;
+
+    if (safetyTier === SAFETY_TIERS.DESTRUCTIVE) {
+      // Destructive actions strictly require double-confirmation
+      pendingConfirmation = !options.doubleConfirmed;
+    } else if (actionDef.requiresConfirmation || safetyTier === SAFETY_TIERS.STATE_MUTATING) {
+      // State mutating actions require interactive confirmation
+      pendingConfirmation = Boolean(actionDef.requiresConfirmation) && !options.confirmed;
+    }
 
     return {
       valid: true,
       action: actionDef,
       sanitizedParams,
+      safetyTier,
       pendingConfirmation
     };
   }
@@ -108,3 +124,4 @@ export class VibiOutputValidator {
 
 const vibiOutputValidator = new VibiOutputValidator();
 export default vibiOutputValidator;
+
