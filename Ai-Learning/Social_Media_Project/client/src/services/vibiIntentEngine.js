@@ -16,7 +16,60 @@ import vibiAuditLog from './vibiAuditLog';
 import vibiCharacterService from './vibiCharacterService';
 import vibiSecurityGuard from './vibiSecurityGuard';
 
+export const EXECUTION_STATES = {
+  IDLE: 'idle',
+  VALIDATING: 'validating',
+  AWAITING_CONFIRMATION: 'awaiting_confirmation',
+  EXECUTING: 'executing',
+  SUCCESS: 'success',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
+  TIMED_OUT: 'timed_out'
+};
+
 export class VibiIntentEngine {
+  constructor() {
+    this.executionState = EXECUTION_STATES.IDLE;
+    this.recentActionNonces = new Map();
+  }
+
+  getExecutionState() {
+    return this.executionState;
+  }
+
+  isExecuting() {
+    return this.executionState === EXECUTION_STATES.EXECUTING;
+  }
+
+  setExecutionState(state) {
+    this.executionState = state;
+  }
+
+  /**
+   * Replay protection guard for state mutating / destructive actions
+   * @param {string} actionId
+   * @param {Object} sanitizedParams
+   * @param {string} username
+   * @returns {boolean} true if execution allowed, false if duplicate
+   */
+  _checkReplayGuard(actionId, sanitizedParams = {}, username = 'anonymous') {
+    const signature = `${actionId}:${JSON.stringify(sanitizedParams)}:${username}`;
+    const now = Date.now();
+    const last = this.recentActionNonces.get(signature);
+    if (last && now - last < 1500) {
+      return false; // rejected by replay guard
+    }
+    this.recentActionNonces.set(signature, now);
+
+    // Bounded cleanup: prune old signatures
+    if (this.recentActionNonces.size > 50) {
+      for (const [k, ts] of this.recentActionNonces.entries()) {
+        if (now - ts > 10000) this.recentActionNonces.delete(k);
+      }
+    }
+    return true;
+  }
+
   /**
    * Extract user handle from text (e.g. @alice)
    * @param {string} text
@@ -917,14 +970,19 @@ export class VibiIntentEngine {
    */
   async executeIntent(intent, context = {}, callbacks = {}, username = 'anonymous', options = {}) {
     if (!intent || !intent.actionId) {
+      this.setExecutionState(EXECUTION_STATES.IDLE);
       return {
         success: false,
+        state: EXECUTION_STATES.FAILED,
         error: 'no_action: No action specified to execute.'
       };
     }
 
+    const startTime = Date.now();
+
     // Step 0: Composite Execution handling
     if (intent.isComposite && intent.secondaryIntent && intent.secondaryIntent.actionId) {
+      this.setExecutionState(EXECUTION_STATES.EXECUTING);
       const primaryRes = await this.executeIntent(
         intent.primaryIntent || { actionId: intent.actionId, params: intent.params },
         context,
@@ -933,6 +991,7 @@ export class VibiIntentEngine {
         options
       );
       if (primaryRes.requiresConfirmation) {
+        this.setExecutionState(EXECUTION_STATES.AWAITING_CONFIRMATION);
         return primaryRes;
       }
       const secondaryRes = await this.executeIntent(
@@ -942,9 +1001,15 @@ export class VibiIntentEngine {
         username,
         options
       );
+      const durationMs = Date.now() - startTime;
+      const isSuccess = Boolean(primaryRes.success && secondaryRes.success);
+      this.setExecutionState(isSuccess ? EXECUTION_STATES.SUCCESS : EXECUTION_STATES.FAILED);
+
       return {
-        success: Boolean(primaryRes.success && secondaryRes.success),
+        success: isSuccess,
         isComposite: true,
+        state: this.executionState,
+        durationMs,
         primaryResult: primaryRes,
         secondaryResult: secondaryRes,
         safetyTier: primaryRes.safetyTier || secondaryRes.safetyTier || SAFETY_TIERS.READ_ONLY,
@@ -957,18 +1022,22 @@ export class VibiIntentEngine {
     const { actionId, params = {}, replyText = '' } = intent;
 
     // Step 1: AI Output / Tool-Call Validator
+    this.setExecutionState(EXECUTION_STATES.VALIDATING);
     const validation = vibiOutputValidator.validateAction(actionId, params, options);
     if (!validation.valid) {
+      this.setExecutionState(EXECUTION_STATES.FAILED);
       vibiAuditLog.logAction({
         actionId,
         category: 'unknown',
         status: 'rejected',
         failureReason: validation.error,
+        durationMs: Date.now() - startTime,
         username
       });
       return {
         success: false,
         rejected: true,
+        state: EXECUTION_STATES.FAILED,
         error: validation.error,
         replyText: `⚠️ Action could not be executed: ${validation.error}`
       };
@@ -978,16 +1047,19 @@ export class VibiIntentEngine {
 
     // Step 2: Confirmation Guard
     if (pendingConfirmation) {
+      this.setExecutionState(EXECUTION_STATES.AWAITING_CONFIRMATION);
       vibiAuditLog.logAction({
         actionId,
         category: action.category,
         safetyTier,
         status: 'pending_confirmation',
+        durationMs: Date.now() - startTime,
         username
       });
       return {
         success: true,
         requiresConfirmation: true,
+        state: EXECUTION_STATES.AWAITING_CONFIRMATION,
         actionId,
         sanitizedParams,
         safetyTier,
@@ -999,52 +1071,90 @@ export class VibiIntentEngine {
       };
     }
 
-    // Step 3: Execute Action
+    // Step 2.5: Replay Guard for Mutating / Destructive actions
+    if ((safetyTier === SAFETY_TIERS.STATE_MUTATING || safetyTier === SAFETY_TIERS.DESTRUCTIVE) && !options.bypassReplayGuard) {
+      const allowed = this._checkReplayGuard(actionId, sanitizedParams, username);
+      if (!allowed) {
+        this.setExecutionState(EXECUTION_STATES.IDLE);
+        return {
+          success: false,
+          isDuplicate: true,
+          state: EXECUTION_STATES.IDLE,
+          message: 'Duplicate action suppressed by replay guard.',
+          replyText: 'Action already recently executed! 🦊⏳'
+        };
+      }
+    }
+
+    // Step 3: State transition to EXECUTING with Timeout Guard
+    this.setExecutionState(EXECUTION_STATES.EXECUTING);
+    const timeoutMs = options.timeoutMs || 5000;
+
     try {
-      const result = await action.handler(sanitizedParams, context, callbacks);
+      const handlerPromise = action.handler(sanitizedParams, context, callbacks);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`action_timeout: Handler timed out after ${timeoutMs}ms`)), timeoutMs);
+      });
+
+      const result = await Promise.race([handlerPromise, timeoutPromise]);
+      const durationMs = Date.now() - startTime;
+      const isSuccess = result?.success !== false;
+      this.setExecutionState(isSuccess ? EXECUTION_STATES.SUCCESS : EXECUTION_STATES.FAILED);
 
       vibiAuditLog.logAction({
         actionId,
         category: action.category,
         safetyTier,
-        status: result.success ? 'success' : 'failed',
-        failureReason: result.success ? null : result.message,
+        status: isSuccess ? 'success' : 'failed',
+        failureReason: isSuccess ? null : result?.message,
+        durationMs,
         username
       });
 
-      if (result.success) {
+      if (isSuccess) {
         vibiCharacterService.success();
       } else {
         vibiCharacterService.error();
       }
 
       return {
-        success: Boolean(result.success),
-        message: replyText || result.message,
+        success: isSuccess,
+        state: this.executionState,
+        durationMs,
+        actionId,
+        message: replyText || result?.message,
         data: result,
-        explanation: result.explanation || null,
+        explanation: result?.explanation || null,
         safetyTier,
         responseType: intent.responseType || 'SHORT',
         topic: intent.topic || null,
-        replyText: result.explanation ? `${replyText}\n\n${result.explanation}` : (replyText || result.summary || result.message)
+        replyText: result?.explanation ? `${replyText}\n\n${result.explanation}` : (replyText || result?.summary || result?.message)
       };
     } catch (err) {
+      const isTimeout = err.message?.includes('action_timeout');
+      this.setExecutionState(isTimeout ? EXECUTION_STATES.TIMED_OUT : EXECUTION_STATES.FAILED);
       vibiCharacterService.error();
 
+      const durationMs = Date.now() - startTime;
       vibiAuditLog.logAction({
         actionId,
         category: action.category,
         safetyTier,
         status: 'failed',
         failureReason: err.message,
+        durationMs,
         username
       });
 
       return {
         success: false,
+        state: this.executionState,
+        durationMs,
         error: err.message,
         replyText: `⚠️ An error occurred while executing ${action.name}: ${err.message}`
       };
+    } finally {
+      this.setExecutionState(EXECUTION_STATES.IDLE);
     }
   }
 
