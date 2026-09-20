@@ -52,6 +52,7 @@ export class VibiAiClient {
       message: sanitizedMessage,
       context: {
         activeTab: contextSnapshot.currentTab || runtimeContext.currentTab || 'feed',
+        activeSection: contextSnapshot.activeSection || runtimeContext.activeSection || null,
         theme: contextSnapshot.theme || 'dark',
         online: contextSnapshot.online !== false,
         soundEnabled: Boolean(runtimeContext.soundEnabled),

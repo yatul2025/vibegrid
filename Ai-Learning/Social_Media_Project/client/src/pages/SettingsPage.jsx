@@ -28,6 +28,7 @@ import { THEMES, getThemeById } from '../constants/themes';
 import soundFx, { SOUND_PACKS } from '../services/soundFxService';
 import navigationService from '../services/navigationService';
 import { useVibiAssistant } from '../context/VibiAssistantContext';
+import vibiContextService from '../services/vibiContextService';
 import { SettingsSkeleton, SkeletonLine, SkeletonCircle, SkeletonPill } from '../components/common/Skeleton';
 import { APP_VERSION, PWA_CACHE_VERSION } from '../constants/appVersion';
 import {
@@ -73,6 +74,14 @@ export default function SettingsPage({
   useEffect(() => {
     mobileViewingSectionRef.current = mobileViewingSection;
   }, [mobileViewingSection]);
+
+  // Synchronize active settings section with Vibi Context Engine (safe structural UI context only)
+  useEffect(() => {
+    vibiContextService.setActiveSection(activeSection);
+    return () => {
+      vibiContextService.clearActiveSection();
+    };
+  }, [activeSection]);
 
   // Global message banner for settings
   const [feedbackMsg, setFeedbackMsg] = useState(null);

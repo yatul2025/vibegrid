@@ -21,6 +21,7 @@ import vibiActionRegistry from '../../services/vibiActionRegistry';
 import vibiProactiveService from '../../services/vibiProactiveService';
 import vibiSecurityGuard from '../../services/vibiSecurityGuard';
 import vibiCharacterService from '../../services/vibiCharacterService';
+import navigationService from '../../services/navigationService';
 import VibiAvatar from './VibiAvatar';
 import VibiTroubleshootingCard from './VibiTroubleshootingCard';
 import { Send, RefreshCw, Trash2, Sparkles, AlertCircle } from 'lucide-react';
@@ -137,12 +138,29 @@ export default function VibiConversation() {
 
           vibiCharacterService.responding({ preferences });
 
+          const actionCallbacks = {
+            onClearChat: () => clearConversation(),
+            onOpenModal: (modal) => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('vibegrid:open-modal', { detail: { modal } }));
+              }
+            },
+            onToggleTheme: (theme) => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('vibegrid:set-theme', { detail: { theme } }));
+              }
+            },
+            onNavigate: (tab, section) => {
+              if (navigationService && typeof navigationService.navigate === 'function') {
+                navigationService.navigate(tab, { section });
+              }
+            }
+          };
+
           vibiIntentEngine.executeIntent(
             intent,
             context,
-            {
-              onClearChat: () => clearConversation()
-            },
+            actionCallbacks,
             user?.username
           ).then((res) => {
             vibiCharacterService.proud({ preferences });
@@ -168,11 +186,29 @@ export default function VibiConversation() {
           // If AI proposed a validated action, execute it safely
           if (aiResult.actionProposal) {
             const { id, params } = aiResult.actionProposal;
+            const actionCallbacks = {
+              onClearChat: () => clearConversation(),
+              onOpenModal: (modal) => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('vibegrid:open-modal', { detail: { modal } }));
+                }
+              },
+              onToggleTheme: (theme) => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('vibegrid:set-theme', { detail: { theme } }));
+                }
+              },
+              onNavigate: (tab, section) => {
+                if (navigationService && typeof navigationService.navigate === 'function') {
+                  navigationService.navigate(tab, { section });
+                }
+              }
+            };
             await vibiIntentEngine.executeAction(
               id,
               params,
               context,
-              { onClearChat: () => clearConversation() },
+              actionCallbacks,
               user?.username
             );
           }
@@ -224,8 +260,9 @@ export default function VibiConversation() {
   };
 
   const currentContext = typeof getContext === 'function' ? getContext(user) : {};
-  const activeTab = currentContext?.currentTab || 'feed';
-  const screenSuggestions = vibiProactiveService.getScreenSuggestions(activeTab);
+  const activeTab = currentContext?.currentTab || currentContext?.screen || 'feed';
+  const activeSection = currentContext?.activeSection || null;
+  const screenSuggestions = vibiProactiveService.getScreenSuggestions(activeTab, activeSection);
 
   return (
     <div className="vibi-conversation-container" data-testid="vibi-conversation">
@@ -276,19 +313,51 @@ export default function VibiConversation() {
 
                     {/* Quick Interactive Actions */}
                     {msg.actions && msg.actions.length > 0 && (
-                      <VibiActionList
-                        actions={msg.actions}
-                        onAction={(action) => {
-                          handleExecuteAction(action);
-                          vibiCharacterService.proud({ durationMs: 2000, preferences });
-                        }}
-                        onActionComplete={(res) => {
-                          addMessage({
-                            sender: 'vibi',
-                            text: res.message || 'Action executed successfully! 🦊'
-                          });
-                        }}
-                      />
+                      <div className="vibi-quick-actions-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                        {msg.actions.map((act, actIdx) => (
+                          <button
+                            key={actIdx}
+                            type="button"
+                            className="vibi-suggestion-pill"
+                            onClick={async () => {
+                              vibiCharacterService.proud({ durationMs: 2000, preferences });
+                              const res = await vibiIntentEngine.executeAction(
+                                act.id || act.actionId,
+                                act.params || {},
+                                currentContext,
+                                {
+                                  onClearChat: () => clearConversation(),
+                                  onOpenModal: (modal) => {
+                                    if (typeof window !== 'undefined') {
+                                      window.dispatchEvent(new CustomEvent('vibegrid:open-modal', { detail: { modal } }));
+                                    }
+                                  },
+                                  onToggleTheme: (theme) => {
+                                    if (typeof window !== 'undefined') {
+                                      window.dispatchEvent(new CustomEvent('vibegrid:set-theme', { detail: { theme } }));
+                                    }
+                                  },
+                                  onNavigate: (tab, section) => {
+                                    if (navigationService && typeof navigationService.navigate === 'function') {
+                                      navigationService.navigate(tab, { section });
+                                    }
+                                  }
+                                },
+                                user?.username
+                              );
+                              if (res) {
+                                addMessage({
+                                  sender: 'vibi',
+                                  text: res.message || res.replyText || 'Action executed successfully! 🦊'
+                                });
+                              }
+                            }}
+                          >
+                            <Sparkles size={12} className="vibi-sug-icon" />
+                            <span>{act.label || act.name || act.id}</span>
+                          </button>
+                        ))}
+                      </div>
                     )}
 
                     {msg.action?.id === 'run_diagnostics' && (

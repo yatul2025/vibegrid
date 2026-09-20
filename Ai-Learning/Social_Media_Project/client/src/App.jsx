@@ -77,7 +77,12 @@ function AppContent() {
   useEffect(() => {
     currentTabRef.current = currentTab;
     vibiContextService.setActiveTab(currentTab);
-  }, [currentTab]);
+    if (currentTab === 'settings') {
+      vibiContextService.setActiveSection(settingsSection);
+    } else {
+      vibiContextService.clearActiveSection();
+    }
+  }, [currentTab, settingsSection]);
   const touchStartRef = useRef({ x: 0, y: 0, time: 0, isIgnored: false });
   const [a11yStatus, setA11yStatus] = useState('');
   const [vibiEasterEgg, setVibiEasterEgg] = useState({ active: false, key: 0 });
@@ -329,6 +334,37 @@ function AppContent() {
       window.removeEventListener('vibegrid:open-permission-setup', handleOpenPermissionSetup);
     };
   }, []);
+
+  // Listen for programmatic modal open and theme set requests (from Vibi, shortcuts, deep links)
+  useEffect(() => {
+    const handleProgrammaticOpenModal = (e) => {
+      const modal = e.detail?.modal;
+      if (modal === 'create_post') {
+        openCreatePost();
+      } else if (modal === 'notifications') {
+        openNotifications();
+      } else if (modal === 'permission_onboarding') {
+        setIsManualOnboardingRecheck(true);
+        setShowPermissionOnboarding(true);
+      }
+    };
+
+    const handleProgrammaticSetTheme = (e) => {
+      const nextTheme = e.detail?.theme;
+      if (nextTheme) {
+        setTheme(nextTheme);
+      } else {
+        setTheme((prev) => (['light', 'pastel-light'].includes(prev) ? 'dark' : 'light'));
+      }
+    };
+
+    window.addEventListener('vibegrid:open-modal', handleProgrammaticOpenModal);
+    window.addEventListener('vibegrid:set-theme', handleProgrammaticSetTheme);
+    return () => {
+      window.removeEventListener('vibegrid:open-modal', handleProgrammaticOpenModal);
+      window.removeEventListener('vibegrid:set-theme', handleProgrammaticSetTheme);
+    };
+  }, [currentTab, viewedUsername]);
 
   // Back interceptor for permission onboarding modal
   useEffect(() => {

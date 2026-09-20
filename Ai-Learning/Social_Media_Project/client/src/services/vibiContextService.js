@@ -38,7 +38,40 @@ export const STRICT_SECURITY_BLACKLIST = Object.freeze([
 export class VibiContextService {
   constructor() {
     this.activeTab = 'feed';
+    this.activeSection = null;
     this.activeChatMetadata = null; // { id, name, type }
+  }
+
+  /**
+   * Set active sub-section (e.g. settings section: 'privacy', 'appearance', etc.)
+   * Whitelisted strictly to non-sensitive structural navigation sections.
+   * @param {string|null} section
+   */
+  setActiveSection(section) {
+    if (!section) {
+      this.activeSection = null;
+      return;
+    }
+    if (typeof section === 'string') {
+      const clean = section.trim().toLowerCase().slice(0, 30);
+      const safeWhitelist = ['profile', 'appearance', 'contact', 'security', 'privacy', 'notifications', 'vibi', 'danger'];
+      this.activeSection = safeWhitelist.includes(clean) ? clean : 'general';
+    }
+  }
+
+  /**
+   * Get current active section
+   * @returns {string|null}
+   */
+  getActiveSection() {
+    return this.activeSection || null;
+  }
+
+  /**
+   * Clear active section
+   */
+  clearActiveSection() {
+    this.activeSection = null;
   }
 
   /**
@@ -205,6 +238,7 @@ export class VibiContextService {
       timestamp: Date.now(),
       screen: this.getActiveTab(),
       subScreen: this.getActiveSubScreen(),
+      activeSection: this.getActiveSection(),
       activeChat: this.activeChatMetadata ? { ...this.activeChatMetadata } : null,
       user: this.getUserSummary(user),
       device: this.getDeviceContext(),
@@ -223,6 +257,7 @@ export class VibiContextService {
           timestamp: snapshot.timestamp,
           screen: snapshot.screen,
           subScreen: 'none',
+          activeSection: snapshot.activeSection,
           user: snapshot.user,
           device: { isOnline: snapshot.device.isOnline },
           appContextEnabled: true
@@ -240,6 +275,7 @@ export class VibiContextService {
     const raw = this.assembleContext({ user, preferences });
     return {
       currentTab: raw.screen || 'feed',
+      activeSection: raw.activeSection || null,
       theme: raw.device?.theme || 'dark',
       online: raw.device?.isOnline !== false,
       device: raw.device?.isPWA ? 'pwa' : 'web',
