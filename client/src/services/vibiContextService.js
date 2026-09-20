@@ -12,7 +12,7 @@
  * - Assembles compact snapshots (< 2KB) without continuous polling.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import navigationService from './navigationService';
 import { useVibiAssistant } from '../context/VibiAssistantContext';
 
@@ -39,10 +39,93 @@ export class VibiContextService {
   constructor() {
     this.activeTab = 'feed';
     this.activeSection = null;
+    this.activeModal = null;
     this.activeChatMetadata = null; // { id, name, type }
     this.recentTopic = null;
     this.lastClarificationQuestion = null;
     this.recentTurns = [];
+    this.listeners = new Set();
+    this.initSystemListeners();
+  }
+
+  /**
+   * Subscribe to runtime context changes without polling
+   * @param {Function} listener
+   * @returns {Function} Unsubscribe callback
+   */
+  subscribe(listener) {
+    if (typeof listener === 'function') {
+      this.listeners.add(listener);
+      return () => this.listeners.delete(listener);
+    }
+    return () => {};
+  }
+
+  /**
+   * Notify all subscribed listeners of a context change
+   */
+  notify() {
+    for (const fn of this.listeners) {
+      try {
+        fn();
+      } catch (err) {
+        console.warn('[VibiContextService] Error in change listener:', err);
+      }
+    }
+  }
+
+  /**
+   * Initialize browser system events for reactive context synchronization
+   */
+  initSystemListeners() {
+    if (typeof window === 'undefined') return;
+    try {
+      window.addEventListener('vibegrid:open-modal', (e) => {
+        if (e?.detail?.modal) {
+          this.setActiveModal(e.detail.modal);
+        }
+      });
+      window.addEventListener('vibegrid:close-modal', () => {
+        this.clearActiveModal();
+      });
+      window.addEventListener('online', () => this.notify());
+      window.addEventListener('offline', () => this.notify());
+      window.addEventListener('popstate', () => {
+        const tab = this.getActiveTab();
+        this.setActiveTab(tab);
+      });
+    } catch {}
+  }
+
+  /**
+   * Set active open modal
+   * @param {string|null} modal
+   */
+  setActiveModal(modal) {
+    if (!modal) {
+      this.activeModal = null;
+    } else if (typeof modal === 'string') {
+      this.activeModal = modal.trim().toLowerCase().slice(0, 40);
+    }
+    this.notify();
+  }
+
+  /**
+   * Get currently active open modal identifier
+   * @returns {string|null}
+   */
+  getActiveModal() {
+    if (this.activeModal) return this.activeModal;
+    const sub = this.getActiveSubScreen();
+    return sub !== 'none' ? sub : null;
+  }
+
+  /**
+   * Clear active modal state
+   */
+  clearActiveModal() {
+    this.activeModal = null;
+    this.notify();
   }
 
   /**
@@ -138,6 +221,7 @@ export class VibiContextService {
     this.recentTopic = null;
     this.lastClarificationQuestion = null;
     this.recentTurns = [];
+    this.notify();
   }
 
   /**
@@ -148,12 +232,14 @@ export class VibiContextService {
   setActiveSection(section) {
     if (!section) {
       this.activeSection = null;
+      this.notify();
       return;
     }
     if (typeof section === 'string') {
       const clean = section.trim().toLowerCase().slice(0, 30);
       const safeWhitelist = ['profile', 'appearance', 'contact', 'security', 'privacy', 'notifications', 'vibi', 'danger'];
       this.activeSection = safeWhitelist.includes(clean) ? clean : 'general';
+      this.notify();
     }
   }
 
@@ -170,6 +256,7 @@ export class VibiContextService {
    */
   clearActiveSection() {
     this.activeSection = null;
+    this.notify();
   }
 
   /**
@@ -178,7 +265,11 @@ export class VibiContextService {
    */
   setActiveTab(tab) {
     if (typeof tab === 'string' && tab.trim()) {
-      this.activeTab = tab.trim().toLowerCase();
+      const cleanTab = tab.trim().toLowerCase();
+      if (this.activeTab !== cleanTab) {
+        this.activeTab = cleanTab;
+        this.notify();
+      }
     }
   }
 
@@ -200,6 +291,7 @@ export class VibiContextService {
   setActiveChatMetadata(metadata) {
     if (!metadata) {
       this.activeChatMetadata = null;
+      this.notify();
       return;
     }
     // Only accept safe whitelist metadata fields
@@ -208,6 +300,7 @@ export class VibiContextService {
       name: metadata.name ? String(metadata.name).slice(0, 50) : null,
       type: metadata.type === 'group' ? 'group' : 'direct'
     };
+    this.notify();
   }
 
   /**
@@ -215,23 +308,25 @@ export class VibiContextService {
    */
   clearActiveChatMetadata() {
     this.activeChatMetadata = null;
+    this.notify();
   }
 
   /**
    * Read active sub-screen or open modal from navigation interceptors
+   * Excludes Vibi's own overlay panel so underlying modal/view is accurately identified.
    * @returns {string} sub-screen identifier or 'none'
    */
   getActiveSubScreen() {
     try {
       const interceptors = navigationService?.interceptors || [];
-      if (interceptors.length > 0) {
-        // Return highest priority interceptor's id
-        return interceptors[0].id || 'modal';
+      const screenInterceptors = interceptors.filter((i) => i.id !== 'vibi-assistant-panel');
+      if (screenInterceptors.length > 0) {
+        return screenInterceptors[0].id || 'modal';
       }
     } catch {
       // Fallback safe
     }
-    return 'none';
+    return this.activeModal || 'none';
   }
 
   /**
@@ -337,6 +432,7 @@ export class VibiContextService {
       screen: this.getActiveTab(),
       subScreen: this.getActiveSubScreen(),
       activeSection: this.getActiveSection(),
+      activeModal: this.getActiveModal(),
       activeChat: this.activeChatMetadata ? { ...this.activeChatMetadata } : null,
       recentTopic: this.getRecentTopic(),
       lastClarificationQuestion: this.getLastClarification(),
@@ -359,6 +455,7 @@ export class VibiContextService {
           screen: snapshot.screen,
           subScreen: 'none',
           activeSection: snapshot.activeSection,
+          activeModal: snapshot.activeModal,
           recentTopic: snapshot.recentTopic,
           lastClarificationQuestion: snapshot.lastClarificationQuestion,
           user: snapshot.user,
@@ -379,6 +476,7 @@ export class VibiContextService {
     return {
       currentTab: raw.screen || 'feed',
       activeSection: raw.activeSection || null,
+      activeModal: raw.activeModal || null,
       recentTopic: raw.recentTopic || null,
       lastClarificationQuestion: raw.lastClarificationQuestion || null,
       recentTurns: raw.recentTurns || [],
@@ -395,11 +493,18 @@ const vibiContextService = new VibiContextService();
 export default vibiContextService;
 
 /**
- * React hook to retrieve dynamic on-demand Vibi context
+ * React hook to retrieve dynamic on-demand Vibi context with reactive change subscription
  */
 export function useVibiContext(user = null) {
   const { preferences } = useVibiAssistant();
   const [context, setContext] = useState(() => vibiContextService.assembleContext({ user, preferences }));
+
+  useEffect(() => {
+    const unsubscribe = vibiContextService.subscribe(() => {
+      setContext(vibiContextService.assembleContext({ user, preferences }));
+    });
+    return unsubscribe;
+  }, [user, preferences]);
 
   const refreshContext = useCallback(() => {
     setContext(vibiContextService.assembleContext({ user, preferences }));

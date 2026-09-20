@@ -19,9 +19,55 @@ export class VibiProactiveService {
   /**
    * Screen-specific contextual quick chips for empty chat state
    * @param {string} [tab='feed']
+   * @param {string|null} [section=null]
+   * @param {string|null} [modal=null]
    * @returns {Array<{ label: string, prompt: string }>}
    */
-  getScreenSuggestions(tab = 'feed', section = null) {
+  getScreenSuggestions(tab = 'feed', section = null, modal = null) {
+    if (modal) {
+      const cleanModal = String(modal).toLowerCase();
+      if (cleanModal.includes('create_post') || cleanModal.includes('app_create_post')) {
+        return [
+          { label: 'Upload Limits', prompt: 'What are the image upload requirements and limits?' },
+          { label: 'Hashtag Tips', prompt: 'How do hashtags work in posts?' },
+          { label: 'Theme Preference', prompt: 'Switch theme to dark mode' },
+          { label: 'Back to Feed', prompt: 'Go to feed' }
+        ];
+      }
+      if (cleanModal.includes('call')) {
+        return [
+          { label: 'Call Diagnostics', prompt: 'Test WebRTC calls and microphone' },
+          { label: 'E2EE in Calls', prompt: 'How do calls work on VibeGrid?' },
+          { label: 'Direct Messages', prompt: 'Open messages' },
+          { label: 'Back to Feed', prompt: 'Go to feed' }
+        ];
+      }
+      if (cleanModal.includes('notification') || cleanModal.includes('app_notifications')) {
+        return [
+          { label: 'Permission Status', prompt: 'Check notification status' },
+          { label: 'Quiet Hours', prompt: 'How do notification preferences work?' },
+          { label: 'Privacy Settings', prompt: 'Open Privacy Settings' },
+          { label: 'Back to Feed', prompt: 'Go to feed' }
+        ];
+      }
+      if (cleanModal.includes('permission_onboarding')) {
+        return [
+          { label: 'Why Camera?', prompt: 'Why does VibeGrid need camera and mic access?' },
+          { label: 'Push Setup', prompt: 'How do push notifications work?' },
+          { label: 'Privacy Guarantees', prompt: 'How does End-to-End Encryption work?' },
+          { label: 'Back to Feed', prompt: 'Go to feed' }
+        ];
+      }
+      if (cleanModal.includes('diagnostic')) {
+        return [
+          { label: 'Run Full Diagnostics', prompt: 'Run a full VibeGrid system health diagnostic check' },
+          { label: 'Clear Cache', prompt: 'Clear temporary cache' },
+          { label: 'Reconnect Socket', prompt: 'Reconnect socket' },
+          { label: 'Settings', prompt: 'Open Settings' }
+        ];
+      }
+    }
+
     switch (tab) {
       case 'settings': {
         switch (section) {

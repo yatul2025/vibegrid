@@ -53,6 +53,8 @@ export class VibiAiClient {
       context: {
         activeTab: contextSnapshot.currentTab || runtimeContext.currentTab || 'feed',
         activeSection: contextSnapshot.activeSection || runtimeContext.activeSection || null,
+        subScreen: contextSnapshot.subScreen || contextSnapshot.activeModal || runtimeContext.subScreen || 'none',
+        activeModal: contextSnapshot.activeModal || null,
         recentTopic: contextSnapshot.recentTopic || runtimeContext.recentTopic || null,
         lastClarificationQuestion: contextSnapshot.lastClarificationQuestion || runtimeContext.lastClarificationQuestion || null,
         theme: contextSnapshot.theme || 'dark',

@@ -384,7 +384,8 @@ export default function VibiConversation() {
   const currentContext = typeof getContext === 'function' ? getContext(user) : {};
   const activeTab = currentContext?.currentTab || currentContext?.screen || 'feed';
   const activeSection = currentContext?.activeSection || null;
-  const screenSuggestions = vibiProactiveService.getScreenSuggestions(activeTab, activeSection);
+  const activeModal = currentContext?.activeModal || (currentContext?.subScreen !== 'none' ? currentContext?.subScreen : null);
+  const screenSuggestions = vibiProactiveService.getScreenSuggestions(activeTab, activeSection, activeModal);
 
   return (
     <div className="vibi-conversation-container" data-testid="vibi-conversation">

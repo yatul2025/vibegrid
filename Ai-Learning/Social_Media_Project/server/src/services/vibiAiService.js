@@ -249,10 +249,26 @@ function queryKnowledgeBase(message, context = {}) {
     };
   }
 
-  // 4. General Assistant Persona Greeting
+  // 4. Modal-Specific Contextual Assistance
+  const activeModal = context.activeModal || (context.subScreen && context.subScreen !== 'none' ? context.subScreen : null);
+  if (activeModal && (activeModal.includes('create_post') || activeModal.includes('app_create_post'))) {
+    if (query.includes('upload') || query.includes('photo') || query.includes('limit') || query.includes('size')) {
+      return {
+        replyText: "📸 **Post Upload Guidelines**:\n\nYou can upload photos in JPG, PNG, WEBP, or GIF format up to **10MB**. Images are automatically compressed client-side before upload to preserve bandwidth!",
+        action: null,
+        responseType: 'NORMAL',
+        topic: 'posts'
+      };
+    }
+  }
+
+  // 5. General Assistant Persona Greeting
   const currentTab = context.activeTab || 'app';
   const activeSection = context.activeSection;
-  const screenLocation = activeSection ? `${currentTab.toUpperCase()} > ${activeSection.toUpperCase()}` : currentTab.toUpperCase();
+  let screenLocation = activeSection ? `${currentTab.toUpperCase()} > ${activeSection.toUpperCase()}` : currentTab.toUpperCase();
+  if (activeModal) {
+    screenLocation += ` [${activeModal.toUpperCase()}]`;
+  }
 
   return {
     replyText: `Hello! I'm **Vibi** 🦊, your native VibeGrid assistant. You're currently on the **${screenLocation}** screen.\n\nI can help you navigate, adjust settings, switch themes, or explain features like E2EE messaging and WebRTC calls. How can I assist you today? ✨`,

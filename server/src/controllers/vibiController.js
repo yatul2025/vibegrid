@@ -100,6 +100,8 @@ const handleVibiChat = async (req, res) => {
     const sanitizedContext = {
       activeTab: typeof cleanContext.activeTab === 'string' ? cleanContext.activeTab.slice(0, 30) : 'feed',
       activeSection: typeof cleanContext.activeSection === 'string' ? cleanContext.activeSection.slice(0, 30) : null,
+      subScreen: typeof cleanContext.subScreen === 'string' ? cleanContext.subScreen.slice(0, 40) : 'none',
+      activeModal: typeof cleanContext.activeModal === 'string' ? cleanContext.activeModal.slice(0, 40) : null,
       recentTopic: typeof cleanContext.recentTopic === 'string' ? cleanContext.recentTopic.slice(0, 50) : null,
       lastClarificationQuestion: typeof cleanContext.lastClarificationQuestion === 'string' ? cleanContext.lastClarificationQuestion.slice(0, 50) : null,
       theme: typeof cleanContext.theme === 'string' ? cleanContext.theme.slice(0, 30) : 'dark',
