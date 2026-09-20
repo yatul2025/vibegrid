@@ -16,6 +16,7 @@ import vibiAuditLog from './vibiAuditLog';
 import vibiCharacterService from './vibiCharacterService';
 import vibiSecurityGuard from './vibiSecurityGuard';
 import vibiContextService from './vibiContextService';
+import vibiMemoryService from './vibiMemoryService';
 
 export const EXECUTION_STATES = {
   IDLE: 'idle',
@@ -386,6 +387,88 @@ export class VibiIntentEngine {
         replyText: 'No actions have been executed yet in this session! 🦊 Anything I can help you with?',
         actions: []
       };
+    }
+
+    // =========================================================================
+    // STEP 0.8: CONTROLLED MEMORY & PERSONALIZATION (PHASE 8)
+    // Handle "what do you remember", "remember that ...", "forget everything", "clear memory"
+    // =========================================================================
+    if (query.includes('what do you remember') || query.includes('show my memory') || query.includes('list memories') || query === 'memory') {
+      const allMem = vibiMemoryService.getAllMemories();
+      const facts = Object.entries(allMem.persistentFacts);
+      if (facts.length === 0) {
+        return {
+          matched: true,
+          actionId: 'explain_feature',
+          params: { feature: 'vibi_memory' },
+          confidence: 0.98,
+          safetyTier: SAFETY_TIERS.READ_ONLY,
+          topic: 'memory',
+          responseType: 'SHORT',
+          replyText: 'I currently have no saved preferences or memories about you! 🦊 You can tell me things like "Remember that I prefer dark mode" or "Remember that I like short answers".',
+          actions: []
+        };
+      }
+      const factList = facts.map(([k, v]) => `• **${k}**: ${v}`).join('\n');
+      return {
+        matched: true,
+        actionId: 'explain_feature',
+        params: { feature: 'vibi_memory' },
+        confidence: 0.98,
+        safetyTier: SAFETY_TIERS.READ_ONLY,
+        topic: 'memory',
+        responseType: 'DETAILED',
+        replyText: `Here is everything I remember about your preferences:\n\n${factList}\n\nYou can say **"forget everything"** to wipe my memory anytime! 🦊🛡️`,
+        actions: [{ id: 'explain_feature', params: { feature: 'vibi_memory' } }]
+      };
+    }
+
+    if (query.includes('forget everything') || query.includes('clear my memory') || query.includes('delete memory') || query.includes('wipe memory')) {
+      vibiMemoryService.clearAllMemory();
+      return {
+        matched: true,
+        actionId: 'clear_temporary_cache',
+        params: { target: 'memory' },
+        confidence: 0.98,
+        safetyTier: SAFETY_TIERS.READ_ONLY,
+        topic: 'memory',
+        responseType: 'SHORT',
+        replyText: 'Memory completely wiped! 🦊🧹 I have forgotten all saved preferences and session topics.',
+        actions: []
+      };
+    }
+
+    if (query.startsWith('remember that ') || query.startsWith('remember ')) {
+      const rawFact = text.trim().replace(/^remember (that )?/i, '').trim();
+      if (rawFact.length >= 3) {
+        const key = rawFact.toLowerCase().split(/\s+/).slice(0, 3).join('_').replace(/[^a-z0-9_]/gi, '').slice(0, 30) || 'user_preference';
+        const saveRes = vibiMemoryService.rememberFact(key, rawFact);
+        if (saveRes.success) {
+          return {
+            matched: true,
+            actionId: 'explain_feature',
+            params: { feature: 'vibi_memory' },
+            confidence: 0.98,
+            safetyTier: SAFETY_TIERS.READ_ONLY,
+            topic: 'memory',
+            responseType: 'SHORT',
+            replyText: `Got it! 🦊 I will remember: "${rawFact}". You can view or clear this anytime!`,
+            actions: []
+          };
+        } else {
+          return {
+            matched: true,
+            actionId: 'explain_feature',
+            params: { feature: 'vibi_memory' },
+            confidence: 0.95,
+            safetyTier: SAFETY_TIERS.READ_ONLY,
+            topic: 'memory',
+            responseType: 'SHORT',
+            replyText: 'I couldn\'t remember that because it contains restricted keywords or exceeds my memory limit. 🦊🛡️',
+            actions: []
+          };
+        }
+      }
     }
 
     // =========================================================================

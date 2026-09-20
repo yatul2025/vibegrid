@@ -17,6 +17,7 @@ import navigationService from '../services/navigationService';
 import vibiContextService from '../services/vibiContextService';
 import vibiProactiveService from '../services/vibiProactiveService';
 import vibiCharacterService, { VIBI_STATES } from '../services/vibiCharacterService';
+import vibiMemoryService from '../services/vibiMemoryService';
 
 export const VIBI_PREFERENCES_STORAGE_KEY = 'vibegrid_vibi_preferences';
 
@@ -358,7 +359,13 @@ export function VibiAssistantProvider({ children }) {
     triggerSuggestion,
     evaluateSuggestions,
     triggerReaction,
-    setCharacterState
+    setCharacterState,
+    // Memory & Personalization (Phase 8)
+    memoryService: vibiMemoryService,
+    getMemories: () => vibiMemoryService.getAllMemories(),
+    forgetMemory: (key) => vibiMemoryService.forgetFact(key),
+    clearAllMemory: () => vibiMemoryService.clearAllMemory(),
+    exportMemory: () => vibiMemoryService.exportMemory()
   }), [
     preferences,
     isOpen,

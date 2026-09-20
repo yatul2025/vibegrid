@@ -15,6 +15,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import navigationService from './navigationService';
 import { useVibiAssistant } from '../context/VibiAssistantContext';
+import vibiMemoryService from './vibiMemoryService';
 
 // Sensitive keys blacklist that must NEVER appear anywhere in context snapshot
 export const STRICT_SECURITY_BLACKLIST = Object.freeze([
@@ -779,6 +780,7 @@ export class VibiContextService {
       recentActions: this.getRecentActions(),
       appState: this.getApplicationState(),
       permissions: this.getPermissionsContext(),
+      memory: vibiMemoryService.getAllMemories(),
       user: this.getUserSummary(user),
       appContextEnabled: true,
       timestamp: Date.now()
@@ -880,6 +882,17 @@ export class VibiContextService {
     // 8. User summary
     if (snapshot.user) {
       relevant.user = snapshot.user;
+    }
+
+    // 9. Memory Context (Phase 8): attach when query asks about memory or preferences
+    if (q.includes('remember') || q.includes('memory') || q.includes('preference') || q.includes('forget')) {
+      const allMem = vibiMemoryService.getAllMemories();
+      if (allMem.persistentCount > 0 || allMem.sessionTopics.length > 0) {
+        relevant.memory = {
+          facts: allMem.persistentFacts,
+          sessionTopics: allMem.sessionTopics
+        };
+      }
     }
 
     this.sanitizeSecurityCheck(relevant);
